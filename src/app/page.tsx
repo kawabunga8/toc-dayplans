@@ -9,7 +9,8 @@ export default function Home() {
       </p>
 
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-        <Link href="/admin" style={btn()}>Admin</Link>
+        <Link href="/login" style={btn()}>Staff login</Link>
+        <Link href="/admin" style={btnOutline()}>Admin</Link>
         <Link href="/p/demo" style={btnOutline()}>Sample public plan link (demo)</Link>
       </div>
 
