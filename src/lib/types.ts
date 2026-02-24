@@ -2,9 +2,13 @@ export type StaffRole = 'admin' | 'editor' | 'viewer';
 
 export type DayPlanVisibility = 'private' | 'link';
 
+export type FridayType = 'day1' | 'day2';
+
 export interface DayPlan {
   id: string;
   plan_date: string; // YYYY-MM-DD
+  slot: string; // e.g., A, B, Flex Block, Lunch
+  friday_type: FridayType | null;
   title: string;
   notes: string | null;
   visibility: DayPlanVisibility;

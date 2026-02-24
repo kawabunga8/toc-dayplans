@@ -14,6 +14,8 @@ export default function DayPlansClient() {
 
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const [planDate, setPlanDate] = useState(today);
+  const [slot, setSlot] = useState('A');
+  const [fridayType, setFridayType] = useState<'day1' | 'day2' | ''>('');
   const [title, setTitle] = useState('');
   const [notes, setNotes] = useState('');
 
@@ -42,12 +44,16 @@ export default function DayPlansClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const isFriday = useMemo(() => isFridayLocal(planDate), [planDate]);
+
   async function createDayPlan() {
     setStatus('saving');
     setError(null);
 
     try {
       if (!planDate) throw new Error('Date is required');
+      if (!slot.trim()) throw new Error('Slot is required');
+      if (isFriday && !fridayType) throw new Error('Friday Type is required');
       if (!title.trim()) throw new Error('Title is required');
 
       const supabase = getSupabaseClient();
@@ -55,6 +61,8 @@ export default function DayPlansClient() {
         .from('day_plans')
         .insert({
           plan_date: planDate,
+          slot: slot.trim(),
+          friday_type: isFriday ? (fridayType as 'day1' | 'day2') : null,
           title: title.trim(),
           notes: notes.trim() ? notes.trim() : null,
         })
@@ -79,7 +87,7 @@ export default function DayPlansClient() {
     <main style={{ padding: 24, maxWidth: 900, margin: '0 auto', fontFamily: 'system-ui' }}>
       <h1>Dayplans</h1>
       <p style={{ opacity: 0.8 }}>
-        Create a dayplan for a date. (Unique per day.)
+        Create a dayplan for a date + slot (e.g., A, Flex Block, Lunch). Fridays require Day 1/Day 2.
       </p>
 
       <section style={{ border: '1px solid #cbd5e1', borderRadius: 12, padding: 16 }}>
@@ -90,17 +98,51 @@ export default function DayPlansClient() {
             <input
               type="date"
               value={planDate}
-              onChange={(e) => setPlanDate(e.target.value)}
+              onChange={(e) => {
+                setPlanDate(e.target.value);
+                // reset friday type when changing dates
+                setFridayType('');
+              }}
               style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #cbd5e1' }}
             />
           </label>
+
+          <label style={{ display: 'grid', gap: 6 }}>
+            <span>Slot</span>
+            <select
+              value={slot}
+              onChange={(e) => setSlot(e.target.value)}
+              style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #cbd5e1' }}
+            >
+              {SLOTS.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {isFriday && (
+            <label style={{ display: 'grid', gap: 6 }}>
+              <span>Friday Type</span>
+              <select
+                value={fridayType}
+                onChange={(e) => setFridayType(e.target.value as any)}
+                style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #cbd5e1' }}
+              >
+                <option value="">Select…</option>
+                <option value="day1">Day 1</option>
+                <option value="day2">Day 2</option>
+              </select>
+            </label>
+          )}
 
           <label style={{ display: 'grid', gap: 6 }}>
             <span>Title</span>
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g., Mr. Kawamura Dayplan"
+              placeholder="e.g., Block A — Math 9"
               style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #cbd5e1' }}
             />
           </label>
@@ -152,7 +194,10 @@ export default function DayPlansClient() {
             <div key={p.id} style={{ border: '1px solid #cbd5e1', borderRadius: 12, padding: 12 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
                 <div>
-                  <div style={{ fontWeight: 700 }}>{p.plan_date}</div>
+                  <div style={{ fontWeight: 700 }}>
+                    {p.plan_date} • {p.slot}
+                    {p.friday_type ? ` • ${p.friday_type === 'day1' ? 'Fri Day 1' : 'Fri Day 2'}` : ''}
+                  </div>
                   <div>{p.title}</div>
                 </div>
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
@@ -179,6 +224,16 @@ function btn(): React.CSSProperties {
     border: 0,
     cursor: 'pointer',
   };
+}
+
+const SLOTS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'Flex Block', 'Career Life', 'Chapel', 'Lunch'];
+
+function isFridayLocal(yyyyMmDd: string): boolean {
+  // Date("YYYY-MM-DD") is treated as UTC; we want local weekday.
+  const [y, m, d] = yyyyMmDd.split('-').map((x) => Number(x));
+  if (!y || !m || !d) return false;
+  const dt = new Date(y, m - 1, d);
+  return dt.getDay() === 5;
 }
 
 function btnOutline(): React.CSSProperties {

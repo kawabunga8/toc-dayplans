@@ -16,6 +16,8 @@ create table if not exists staff_profiles (
 create table if not exists day_plans (
   id uuid primary key default gen_random_uuid(),
   plan_date date not null,
+  slot text not null default 'General',
+  friday_type text,
   title text not null,
   notes text,
   visibility text not null default 'private',
@@ -23,10 +25,14 @@ create table if not exists day_plans (
   share_expires_at timestamptz,
   created_by uuid references auth.users(id),
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  constraint friday_type_check check (friday_type in ('day1','day2') or friday_type is null)
 );
 
-create unique index if not exists day_plans_plan_date_uq on day_plans(plan_date);
+-- Allow multiple plans per day; prevent duplicates per (date, slot, friday_type)
+-- Use COALESCE so non-Friday (null friday_type) still participates in uniqueness.
+create unique index if not exists day_plans_date_slot_friday_uq
+  on day_plans(plan_date, slot, ((coalesce(friday_type, ''))));
 
 -- BLOCKS (schedule entries for the day)
 create table if not exists day_plan_blocks (
