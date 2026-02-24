@@ -117,17 +117,17 @@ export default function DayPlansClient() {
   }
 
   return (
-    <main style={{ padding: 24, maxWidth: 900, margin: '0 auto', fontFamily: 'system-ui' }}>
-      <h1>Dayplans</h1>
-      <p style={{ opacity: 0.8 }}>
-        Create a dayplan for a date + slot (e.g., A, Flex Block, Lunch). Fridays require Day 1/Day 2.
+    <main style={styles.page}>
+      <h1 style={styles.h1}>Dayplans</h1>
+      <p style={styles.muted}>
+        Create a dayplan for a date + block. Fridays require Day 1/Day 2.
       </p>
 
-      <section style={{ border: '1px solid #cbd5e1', borderRadius: 12, padding: 16 }}>
-        <h2 style={{ marginTop: 0 }}>New dayplan</h2>
+      <section style={styles.card}>
+        <div style={styles.sectionHeader}>New dayplan</div>
         <div style={{ display: 'grid', gap: 10 }}>
           <label style={{ display: 'grid', gap: 6 }}>
-            <span>Date</span>
+            <span style={styles.label}>Date</span>
             <input
               type="date"
               value={planDate}
@@ -136,12 +136,12 @@ export default function DayPlansClient() {
                 // reset friday type when changing dates
                 setFridayType('');
               }}
-              style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #cbd5e1' }}
+              style={styles.input}
             />
           </label>
 
           <label style={{ display: 'grid', gap: 6 }}>
-            <span>Block</span>
+            <span style={styles.label}>Block</span>
             <select
               value={slot}
               onChange={(e) => {
@@ -154,7 +154,7 @@ export default function DayPlansClient() {
                   setTitle(hit.name);
                 }
               }}
-              style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #cbd5e1' }}
+              style={styles.input}
             >
               {(blocks.length ? blocks.map((b) => b.block_label) : SLOTS).map((s) => (
                 <option key={s} value={s}>
@@ -166,11 +166,11 @@ export default function DayPlansClient() {
 
           {isFriday && (
             <label style={{ display: 'grid', gap: 6 }}>
-              <span>Friday Type</span>
+              <span style={styles.label}>Friday Type</span>
               <select
                 value={fridayType}
                 onChange={(e) => setFridayType(e.target.value as any)}
-                style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #cbd5e1' }}
+                style={styles.input}
               >
                 <option value="">Select…</option>
                 <option value="day1">Day 1</option>
@@ -180,7 +180,7 @@ export default function DayPlansClient() {
           )}
 
           <label style={{ display: 'grid', gap: 6 }}>
-            <span>Title</span>
+            <span style={styles.label}>Title</span>
             <input
               value={title}
               onChange={(e) => {
@@ -193,7 +193,7 @@ export default function DayPlansClient() {
           </label>
 
           <label style={{ display: 'grid', gap: 6 }}>
-            <span>Notes (optional)</span>
+            <span style={styles.label}>Notes (optional)</span>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
@@ -204,17 +204,17 @@ export default function DayPlansClient() {
           </label>
 
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <button onClick={createDayPlan} disabled={status === 'saving' || status === 'loading'} style={btn()}>
+            <button onClick={createDayPlan} disabled={status === 'saving' || status === 'loading'} style={styles.primaryBtn}>
               {status === 'saving' ? 'Creating…' : 'Create'}
             </button>
-            <button onClick={load} disabled={status === 'saving' || status === 'loading'} style={btnOutline()}>
+            <button onClick={load} disabled={status === 'saving' || status === 'loading'} style={styles.secondaryBtn}>
               Refresh
             </button>
           </div>
 
           {error && (
-            <div style={{ padding: 12, borderRadius: 10, border: '1px solid #fecaca', background: '#fee2e2' }}>
-              <div style={{ fontWeight: 700, marginBottom: 6 }}>Couldn’t create dayplan</div>
+            <div style={styles.errorBox}>
+              <div style={{ fontWeight: 900, marginBottom: 6 }}>Couldn’t create dayplan</div>
               <div>{error}</div>
             </div>
           )}
@@ -223,8 +223,8 @@ export default function DayPlansClient() {
 
       <hr style={{ margin: '18px 0', opacity: 0.25 }} />
 
-      <section>
-        <h2>Existing</h2>
+      <section style={styles.card}>
+        <div style={styles.sectionHeader}>Existing</div>
 
         {status === 'loading' && <div>Loading…</div>}
 
@@ -233,18 +233,18 @@ export default function DayPlansClient() {
         )}
 
         <div style={{ display: 'grid', gap: 10 }}>
-          {items.map((p) => (
-            <div key={p.id} style={{ border: '1px solid #cbd5e1', borderRadius: 12, padding: 12 }}>
+          {items.map((p, idx) => (
+            <div key={p.id} style={idx % 2 === 0 ? styles.itemEven : styles.itemOdd}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
                 <div>
-                  <div style={{ fontWeight: 700 }}>
+                  <div style={{ fontWeight: 900, color: RCS.deepNavy }}>
                     {p.plan_date} • {p.slot}
                     {p.friday_type ? ` • ${p.friday_type === 'day1' ? 'Fri Day 1' : 'Fri Day 2'}` : ''}
                   </div>
-                  <div>{p.title}</div>
+                  <div style={{ fontWeight: 900 }}>{p.title}</div>
                 </div>
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                  <Link href={`/admin/dayplans/${p.id}`} style={btnOutline()}>
+                  <Link href={`/admin/dayplans/${p.id}`} style={styles.secondaryLink}>
                     Open
                   </Link>
                 </div>
@@ -257,17 +257,39 @@ export default function DayPlansClient() {
   );
 }
 
-function btn(): React.CSSProperties {
-  return {
-    padding: '10px 12px',
+const RCS = {
+  deepNavy: '#1F4E79',
+  midBlue: '#2E75B6',
+  gold: '#C9A84C',
+  white: '#FFFFFF',
+  lightGray: '#F5F5F5',
+  textDark: '#1A1A1A',
+} as const;
+
+const styles: Record<string, React.CSSProperties> = {
+  page: { padding: 24, maxWidth: 1000, margin: '0 auto', fontFamily: 'system-ui', background: RCS.white, color: RCS.textDark },
+  h1: { margin: 0, color: RCS.deepNavy },
+  muted: { opacity: 0.85, marginTop: 6, marginBottom: 16 },
+  card: { border: `1px solid ${RCS.deepNavy}`, borderRadius: 12, padding: 16, background: RCS.white },
+  sectionHeader: {
+    background: RCS.deepNavy,
+    color: RCS.white,
+    padding: '8px 10px',
     borderRadius: 10,
-    background: '#2563eb',
-    color: 'white',
-    textDecoration: 'none',
-    border: 0,
-    cursor: 'pointer',
-  };
-}
+    borderBottom: `3px solid ${RCS.gold}`,
+    fontWeight: 900,
+    marginBottom: 12,
+  },
+  label: { color: RCS.midBlue, fontWeight: 800, fontSize: 12 },
+  input: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.deepNavy}`, background: RCS.white, color: RCS.textDark },
+  textarea: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.deepNavy}`, background: RCS.white, color: RCS.textDark, fontFamily: 'inherit' },
+  primaryBtn: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.gold}`, background: RCS.deepNavy, color: RCS.white, cursor: 'pointer', fontWeight: 900 },
+  secondaryBtn: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.gold}`, background: 'transparent', color: RCS.deepNavy, cursor: 'pointer', fontWeight: 900 },
+  secondaryLink: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.gold}`, background: 'transparent', color: RCS.deepNavy, textDecoration: 'none', cursor: 'pointer', fontWeight: 900 },
+  errorBox: { marginTop: 12, padding: 12, borderRadius: 10, background: '#FEE2E2', border: '1px solid #991b1b', color: '#7F1D1D' },
+  itemEven: { border: `1px solid ${RCS.deepNavy}`, borderRadius: 12, padding: 12, background: RCS.white },
+  itemOdd: { border: `1px solid ${RCS.deepNavy}`, borderRadius: 12, padding: 12, background: RCS.lightGray },
+};
 
 const SLOTS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'Flex Block', 'Career Life', 'Chapel', 'Lunch'];
 
@@ -311,14 +333,4 @@ function isFridayLocal(yyyyMmDd: string): boolean {
   return dt.getDay() === 5;
 }
 
-function btnOutline(): React.CSSProperties {
-  return {
-    padding: '10px 12px',
-    borderRadius: 10,
-    border: '1px solid #94a3b8',
-    color: '#0f172a',
-    background: 'transparent',
-    textDecoration: 'none',
-    cursor: 'pointer',
-  };
-}
+// legacy helpers removed; styles are centralized above.
