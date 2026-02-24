@@ -120,18 +120,75 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
         if (cancelled) return;
 
         if (!tpl) {
-          // blank create form
+          // blank create form (with sensible defaults)
           setTemplate(null);
-          setTeacherName('');
+
+          // 1) Default teacher name (new templates only)
+          setTeacherName('Mr. Shingo Kawamura');
+
+          // 2) Default TA fields: blank
           setTaName('');
           setTaRole('');
+
+          // 3) Default phone policy
           setPhonePolicy('Not permitted');
+
+          // 4) Default note
           setNoteToToc('');
+
+          // 5) Default plan mode
           setPlanMode('lesson_flow');
-          setOpeningRoutine([]);
+
+          // 6) Default opening routine by class type (inferred from block_label)
+          const block = ((classData as any)?.block_label ?? '') as string;
+          const isMusic = block === 'B' || block === 'H';
+          const isComputer = block === 'A' || block === 'G';
+
+          const defaultRoutine: RoutineStep[] = isMusic
+            ? [
+                { text: 'Students enter, unpack instruments, and begin individual scale practice independently' },
+                { text: 'Teacher/TA leads the full band warm-up routine including scales and rhythm reading' },
+                { text: 'TOC takes attendance during the warm-up window' },
+              ]
+            : isComputer
+              ? [
+                  { text: 'Students enter and log into their computers and the CMU/course environment independently' },
+                  { text: 'TOC takes attendance' },
+                  { text: 'Students begin working on the assigned task — they know what to do' },
+                ]
+              : [
+                  { text: 'Students enter and settle' },
+                  { text: 'TOC takes attendance' },
+                  { text: 'Follow Andrea or TA lead if present' },
+                ];
+
+          setOpeningRoutine(defaultRoutine);
+
+          // 7) Default What to Do If items
+          setWhatIfItems([
+            {
+              scenario_text: 'A student is disruptive',
+              response_text:
+                'Have a quiet one-on-one conversation first. If it continues, remove the student from the activity and contact Mr. Kawamura on Teams.',
+            },
+            {
+              scenario_text: 'A student is injured or unwell',
+              response_text: 'Follow standard school first aid protocol. Send a responsible student to the office if needed.',
+            },
+            {
+              scenario_text: 'Something urgent comes up',
+              response_text: 'Mr. Kawamura is reachable on Microsoft Teams.',
+            },
+            {
+              scenario_text: 'A student finishes early',
+              response_text: 'Ask them to review previous material or work ahead quietly.',
+            },
+          ]);
+
+          // other sections start blank
           setLessonFlow([]);
           setActivityOptions([]);
-          setWhatIfItems([]);
+
           setStatus('idle');
           return;
         }
