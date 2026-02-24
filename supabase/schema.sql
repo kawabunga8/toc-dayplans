@@ -89,10 +89,11 @@ as $$
   );
 $$;
 
--- Staff can read their own staff profile; admins can read all (simplify later)
-create policy "staff_profiles_read" on staff_profiles
+-- Staff profiles: allow users to read their own row
+-- (Do NOT depend on is_staff() here, or you can create a circular dependency.)
+create policy "staff_profiles_self_read" on staff_profiles
 for select
-using (is_staff());
+using (auth.uid() = user_id);
 
 -- day_plans: staff CRUD
 create policy "day_plans_staff_select" on day_plans
