@@ -60,6 +60,7 @@ create table if not exists classes (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   room text,
+  sort_order int,
   created_at timestamptz not null default now()
 );
 
@@ -72,6 +73,12 @@ create table if not exists enrollments (
 -- Link dayplan blocks to a class (optional)
 alter table day_plan_blocks
   add column if not exists class_id uuid references classes(id);
+
+-- Order classes in the desired admin/UI display order (Block A, Block B, ...)
+alter table classes
+  add column if not exists sort_order int;
+
+create index if not exists classes_sort_order_idx on classes(sort_order);
 
 -- ----------------------
 -- ROW LEVEL SECURITY

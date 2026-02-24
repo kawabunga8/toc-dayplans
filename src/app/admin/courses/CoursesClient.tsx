@@ -8,6 +8,7 @@ type CourseRow = {
   id: string;
   name: string;
   room: string | null;
+  sort_order: number | null;
 };
 
 type Status = 'loading' | 'idle' | 'error';
@@ -23,7 +24,11 @@ export default function CoursesClient() {
 
     try {
       const supabase = getSupabaseClient();
-      const { data, error } = await supabase.from('classes').select('id,name,room').order('name', { ascending: true });
+          const { data, error } = await supabase
+        .from('classes')
+        .select('id,name,room,sort_order')
+        .order('sort_order', { ascending: true, nullsFirst: false })
+        .order('name', { ascending: true });
       if (error) throw error;
       setItems((data ?? []) as CourseRow[]);
       setStatus('idle');
@@ -41,13 +46,13 @@ export default function CoursesClient() {
   return (
     <main style={styles.page}>
       <h1 style={styles.h1}>Courses / Rooms</h1>
-      <p style={styles.muted}>Classes from the <code>classes</code> table. Use these to navigate to the TOC template editor.</p>
+      <p style={styles.muted}>Classes from the <code>classes</code> table, ordered by <code>sort_order</code>.</p>
 
       <section style={styles.card}>
         <div style={styles.rowBetween}>
           <div>
             <div style={styles.sectionTitle}>Classes</div>
-            <div style={styles.mutedSmall}>Showing name + room, with a link to its TOC template.</div>
+            <div style={styles.mutedSmall}>Name + room, with a link to its TOC template.</div>
           </div>
           <button onClick={load} disabled={status === 'loading'} style={styles.secondaryBtn}>
             {status === 'loading' ? 'Loading…' : 'Refresh'}
@@ -65,21 +70,34 @@ export default function CoursesClient() {
           <div style={{ opacity: 0.85, marginTop: 12 }}>No classes found. (Seed the <code>classes</code> table.)</div>
         )}
 
-        <div style={{ display: 'grid', gap: 10, marginTop: 12 }}>
-          {items.map((c) => (
-            <div key={c.id} style={styles.item}>
-              <div>
-                <div style={{ fontWeight: 800, color: 'white' }}>{c.name}</div>
-                <div style={{ opacity: 0.9 }}>Room: {c.room || '—'}</div>
-              </div>
-              <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                <Link href={`/admin/courses/${c.id}/toc-template`} style={styles.primaryLink}>
-                  TOC Template
-                </Link>
-              </div>
-            </div>
-          ))}
-        </div>
+        {items.length > 0 && (
+          <div style={{ overflowX: 'auto', marginTop: 12 }}>
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  <th style={styles.th}>Order</th>
+                  <th style={styles.th}>Class</th>
+                  <th style={styles.th}>Room</th>
+                  <th style={styles.th}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((c, i) => (
+                  <tr key={c.id} style={i % 2 === 0 ? styles.trEven : styles.trOdd}>
+                    <td style={styles.tdLabel}>{c.sort_order ?? '—'}</td>
+                    <td style={styles.td}>{c.name}</td>
+                    <td style={styles.td}>{c.room || '—'}</td>
+                    <td style={styles.tdRight}>
+                      <Link href={`/admin/courses/${c.id}/toc-template`} style={styles.primaryLink}>
+                        TOC Template
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
     </main>
   );
@@ -99,47 +117,92 @@ function humanizeError(e: any): string {
   return message || 'Unknown error.';
 }
 
+const RCS = {
+  deepNavy: '#1F4E79',
+  midBlue: '#2E75B6',
+  lightBlue: '#D6E4F0',
+  gold: '#C9A84C',
+  paleGold: '#FDF3DC',
+  white: '#FFFFFF',
+  lightGray: '#F5F5F5',
+  textDark: '#1A1A1A',
+} as const;
+
 const styles: Record<string, React.CSSProperties> = {
-  page: { padding: 24, maxWidth: 1000, margin: '0 auto', fontFamily: 'system-ui', color: '#e2e8f0' },
-  h1: { margin: 0, color: 'white' },
+  page: {
+    padding: 24,
+    maxWidth: 1000,
+    margin: '0 auto',
+    fontFamily: 'system-ui',
+    color: RCS.textDark,
+    background: RCS.white,
+  },
+  h1: { margin: 0, color: RCS.deepNavy },
   muted: { opacity: 0.85, marginTop: 6, marginBottom: 16 },
-  mutedSmall: { opacity: 0.8, fontSize: 12 },
-  card: { border: '1px solid #334155', borderRadius: 12, padding: 16, background: 'rgba(2,6,23,0.35)' },
+  mutedSmall: { opacity: 0.85, fontSize: 12 },
+  card: {
+    border: `1px solid ${RCS.deepNavy}`,
+    borderRadius: 12,
+    padding: 16,
+    background: RCS.white,
+  },
   rowBetween: { display: 'flex', gap: 16, justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap' },
-  sectionTitle: { fontWeight: 900, color: 'white' },
+  sectionTitle: { fontWeight: 900, color: RCS.deepNavy },
   primaryLink: {
-    padding: '10px 12px',
+    padding: '8px 10px',
     borderRadius: 10,
-    border: '1px solid #c9a84c',
-    background: '#0b1f33',
-    color: 'white',
+    border: `1px solid ${RCS.gold}`,
+    background: RCS.deepNavy,
+    color: RCS.white,
     textDecoration: 'none',
     fontWeight: 800,
+    whiteSpace: 'nowrap',
   },
   secondaryBtn: {
-    padding: '10px 12px',
+    padding: '8px 10px',
     borderRadius: 10,
-    border: '1px solid #94a3b8',
-    background: 'transparent',
-    color: '#e2e8f0',
+    border: `1px solid ${RCS.gold}`,
+    background: RCS.white,
+    color: RCS.deepNavy,
     cursor: 'pointer',
+    fontWeight: 800,
   },
-  item: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    gap: 12,
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 12,
-    border: '1px solid #334155',
-    background: 'rgba(2,6,23,0.4)',
+  table: { width: '100%', borderCollapse: 'collapse', marginTop: 6 },
+  th: {
+    textAlign: 'left',
+    padding: 10,
+    background: RCS.deepNavy,
+    color: RCS.white,
+    borderBottom: `3px solid ${RCS.gold}`,
+    fontSize: 12,
+    letterSpacing: 0.4,
+  },
+  trEven: { background: RCS.white },
+  trOdd: { background: RCS.lightGray },
+  td: {
+    padding: 10,
+    borderBottom: `1px solid ${RCS.deepNavy}`,
+    verticalAlign: 'top',
+  },
+  tdRight: {
+    padding: 10,
+    borderBottom: `1px solid ${RCS.deepNavy}`,
+    textAlign: 'right',
+    verticalAlign: 'top',
+  },
+  tdLabel: {
+    padding: 10,
+    borderBottom: `1px solid ${RCS.deepNavy}`,
+    color: RCS.midBlue,
+    fontWeight: 800,
+    width: 70,
   },
   errorBox: {
     marginTop: 12,
     padding: 12,
     borderRadius: 10,
-    border: '1px solid #fecaca',
-    background: '#7f1d1d',
-    color: 'white',
+    border: '1px solid #991b1b',
+    background: '#FEE2E2',
+    color: '#7F1D1D',
   },
 };
