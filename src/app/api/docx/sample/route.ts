@@ -81,13 +81,13 @@ export async function GET() {
         time: '0–5',
         phase: 'Settle',
         activity: 'Students enter and get ready.\n\nTOC takes attendance.',
-        purpose: 'Start the class smoothly',
+        purpose: 'Start the class smoothly (purpose column test).',
       },
       {
         time: '5–25',
         phase: 'Work',
         activity: 'Independent practice time.\n\nTeacher circulates and supports.',
-        purpose: 'Practice skills',
+        purpose: 'Practice skills and check that PURPOSE is visible in data rows.',
       },
     ]),
     spacer(),
@@ -98,6 +98,12 @@ export async function GET() {
       body('Details paragraph one.'),
       body('Details paragraph two.'),
       bulletItem('A detail bullet'),
+    ]),
+    spacer(),
+    activityBox('2', 'Option Two', 'Second option to confirm repeated two-row pattern', [
+      body('This option exists to confirm the bottom row renders as:'),
+      bulletItem('Left accent cell = pale gold'),
+      bulletItem('Right content cell = white'),
     ]),
     spacer(),
 
