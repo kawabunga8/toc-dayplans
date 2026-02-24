@@ -61,6 +61,7 @@ create table if not exists classes (
   name text not null,
   room text,
   sort_order int,
+  block_label text,
   created_at timestamptz not null default now()
 );
 
@@ -78,7 +79,11 @@ alter table day_plan_blocks
 alter table classes
   add column if not exists sort_order int;
 
+alter table classes
+  add column if not exists block_label text;
+
 create index if not exists classes_sort_order_idx on classes(sort_order);
+create index if not exists classes_block_label_idx on classes(block_label);
 
 -- ----------------------
 -- ROW LEVEL SECURITY

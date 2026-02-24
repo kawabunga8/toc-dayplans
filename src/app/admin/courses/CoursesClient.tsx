@@ -9,6 +9,7 @@ type CourseRow = {
   name: string;
   room: string | null;
   sort_order: number | null;
+  block_label: string | null;
 };
 
 type Status = 'loading' | 'idle' | 'error';
@@ -26,7 +27,7 @@ export default function CoursesClient() {
       const supabase = getSupabaseClient();
           const { data, error } = await supabase
         .from('classes')
-        .select('id,name,room,sort_order')
+        .select('id,name,room,sort_order,block_label')
         .order('sort_order', { ascending: true, nullsFirst: false })
         .order('name', { ascending: true });
       if (error) throw error;
@@ -75,7 +76,7 @@ export default function CoursesClient() {
             <table style={styles.table}>
               <thead>
                 <tr>
-                  <th style={styles.th}>Order</th>
+                  <th style={styles.th}>Block</th>
                   <th style={styles.th}>Class</th>
                   <th style={styles.th}>Room</th>
                   <th style={styles.th}></th>
@@ -84,7 +85,7 @@ export default function CoursesClient() {
               <tbody>
                 {items.map((c, i) => (
                   <tr key={c.id} style={i % 2 === 0 ? styles.trEven : styles.trOdd}>
-                    <td style={styles.tdLabel}>{c.sort_order ?? '—'}</td>
+                    <td style={styles.tdLabel}>{c.block_label ?? '—'}</td>
                     <td style={styles.td}>{c.name}</td>
                     <td style={styles.td}>{c.room || '—'}</td>
                     <td style={styles.tdRight}>
