@@ -20,7 +20,7 @@ const RCS = {
 const styles: Record<string, React.CSSProperties> = {
   page: { minHeight: '100vh', background: RCS.white, color: RCS.textDark, fontFamily: 'system-ui' },
   header: { background: RCS.deepNavy, borderBottom: `4px solid ${RCS.gold}`, padding: '18px 24px' },
-  brandRow: { maxWidth: 980, margin: '0 auto', display: 'flex', gap: 14, alignItems: 'center' },
+  brandRow: { maxWidth: 980, margin: '0 auto', display: 'flex', gap: 14, alignItems: 'center', justifyContent: 'space-between' },
   logo: { height: 40, width: 'auto', display: 'block' },
   schoolName: { color: RCS.gold, fontWeight: 900, letterSpacing: 0.2, marginBottom: 4 },
   appName: { color: RCS.white, fontWeight: 900, fontSize: 22 },
@@ -104,11 +104,11 @@ export default function LoginClient() {
     <main style={styles.page}>
       <header style={styles.header}>
         <div style={styles.brandRow}>
-          <img src="/rcs-wordmark.png" alt="RCS" style={styles.logo} />
           <div>
             <div style={styles.schoolName}>Richmond Christian School</div>
             <div style={styles.appName}>TOC Day Plans</div>
           </div>
+          <img src="/rcs-wordmark.png" alt="RCS" style={styles.logo} />
         </div>
       </header>
 
