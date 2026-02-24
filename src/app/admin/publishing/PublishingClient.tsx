@@ -29,6 +29,7 @@ export default function PublishingClient() {
         .from('day_plans')
         .select('id,plan_date,slot,title,share_expires_at,visibility')
         .eq('visibility', 'link')
+        .is('trashed_at', null)
         .order('plan_date', { ascending: false })
         .order('slot', { ascending: true });
       if (error) throw error;

@@ -13,6 +13,7 @@ type DayPlanRow = {
   notes: string | null;
   visibility: 'private' | 'link';
   share_expires_at: string | null;
+  trashed_at: string | null;
 };
 
 type ClassRow = { id: string; block_label: string | null; name: string; room: string | null };
@@ -64,7 +65,7 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
         await Promise.all([
           supabase
             .from('day_plans')
-            .select('id,plan_date,slot,friday_type,title,notes,visibility,share_expires_at')
+            .select('id,plan_date,slot,friday_type,title,notes,visibility,share_expires_at,trashed_at')
             .eq('id', id)
             .single(),
           supabase
@@ -303,7 +304,46 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
     await navigator.clipboard.writeText(publicUrl);
   }
 
+  async function trash() {
+    setStatus('saving');
+    setError(null);
+
+    try {
+      const ok = window.confirm('Move this day plan to the trash? (This will also unpublish it.)');
+      if (!ok) {
+        setStatus('idle');
+        return;
+      }
+
+      const res = await fetch(`/api/admin/dayplans/${id}/trash`, { method: 'POST' });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j?.error ?? 'Failed to trash');
+      await load();
+      setStatus('idle');
+    } catch (e: any) {
+      setStatus('error');
+      setError(e?.message ?? 'Failed to trash');
+    }
+  }
+
+  async function restore() {
+    setStatus('saving');
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/admin/dayplans/${id}/restore`, { method: 'POST' });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j?.error ?? 'Failed to restore');
+      await load();
+      setStatus('idle');
+    } catch (e: any) {
+      setStatus('error');
+      setError(e?.message ?? 'Failed to restore');
+    }
+  }
+
   const published = plan?.visibility === 'link';
+  const trashed = !!plan?.trashed_at;
 
   return (
     <main style={styles.page}>
@@ -427,6 +467,11 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
 
           <section style={styles.card}>
             <div style={styles.sectionHeader}>Publishing (TOC link)</div>
+            {trashed && (
+              <div style={{ ...styles.errorBox, marginTop: 0, marginBottom: 12 }}>
+                This plan is in the trash. Restore it to publish again.
+              </div>
+            )}
             <div style={{ display: 'grid', gap: 8 }}>
               <div>
                 <b>Status:</b> {published ? <span>Published</span> : <span>Not published</span>}
@@ -445,12 +490,21 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
             </div>
 
             <div style={{ display: 'flex', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
-              <button onClick={publish} disabled={status !== 'idle'} style={styles.primaryBtn}>
+              <button onClick={publish} disabled={status !== 'idle' || trashed} style={styles.primaryBtn}>
                 {published ? 'Republish' : 'Publish'}
               </button>
               <button onClick={revoke} disabled={!published || status !== 'idle'} style={styles.dangerBtn}>
                 Revoke
               </button>
+              {trashed ? (
+                <button onClick={restore} disabled={status !== 'idle'} style={styles.secondaryBtn}>
+                  Restore
+                </button>
+              ) : (
+                <button onClick={trash} disabled={status !== 'idle'} style={styles.dangerBtn}>
+                  Trash
+                </button>
+              )}
             </div>
           </section>
         </>

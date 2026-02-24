@@ -22,17 +22,18 @@ export default function DayPlansClient() {
   const [blocks, setBlocks] = useState<Array<{ block_label: string; name: string }>>([]);
   const [notes, setNotes] = useState('');
 
+  const [showTrashed, setShowTrashed] = useState(false);
+
   async function load() {
     setStatus('loading');
     setError(null);
 
     try {
       const supabase = getSupabaseClient();
-      const { data, error } = await supabase
-        .from('day_plans')
-        .select('*')
-        .order('plan_date', { ascending: false });
+      let q = supabase.from('day_plans').select('*').order('plan_date', { ascending: false });
+      q = showTrashed ? q : q.is('trashed_at', null);
 
+      const { data, error } = await q;
       if (error) throw error;
       setItems((data ?? []) as DayPlan[]);
       setStatus('idle');
@@ -46,7 +47,7 @@ export default function DayPlansClient() {
     void load();
     void loadBlocks();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [showTrashed]);
 
   async function loadBlocks() {
     try {
@@ -224,7 +225,13 @@ export default function DayPlansClient() {
       <hr style={{ margin: '18px 0', opacity: 0.25 }} />
 
       <section style={styles.card}>
-        <div style={styles.sectionHeader}>Existing</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={styles.sectionHeader}>Existing</div>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 800, color: RCS.midBlue }}>
+            <input type="checkbox" checked={showTrashed} onChange={(e) => setShowTrashed(e.target.checked)} />
+            Show trashed
+          </label>
+        </div>
 
         {status === 'loading' && <div>Loading…</div>}
 

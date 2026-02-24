@@ -23,6 +23,7 @@ create table if not exists day_plans (
   visibility text not null default 'private',
   share_token_hash text,
   share_expires_at timestamptz,
+  trashed_at timestamptz,
   created_by uuid references auth.users(id),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -33,6 +34,8 @@ create table if not exists day_plans (
 -- Use COALESCE so non-Friday (null friday_type) still participates in uniqueness.
 create unique index if not exists day_plans_date_slot_friday_uq
   on day_plans(plan_date, slot, ((coalesce(friday_type, ''))));
+
+create index if not exists day_plans_trashed_at_idx on day_plans(trashed_at);
 
 -- BLOCKS (schedule entries for the day)
 create table if not exists day_plan_blocks (
@@ -451,6 +454,7 @@ begin
   from day_plans
   where id = plan_id
     and visibility = 'link'
+    and trashed_at is null
   limit 1;
 
   if not found then
@@ -514,6 +518,7 @@ begin
   into plans
   from day_plans p
   where p.visibility = 'link'
+    and p.trashed_at is null
     and p.plan_date between ws and we;
 
   return plans;
