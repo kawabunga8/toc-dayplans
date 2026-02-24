@@ -17,6 +17,9 @@ export default function DayPlansClient() {
   const [slot, setSlot] = useState('A');
   const [fridayType, setFridayType] = useState<'day1' | 'day2' | ''>('');
   const [title, setTitle] = useState('');
+  const [titleAuto, setTitleAuto] = useState(true);
+
+  const [blocks, setBlocks] = useState<Array<{ block_label: string; name: string }>>([]);
   const [notes, setNotes] = useState('');
 
   async function load() {
@@ -41,8 +44,40 @@ export default function DayPlansClient() {
 
   useEffect(() => {
     void load();
+    void loadBlocks();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function loadBlocks() {
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('classes')
+        .select('block_label,name,sort_order')
+        .not('block_label', 'is', null)
+        .order('sort_order', { ascending: true, nullsFirst: false });
+
+      if (error) throw error;
+      const rows = (data ?? []) as any[];
+      const list = rows
+        .map((r) => ({ block_label: String(r.block_label), name: String(r.name) }))
+        .filter((r) => r.block_label);
+      setBlocks(list);
+
+      // If the current selected slot doesn't exist in seeded blocks, fall back to first.
+      if (list.length > 0 && !list.some((b) => b.block_label === slot)) {
+        setSlot(list[0]!.block_label);
+      }
+
+      // Pre-populate title if still auto.
+      const current = list.find((b) => b.block_label === slot);
+      if (current && titleAuto && !title.trim()) {
+        setTitle(current.name);
+      }
+    } catch {
+      // If classes aren't available yet, keep the legacy defaults.
+    }
+  }
 
   const isFriday = useMemo(() => isFridayLocal(planDate), [planDate]);
 
@@ -106,13 +141,22 @@ export default function DayPlansClient() {
           </label>
 
           <label style={{ display: 'grid', gap: 6 }}>
-            <span>Slot</span>
+            <span>Block</span>
             <select
               value={slot}
-              onChange={(e) => setSlot(e.target.value)}
+              onChange={(e) => {
+                const next = e.target.value;
+                setSlot(next);
+
+                // Pre-populate title from the class name for this block.
+                const hit = blocks.find((b) => b.block_label === next);
+                if (hit && titleAuto) {
+                  setTitle(hit.name);
+                }
+              }}
               style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #cbd5e1' }}
             >
-              {SLOTS.map((s) => (
+              {(blocks.length ? blocks.map((b) => b.block_label) : SLOTS).map((s) => (
                 <option key={s} value={s}>
                   {s}
                 </option>
@@ -139,8 +183,11 @@ export default function DayPlansClient() {
             <span>Title</span>
             <input
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g., Block A — Math 9"
+              onChange={(e) => {
+                setTitleAuto(false);
+                setTitle(e.target.value);
+              }}
+              placeholder="e.g., Computer Programming 11/12"
               style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #cbd5e1' }}
             />
           </label>
