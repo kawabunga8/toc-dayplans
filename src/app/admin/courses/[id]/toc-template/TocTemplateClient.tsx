@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 
 type PlanMode = 'lesson_flow' | 'activity_options';
@@ -50,7 +51,10 @@ type WhatIfItem = { id?: string; scenario_text: string; response_text: string };
 
 type Status = 'loading' | 'idle' | 'saving' | 'error';
 
-export default function TocTemplateClient({ classId }: { classId: string }) {
+export default function TocTemplateClient({ classId }: { classId?: string }) {
+  const params = useParams<{ id?: string }>();
+  const effectiveClassId = (classId || params?.id || '') as string;
+
   const [status, setStatus] = useState<Status>('loading');
   const [error, setError] = useState<string | null>(null);
 
@@ -87,13 +91,17 @@ export default function TocTemplateClient({ classId }: { classId: string }) {
       setError(null);
 
       try {
+        if (!effectiveClassId) {
+          throw new Error('Missing class id in route.');
+        }
+
         const supabase = getSupabaseClient();
 
         // 1) class header info
         const { data: classData, error: classErr } = await supabase
           .from('classes')
           .select('id,name,room,block_label')
-          .eq('id', classId)
+          .eq('id', effectiveClassId)
           .single();
         if (classErr) throw classErr;
 
@@ -104,7 +112,7 @@ export default function TocTemplateClient({ classId }: { classId: string }) {
         const { data: tpl, error: tplErr } = await supabase
           .from('class_toc_templates')
           .select('*')
-          .eq('class_id', classId)
+          .eq('class_id', effectiveClassId)
           .eq('is_active', true)
           .maybeSingle();
         if (tplErr) throw tplErr;
@@ -240,7 +248,7 @@ export default function TocTemplateClient({ classId }: { classId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [classId]);
+  }, [effectiveClassId]);
 
   function confirmSwitch(next: PlanMode) {
     if (next === planMode) return;
@@ -263,7 +271,7 @@ export default function TocTemplateClient({ classId }: { classId: string }) {
 
       // upsert template
       const payload: any = {
-        class_id: classId,
+        class_id: effectiveClassId,
         is_active: true,
         teacher_name: teacherName.trim(),
         ta_name: taName.trim() ? taName.trim() : null,
