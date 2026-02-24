@@ -17,7 +17,8 @@ type BlockTimeRow = {
 
 type Status = 'loading' | 'idle' | 'saving' | 'error';
 
-const DEFAULT_SLOTS = ['A', 'B', 'Career Life', 'Chapel', 'Lunch', 'C', 'D', 'E', 'F', 'Flex Block', 'G', 'H'];
+const DEFAULT_SLOTS_MON_THU = ['P1', 'P2', 'Flex', 'Lunch', 'P5', 'P6'];
+const DEFAULT_SLOTS_FRI = ['P1', 'P2', 'Chapel', 'Lunch', 'P5', 'P6'];
 
 export default function BlockTimesClient() {
   const [template, setTemplate] = useState<TemplateKey>('mon_thu');
@@ -28,13 +29,17 @@ export default function BlockTimesClient() {
 
   const [rows, setRows] = useState<Array<Omit<BlockTimeRow, 'id' | 'effective_to'>>>((() => {
     // editable draft rows to save as a new effective set
-    return DEFAULT_SLOTS.map((slot) => ({
-      template_key: 'mon_thu' as TemplateKey,
-      effective_from: new Date().toISOString().slice(0, 10),
-      slot,
-      start_time: '08:30',
-      end_time: '09:45',
-    }));
+    const eff = new Date().toISOString().slice(0, 10);
+    return DEFAULT_SLOTS_MON_THU.map((slot) => {
+      const t = defaultTimes('mon_thu', slot);
+      return {
+        template_key: 'mon_thu' as TemplateKey,
+        effective_from: eff,
+        slot,
+        start_time: t.start,
+        end_time: t.end,
+      };
+    });
   })());
 
   const title = useMemo(() => (template === 'mon_thu' ? 'Mon–Thu Block Times' : 'Friday Block Times'), [template]);
@@ -58,15 +63,19 @@ export default function BlockTimesClient() {
       if (error) throw error;
 
       if ((data?.length ?? 0) === 0) {
-        // no defaults yet: start with a blank-ish draft
+        // no defaults yet: start with our real schedule draft
+        const slots = template === 'mon_thu' ? DEFAULT_SLOTS_MON_THU : DEFAULT_SLOTS_FRI;
         setRows(
-          DEFAULT_SLOTS.map((slot) => ({
-            template_key: template,
-            effective_from: effectiveFrom,
-            slot,
-            start_time: '08:30',
-            end_time: '09:45',
-          }))
+          slots.map((slot) => {
+            const t = defaultTimes(template, slot);
+            return {
+              template_key: template,
+              effective_from: effectiveFrom,
+              slot,
+              start_time: t.start,
+              end_time: t.end,
+            };
+          })
         );
       } else {
         setRows(
@@ -226,6 +235,46 @@ export default function BlockTimesClient() {
       </section>
     </main>
   );
+}
+
+function defaultTimes(template: TemplateKey, slot: string): { start: string; end: string } {
+  // RCS fixed time slots. Block letters rotate; these are the time periods.
+  if (template === 'fri') {
+    switch (slot) {
+      case 'P1':
+        return { start: '09:10', end: '10:10' };
+      case 'P2':
+        return { start: '10:15', end: '11:15' };
+      case 'Chapel':
+        return { start: '11:20', end: '12:10' };
+      case 'Lunch':
+        return { start: '12:10', end: '13:00' };
+      case 'P5':
+        return { start: '13:00', end: '14:00' };
+      case 'P6':
+        return { start: '14:05', end: '15:05' };
+      default:
+        return { start: '09:10', end: '10:10' };
+    }
+  }
+
+  // mon_thu
+  switch (slot) {
+    case 'P1':
+      return { start: '08:30', end: '09:40' };
+    case 'P2':
+      return { start: '09:45', end: '10:55' };
+    case 'Flex':
+      return { start: '11:00', end: '11:50' };
+    case 'Lunch':
+      return { start: '11:50', end: '12:35' };
+    case 'P5':
+      return { start: '12:40', end: '13:50' };
+    case 'P6':
+      return { start: '13:55', end: '15:05' };
+    default:
+      return { start: '08:30', end: '09:40' };
+  }
 }
 
 function humanizeError(e: any): string {
