@@ -425,6 +425,69 @@ for all
 using (is_staff())
 with check (is_staff());
 
+-- ----------------------
+-- PUBLIC DAYPLAN SHARE (TOC-facing)
+-- ----------------------
+
+-- Returns the minimum safe payload for TOCs by share token.
+-- Token is compared by sha256 hash to day_plans.share_token_hash.
+-- SECURITY DEFINER so anon callers can access without opening table RLS.
+create or replace function get_public_day_plan(token text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  token_hash text;
+  p record;
+  blocks jsonb;
+begin
+  if token is null or length(trim(token)) = 0 then
+    return null;
+  end if;
+
+  token_hash := encode(digest(token, 'sha256'), 'hex');
+
+  select * into p
+  from day_plans
+  where share_token_hash = token_hash
+    and visibility = 'link'
+    and (share_expires_at is null or share_expires_at > now())
+  limit 1;
+
+  if not found then
+    return null;
+  end if;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+      'id', b.id,
+      'start_time', b.start_time,
+      'end_time', b.end_time,
+      'room', b.room,
+      'class_name', b.class_name,
+      'details', b.details,
+      'class_id', b.class_id
+    ) order by b.start_time asc), '[]'::jsonb)
+  into blocks
+  from day_plan_blocks b
+  where b.day_plan_id = p.id;
+
+  return jsonb_build_object(
+    'id', p.id,
+    'plan_date', p.plan_date,
+    'slot', p.slot,
+    'friday_type', p.friday_type,
+    'title', p.title,
+    'notes', p.notes,
+    'blocks', blocks
+  );
+end;
+$$;
+
+revoke all on function get_public_day_plan(text) from public;
+grant execute on function get_public_day_plan(text) to anon;
+
 -- PUBLIC ACCESS NOTE:
 -- Public TOC links should be served through a *server-side* route or edge function
 -- that validates token + expiry. Do NOT enable anon select on student tables.
