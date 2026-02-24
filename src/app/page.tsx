@@ -5,8 +5,13 @@ export default function Home() {
     <main style={styles.page}>
       <header style={styles.header}>
         <div style={styles.brandWrap}>
-          <div style={styles.schoolName}>Richmond Christian School</div>
-          <div style={styles.appName}>TOC Day Plans</div>
+          <div style={styles.brandRow}>
+            <img src="/rcs-wordmark.png" alt="RCS" style={styles.logo} />
+            <div>
+              <div style={styles.schoolName}>Richmond Christian School</div>
+              <div style={styles.appName}>TOC Day Plans</div>
+            </div>
+          </div>
         </div>
       </header>
 
@@ -46,6 +51,8 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '22px 24px',
   },
   brandWrap: { maxWidth: 980, margin: '0 auto' },
+  brandRow: { display: 'flex', gap: 14, alignItems: 'center' },
+  logo: { height: 44, width: 'auto', display: 'block' },
   schoolName: { color: RCS.gold, fontWeight: 900, letterSpacing: 0.2, marginBottom: 6 },
   appName: { color: RCS.white, fontWeight: 900, fontSize: 28 },
   body: { padding: 24 },
