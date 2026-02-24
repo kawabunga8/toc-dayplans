@@ -1,9 +1,11 @@
 'use client';
 
 import { FormEvent, useMemo, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { getSupabaseClient } from '@/lib/supabaseClient';
+
+type Status = 'idle' | 'signing-in' | 'error' | 'sent';
 
 export default function LoginClient() {
   const router = useRouter();
@@ -11,56 +13,58 @@ export default function LoginClient() {
   const next = sp.get('next') || '/admin';
 
   const [email, setEmail] = useState('');
-  const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [password, setPassword] = useState('');
+  const [status, setStatus] = useState<Status>('idle');
   const [error, setError] = useState<string | null>(null);
 
-  const redirectTo = useMemo(() => {
+  const resetRedirectTo = useMemo(() => {
     if (typeof window === 'undefined') return undefined;
-    const url = new URL('/auth/callback', window.location.origin);
+    const url = new URL('/reset-password', window.location.origin);
     url.searchParams.set('next', next);
     return url.toString();
   }, [next]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
-    setStatus('sending');
+    setStatus('signing-in');
     setError(null);
 
     try {
       const supabase = getSupabaseClient();
-      const { error } = await supabase.auth.signInWithOtp({
+      const { error } = await supabase.auth.signInWithPassword({
         email,
-        options: {
-          emailRedirectTo: redirectTo,
-        },
+        password,
       });
+      if (error) throw error;
+      router.push(next);
+    } catch (err: any) {
+      setStatus('error');
+      setError(err?.message ?? 'Sign-in failed');
+    }
+  }
 
+  async function sendReset() {
+    setStatus('signing-in');
+    setError(null);
+
+    try {
+      if (!email.trim()) throw new Error('Enter your email first');
+      const supabase = getSupabaseClient();
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: resetRedirectTo,
+      });
       if (error) throw error;
       setStatus('sent');
     } catch (err: any) {
       setStatus('error');
-      setError(err?.message ?? 'Failed to send magic link');
+      setError(err?.message ?? 'Failed to send reset email');
     }
-  }
-
-  async function goIfAlreadyLoggedIn() {
-    const supabase = getSupabaseClient();
-    const { data } = await supabase.auth.getSession();
-    if (data.session) router.push(next);
-  }
-
-  // best-effort: if already logged in, bounce.
-  if (typeof window !== 'undefined') {
-    // fire and forget
-    void goIfAlreadyLoggedIn();
   }
 
   return (
     <main style={{ padding: 24, maxWidth: 520, margin: '0 auto', fontFamily: 'system-ui' }}>
-      <h1>Staff Login</h1>
-      <p style={{ opacity: 0.8 }}>
-        Enter your staff email and we’ll send you a sign-in link.
-      </p>
+      <h1>Admin Login</h1>
+      <p style={{ opacity: 0.8 }}>Sign in with your admin email and password.</p>
 
       <form onSubmit={onSubmit} style={{ display: 'grid', gap: 10 }}>
         <label style={{ display: 'grid', gap: 6 }}>
@@ -75,17 +79,37 @@ export default function LoginClient() {
           />
         </label>
 
+        <label style={{ display: 'grid', gap: 6 }}>
+          <span>Password</span>
+          <input
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            type="password"
+            required
+            style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #cbd5e1' }}
+          />
+        </label>
+
         <button
           type="submit"
-          disabled={status === 'sending'}
+          disabled={status === 'signing-in'}
           style={{ padding: '10px 12px', borderRadius: 10, border: 0, background: '#2563eb', color: 'white' }}
         >
-          {status === 'sending' ? 'Sending…' : 'Send magic link'}
+          {status === 'signing-in' ? 'Signing in…' : 'Sign in'}
+        </button>
+
+        <button
+          type="button"
+          onClick={sendReset}
+          disabled={status === 'signing-in'}
+          style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #94a3b8', background: 'transparent' }}
+        >
+          Forgot password (email reset link)
         </button>
 
         {status === 'sent' && (
           <div style={{ padding: 12, borderRadius: 10, border: '1px solid #86efac', background: '#dcfce7' }}>
-            Link sent. Check your inbox.
+            Password reset email sent. Check your inbox.
           </div>
         )}
 
