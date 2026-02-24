@@ -12,8 +12,10 @@ import {
   TextRun,
   WidthType,
   ImageRun,
+  UnderlineType,
 } from 'docx';
 
+// Colour constants (from RCS TOC Document Style Guide)
 export const COLOR = {
   DEEP_BLUE: '1F4E79',
   MID_BLUE: '2E75B6',
@@ -26,14 +28,20 @@ export const COLOR = {
   TEXT_DARK: '1A1A1A',
 } as const;
 
+// Page setup constants
 export const CONTENT_WIDTH_DXA = 9360;
 
+// Standard cell borders
 export const cellBorders = {
   top: { style: BorderStyle.SINGLE, size: 1, color: COLOR.MED_GRAY },
   bottom: { style: BorderStyle.SINGLE, size: 1, color: COLOR.MED_GRAY },
   left: { style: BorderStyle.SINGLE, size: 1, color: COLOR.MED_GRAY },
   right: { style: BorderStyle.SINGLE, size: 1, color: COLOR.MED_GRAY },
 } as const;
+
+// -------------------------
+// Document helpers
+// -------------------------
 
 export function createRcsDoc(children: (Paragraph | Table)[]) {
   return new Document({
@@ -58,7 +66,11 @@ export function createRcsDoc(children: (Paragraph | Table)[]) {
               format: LevelFormat.BULLET,
               text: '\u2022',
               alignment: AlignmentType.LEFT,
-              style: { paragraph: { indent: { left: 560, hanging: 280 } } },
+              style: {
+                paragraph: {
+                  indent: { left: 560, hanging: 280 },
+                },
+              },
             },
           ],
         },
@@ -70,7 +82,11 @@ export function createRcsDoc(children: (Paragraph | Table)[]) {
               format: LevelFormat.DECIMAL,
               text: '%1.',
               alignment: AlignmentType.LEFT,
-              style: { paragraph: { indent: { left: 560, hanging: 280 } } },
+              style: {
+                paragraph: {
+                  indent: { left: 560, hanging: 280 },
+                },
+              },
             },
           ],
         },
@@ -83,17 +99,86 @@ export async function packDoc(doc: Document) {
   return Packer.toBuffer(doc);
 }
 
-export function spacer() {
-  return new Paragraph({ children: [new TextRun('')], spacing: { before: 80, after: 80 } });
-}
+// -------------------------
+// Components (exact per guide)
+// -------------------------
 
-export function body(text: string) {
-  return new Paragraph({
-    children: [new TextRun({ text, size: 20, font: 'Arial', color: COLOR.TEXT_DARK })],
-    spacing: { after: 80 },
+// 1) TITLE BLOCK
+export function titleBlock(teacherName: string, className: string, subtitle: string, courseDetail?: string) {
+  return new Table({
+    width: { size: CONTENT_WIDTH_DXA, type: WidthType.DXA },
+    columnWidths: [CONTENT_WIDTH_DXA],
+    rows: [
+      new TableRow({
+        children: [
+          new TableCell({
+            width: { size: CONTENT_WIDTH_DXA, type: WidthType.DXA },
+            shading: { fill: COLOR.DEEP_BLUE, type: ShadingType.CLEAR },
+            borders: {
+              bottom: { style: BorderStyle.SINGLE, size: 6, color: COLOR.ACCENT_GOLD },
+            },
+            margins: { top: 300, bottom: 300, left: 360, right: 360 },
+            children: [
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                children: [
+                  new TextRun({
+                    text: teacherName,
+                    size: 22,
+                    color: COLOR.ACCENT_GOLD,
+                    font: 'Arial',
+                  }),
+                ],
+              }),
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { before: 80, after: 80 },
+                children: [
+                  new TextRun({
+                    text: className,
+                    bold: true,
+                    size: 40,
+                    color: COLOR.WHITE,
+                    font: 'Arial',
+                  }),
+                ],
+              }),
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                children: [
+                  new TextRun({
+                    text: subtitle,
+                    size: 28,
+                    color: COLOR.ACCENT_GOLD,
+                    font: 'Arial',
+                  }),
+                ],
+              }),
+              ...(courseDetail
+                ? [
+                    new Paragraph({
+                      alignment: AlignmentType.CENTER,
+                      spacing: { before: 80 },
+                      children: [
+                        new TextRun({
+                          text: courseDetail,
+                          size: 22,
+                          color: COLOR.LIGHT_BLUE,
+                          font: 'Arial',
+                        }),
+                      ],
+                    }),
+                  ]
+                : []),
+            ],
+          }),
+        ],
+      }),
+    ],
   });
 }
 
+// Header variant (separate named variant)
 export function headerWithWordmark(opts: {
   wordmarkPng: Buffer;
   teacherName: string;
@@ -195,6 +280,496 @@ export function headerWithWordmark(opts: {
                   ]
                 : []),
             ],
+          }),
+        ],
+      }),
+    ],
+  });
+}
+
+// 2) SECTION HEADER
+export function sectionHeader(label: string, title: string) {
+  return new Table({
+    width: { size: CONTENT_WIDTH_DXA, type: WidthType.DXA },
+    columnWidths: [CONTENT_WIDTH_DXA],
+    rows: [
+      new TableRow({
+        children: [
+          new TableCell({
+            width: { size: CONTENT_WIDTH_DXA, type: WidthType.DXA },
+            shading: { fill: COLOR.DEEP_BLUE, type: ShadingType.CLEAR },
+            borders: {
+              top: { style: BorderStyle.SINGLE, size: 4, color: COLOR.ACCENT_GOLD },
+              bottom: { style: BorderStyle.SINGLE, size: 4, color: COLOR.ACCENT_GOLD },
+              left: { style: BorderStyle.SINGLE, size: 4, color: COLOR.ACCENT_GOLD },
+              right: { style: BorderStyle.SINGLE, size: 4, color: COLOR.ACCENT_GOLD },
+            },
+            margins: { top: 160, bottom: 160, left: 240, right: 240 },
+            children: [
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: label,
+                    bold: true,
+                    size: 20,
+                    color: COLOR.ACCENT_GOLD,
+                    font: 'Arial',
+                  }),
+                ],
+              }),
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: title,
+                    bold: true,
+                    size: 36,
+                    color: COLOR.WHITE,
+                    font: 'Arial',
+                  }),
+                ],
+              }),
+            ],
+          }),
+        ],
+      }),
+    ],
+  });
+}
+
+// 3) SUB-HEADER
+export function subHeader(text: string) {
+  return new Paragraph({
+    children: [new TextRun({ text, bold: true, size: 24, color: COLOR.MID_BLUE, font: 'Arial' })],
+    spacing: { before: 200, after: 80 },
+    border: { bottom: { style: BorderStyle.SINGLE, size: 2, color: COLOR.MED_GRAY } },
+  });
+}
+
+// 4) BODY PARAGRAPH
+export function body(text: string) {
+  return new Paragraph({
+    children: [new TextRun({ text, size: 20, font: 'Arial', color: COLOR.TEXT_DARK })],
+    spacing: { after: 80 },
+  });
+}
+
+// 5) BULLET ITEM
+export function bulletItem(text: string) {
+  return new Paragraph({
+    numbering: { reference: 'bullets', level: 0 },
+    children: [new TextRun({ text, size: 20, font: 'Arial', color: COLOR.TEXT_DARK })],
+    spacing: { before: 30, after: 30 },
+  });
+}
+
+// 6) NUMBERED ITEM
+export function numberedItem(text: string) {
+  return new Paragraph({
+    numbering: { reference: 'numbers', level: 0 },
+    children: [new TextRun({ text, size: 20, font: 'Arial', color: COLOR.TEXT_DARK })],
+    spacing: { before: 30, after: 30 },
+  });
+}
+
+// 7) SPACER
+export function spacer() {
+  return new Paragraph({
+    children: [new TextRun('')],
+    spacing: { before: 80, after: 80 },
+  });
+}
+
+// 8) BLUE INFO BOX
+export function blueBox(title: string, children: Paragraph[]) {
+  return new Table({
+    width: { size: CONTENT_WIDTH_DXA, type: WidthType.DXA },
+    columnWidths: [CONTENT_WIDTH_DXA],
+    rows: [
+      new TableRow({
+        children: [
+          new TableCell({
+            width: { size: CONTENT_WIDTH_DXA, type: WidthType.DXA },
+            borders: {
+              top: { style: BorderStyle.SINGLE, size: 4, color: COLOR.MID_BLUE },
+              bottom: { style: BorderStyle.SINGLE, size: 4, color: COLOR.MID_BLUE },
+              left: { style: BorderStyle.SINGLE, size: 12, color: COLOR.MID_BLUE },
+              right: { style: BorderStyle.SINGLE, size: 4, color: COLOR.MID_BLUE },
+            },
+            shading: { fill: COLOR.LIGHT_BLUE, type: ShadingType.CLEAR },
+            margins: { top: 120, bottom: 120, left: 200, right: 200 },
+            children: [
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: title,
+                    bold: true,
+                    size: 20,
+                    font: 'Arial',
+                    color: COLOR.DEEP_BLUE,
+                  }),
+                ],
+                spacing: { after: 80 },
+              }),
+              ...children,
+            ],
+          }),
+        ],
+      }),
+    ],
+  });
+}
+
+// 9) GOLD HIGHLIGHT BOX
+export function goldBox(title: string, children: Paragraph[]) {
+  return new Table({
+    width: { size: CONTENT_WIDTH_DXA, type: WidthType.DXA },
+    columnWidths: [CONTENT_WIDTH_DXA],
+    rows: [
+      new TableRow({
+        children: [
+          new TableCell({
+            width: { size: CONTENT_WIDTH_DXA, type: WidthType.DXA },
+            borders: {
+              top: { style: BorderStyle.SINGLE, size: 4, color: COLOR.ACCENT_GOLD },
+              bottom: { style: BorderStyle.SINGLE, size: 4, color: COLOR.ACCENT_GOLD },
+              left: { style: BorderStyle.SINGLE, size: 12, color: COLOR.ACCENT_GOLD },
+              right: { style: BorderStyle.SINGLE, size: 4, color: COLOR.ACCENT_GOLD },
+            },
+            shading: { fill: COLOR.LIGHT_GOLD, type: ShadingType.CLEAR },
+            margins: { top: 120, bottom: 120, left: 200, right: 200 },
+            children: [
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: title,
+                    bold: true,
+                    size: 20,
+                    font: 'Arial',
+                    color: COLOR.ACCENT_GOLD,
+                  }),
+                ],
+                spacing: { after: 80 },
+              }),
+              ...children,
+            ],
+          }),
+        ],
+      }),
+    ],
+  });
+}
+
+// 10) INFO TABLE
+export function infoTable(rows: Array<[label: string, value: string]>) {
+  return new Table({
+    width: { size: CONTENT_WIDTH_DXA, type: WidthType.DXA },
+    columnWidths: [2200, 7160],
+    rows: rows.map(([label, value], i) =>
+      new TableRow({
+        children: [
+          new TableCell({
+            width: { size: 2200, type: WidthType.DXA },
+            borders: cellBorders,
+            shading: { fill: COLOR.LIGHT_BLUE, type: ShadingType.CLEAR },
+            margins: { top: 80, bottom: 80, left: 120, right: 80 },
+            children: [
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: label,
+                    bold: true,
+                    size: 19,
+                    font: 'Arial',
+                    color: COLOR.DEEP_BLUE,
+                  }),
+                ],
+              }),
+            ],
+          }),
+          new TableCell({
+            width: { size: 7160, type: WidthType.DXA },
+            borders: cellBorders,
+            shading: { fill: i % 2 === 0 ? COLOR.WHITE : COLOR.LIGHT_GRAY, type: ShadingType.CLEAR },
+            margins: { top: 80, bottom: 80, left: 120, right: 80 },
+            children: [
+              new Paragraph({
+                children: [new TextRun({ text: value, size: 19, font: 'Arial', color: COLOR.TEXT_DARK })],
+              }),
+            ],
+          }),
+        ],
+      })
+    ),
+  });
+}
+
+// 11) ROLE TABLE
+export function roleTable(rows: Array<[who: string, responsibility: string]>) {
+  return new Table({
+    width: { size: CONTENT_WIDTH_DXA, type: WidthType.DXA },
+    columnWidths: [2400, 6960],
+    rows: [
+      new TableRow({
+        children: [
+          new TableCell({
+            width: { size: 2400, type: WidthType.DXA },
+            borders: cellBorders,
+            shading: { fill: COLOR.MID_BLUE, type: ShadingType.CLEAR },
+            margins: { top: 80, bottom: 80, left: 120, right: 80 },
+            children: [
+              new Paragraph({
+                children: [
+                  new TextRun({ text: 'WHO', bold: true, size: 19, font: 'Arial', color: COLOR.WHITE }),
+                ],
+              }),
+            ],
+          }),
+          new TableCell({
+            width: { size: 6960, type: WidthType.DXA },
+            borders: cellBorders,
+            shading: { fill: COLOR.MID_BLUE, type: ShadingType.CLEAR },
+            margins: { top: 80, bottom: 80, left: 120, right: 80 },
+            children: [
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: 'RESPONSIBILITY',
+                    bold: true,
+                    size: 19,
+                    font: 'Arial',
+                    color: COLOR.WHITE,
+                  }),
+                ],
+              }),
+            ],
+          }),
+        ],
+      }),
+      ...rows.map(([who, resp], i) =>
+        new TableRow({
+          children: [
+            new TableCell({
+              width: { size: 2400, type: WidthType.DXA },
+              borders: cellBorders,
+              shading: { fill: i % 2 === 0 ? COLOR.LIGHT_BLUE : COLOR.WHITE, type: ShadingType.CLEAR },
+              margins: { top: 80, bottom: 80, left: 120, right: 80 },
+              children: [
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: who,
+                      bold: true,
+                      size: 19,
+                      font: 'Arial',
+                      color: COLOR.DEEP_BLUE,
+                    }),
+                  ],
+                }),
+              ],
+            }),
+            new TableCell({
+              width: { size: 6960, type: WidthType.DXA },
+              borders: cellBorders,
+              shading: { fill: i % 2 === 0 ? COLOR.LIGHT_BLUE : COLOR.WHITE, type: ShadingType.CLEAR },
+              margins: { top: 80, bottom: 80, left: 120, right: 80 },
+              children: [
+                new Paragraph({
+                  children: [new TextRun({ text: resp, size: 19, font: 'Arial', color: COLOR.TEXT_DARK })],
+                }),
+              ],
+            }),
+          ],
+        })
+      ),
+    ],
+  });
+}
+
+// 12) PHASE TABLE (4 columns)
+export function phaseTable(phases: Array<{ time: string; phase: string; activity: string; purpose: string }>) {
+  return new Table({
+    width: { size: CONTENT_WIDTH_DXA, type: WidthType.DXA },
+    columnWidths: [1100, 1700, 4360, 2200],
+    rows: [
+      new TableRow({
+        children: [
+          new TableCell({
+            width: { size: 1100, type: WidthType.DXA },
+            borders: cellBorders,
+            shading: { fill: COLOR.MID_BLUE, type: ShadingType.CLEAR },
+            margins: { top: 80, bottom: 80, left: 120, right: 80 },
+            children: [
+              new Paragraph({
+                children: [new TextRun({ text: 'TIME', bold: true, size: 18, font: 'Arial', color: COLOR.WHITE })],
+              }),
+            ],
+          }),
+          new TableCell({
+            width: { size: 1700, type: WidthType.DXA },
+            borders: cellBorders,
+            shading: { fill: COLOR.MID_BLUE, type: ShadingType.CLEAR },
+            margins: { top: 80, bottom: 80, left: 120, right: 80 },
+            children: [
+              new Paragraph({
+                children: [new TextRun({ text: 'PHASE', bold: true, size: 18, font: 'Arial', color: COLOR.WHITE })],
+              }),
+            ],
+          }),
+          new TableCell({
+            width: { size: 4360, type: WidthType.DXA },
+            borders: cellBorders,
+            shading: { fill: COLOR.MID_BLUE, type: ShadingType.CLEAR },
+            margins: { top: 80, bottom: 80, left: 120, right: 80 },
+            children: [
+              new Paragraph({
+                children: [
+                  new TextRun({ text: 'ACTIVITY', bold: true, size: 18, font: 'Arial', color: COLOR.WHITE }),
+                ],
+              }),
+            ],
+          }),
+          new TableCell({
+            width: { size: 2200, type: WidthType.DXA },
+            borders: cellBorders,
+            shading: { fill: COLOR.MID_BLUE, type: ShadingType.CLEAR },
+            margins: { top: 80, bottom: 80, left: 120, right: 80 },
+            children: [
+              new Paragraph({
+                children: [
+                  new TextRun({ text: 'PURPOSE', bold: true, size: 18, font: 'Arial', color: COLOR.WHITE }),
+                ],
+              }),
+            ],
+          }),
+        ],
+      }),
+      ...phases.map(({ time, phase, activity, purpose }, i) =>
+        new TableRow({
+          children: [
+            new TableCell({
+              width: { size: 1100, type: WidthType.DXA },
+              borders: cellBorders,
+              shading: { fill: i % 2 === 0 ? COLOR.LIGHT_GOLD : COLOR.WHITE, type: ShadingType.CLEAR },
+              margins: { top: 80, bottom: 80, left: 120, right: 80 },
+              children: [
+                new Paragraph({
+                  children: [new TextRun({ text: time, bold: true, size: 18, font: 'Arial', color: COLOR.DEEP_BLUE })],
+                }),
+              ],
+            }),
+            new TableCell({
+              width: { size: 1700, type: WidthType.DXA },
+              borders: cellBorders,
+              shading: { fill: i % 2 === 0 ? COLOR.LIGHT_GOLD : COLOR.WHITE, type: ShadingType.CLEAR },
+              margins: { top: 80, bottom: 80, left: 120, right: 80 },
+              children: [
+                new Paragraph({
+                  children: [new TextRun({ text: phase, bold: true, size: 18, font: 'Arial', color: COLOR.DEEP_BLUE })],
+                }),
+              ],
+            }),
+            new TableCell({
+              width: { size: 4360, type: WidthType.DXA },
+              borders: cellBorders,
+              shading: { fill: i % 2 === 0 ? COLOR.LIGHT_BLUE : COLOR.WHITE, type: ShadingType.CLEAR },
+              margins: { top: 80, bottom: 80, left: 120, right: 80 },
+              children: activity.split('\n\n').map((para) =>
+                new Paragraph({
+                  children: [new TextRun({ text: para, size: 18, font: 'Arial', color: COLOR.TEXT_DARK })],
+                  spacing: { after: 60 },
+                })
+              ),
+            }),
+            new TableCell({
+              width: { size: 2200, type: WidthType.DXA },
+              borders: cellBorders,
+              shading: { fill: i % 2 === 0 ? COLOR.LIGHT_BLUE : COLOR.WHITE, type: ShadingType.CLEAR },
+              margins: { top: 80, bottom: 80, left: 120, right: 80 },
+              children: [
+                new Paragraph({
+                  children: [
+                    new TextRun({
+                      text: purpose,
+                      size: 18,
+                      font: 'Arial',
+                      color: COLOR.TEXT_DARK,
+                      italics: true,
+                    }),
+                  ],
+                }),
+              ],
+            }),
+          ],
+        })
+      ),
+    ],
+  });
+}
+
+// 13) ACTIVITY OPTION BLOCK
+export function activityBox(
+  number: string,
+  title: string,
+  description: string,
+  details: Paragraph[]
+) {
+  return new Table({
+    width: { size: CONTENT_WIDTH_DXA, type: WidthType.DXA },
+    columnWidths: [600, 8760],
+    rows: [
+      new TableRow({
+        children: [
+          new TableCell({
+            width: { size: 600, type: WidthType.DXA },
+            borders: cellBorders,
+            shading: { fill: COLOR.DEEP_BLUE, type: ShadingType.CLEAR },
+            margins: { top: 100, bottom: 100, left: 120, right: 80 },
+            children: [
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                children: [
+                  new TextRun({
+                    text: number,
+                    bold: true,
+                    size: 28,
+                    font: 'Arial',
+                    color: COLOR.ACCENT_GOLD,
+                  }),
+                ],
+              }),
+            ],
+          }),
+          new TableCell({
+            width: { size: 8760, type: WidthType.DXA },
+            borders: cellBorders,
+            shading: { fill: COLOR.DEEP_BLUE, type: ShadingType.CLEAR },
+            margins: { top: 100, bottom: 100, left: 160, right: 120 },
+            children: [
+              new Paragraph({
+                children: [new TextRun({ text: title, bold: true, size: 22, font: 'Arial', color: COLOR.WHITE })],
+              }),
+              new Paragraph({
+                children: [new TextRun({ text: description, size: 19, font: 'Arial', color: COLOR.LIGHT_BLUE })],
+              }),
+            ],
+          }),
+        ],
+      }),
+      new TableRow({
+        children: [
+          new TableCell({
+            width: { size: 600, type: WidthType.DXA },
+            borders: cellBorders,
+            shading: { fill: COLOR.LIGHT_GOLD, type: ShadingType.CLEAR },
+            margins: { top: 80, bottom: 80, left: 120, right: 80 },
+            children: [new Paragraph({ children: [] })],
+          }),
+          new TableCell({
+            width: { size: 8760, type: WidthType.DXA },
+            borders: cellBorders,
+            shading: { fill: COLOR.WHITE, type: ShadingType.CLEAR },
+            margins: { top: 100, bottom: 100, left: 160, right: 120 },
+            children: details,
           }),
         ],
       }),
