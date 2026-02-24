@@ -153,6 +153,32 @@ for all
 using (is_staff())
 with check (is_staff());
 
+-- ----------------------
+-- BLOCK TIME DEFAULTS (effective-dated)
+-- ----------------------
+create table if not exists block_time_defaults (
+  id uuid primary key default gen_random_uuid(),
+  template_key text not null, -- 'mon_thu' | 'fri'
+  effective_from date not null,
+  effective_to date,
+  slot text not null,
+  start_time time not null,
+  end_time time not null,
+  created_at timestamptz not null default now(),
+  constraint block_time_template_key_check check (template_key in ('mon_thu','fri')),
+  constraint block_time_effective_check check (effective_to is null or effective_to > effective_from)
+);
+
+alter table block_time_defaults enable row level security;
+
+create policy "block_time_defaults_staff_all" on block_time_defaults
+for all
+using (is_staff())
+with check (is_staff());
+
+create unique index if not exists block_time_defaults_uq
+  on block_time_defaults(template_key, effective_from, slot);
+
 -- PUBLIC ACCESS NOTE:
 -- Public TOC links should be served through a *server-side* route or edge function
 -- that validates token + expiry. Do NOT enable anon select on student tables.

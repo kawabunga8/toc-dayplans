@@ -79,20 +79,45 @@ export default function AdminLayout({ children }: PropsWithChildren) {
 
   if (state.status === 'not-staff') {
     return (
-      <main style={{ padding: 24, maxWidth: 900, margin: '0 auto', fontFamily: 'system-ui' }}>
-        <h1>Access denied</h1>
-        <p style={{ opacity: 0.8 }}>
-          This account isn’t enabled as staff in Supabase (<code>staff_profiles</code>).
-        </p>
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 12 }}>
-          <Link href="/" style={btnOutline()}>
-            Home
-          </Link>
-          <button onClick={logout} style={btn()}>
+      <div style={{ fontFamily: 'system-ui' }}>
+        <header
+          style={{
+            padding: '12px 24px',
+            borderBottom: '1px solid #e2e8f0',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 16,
+          }}
+        >
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+            <Link href="/admin" style={{ textDecoration: 'none', color: '#0f172a' }}>
+              <b>Admin</b>
+            </Link>
+            <span style={disabledNav()}>Dayplans</span>
+            <span style={disabledNav()}>Block times</span>
+            <span style={disabledNav()}>Courses/Rooms</span>
+            <span style={disabledNav()}>Class lists</span>
+            <span style={disabledNav()}>Publishing</span>
+          </div>
+
+          <button onClick={logout} style={btnOutline()}>
             Sign out
           </button>
-        </div>
-      </main>
+        </header>
+
+        <main style={{ padding: 24, maxWidth: 900, margin: '0 auto', fontFamily: 'system-ui' }}>
+          <h1>Access denied</h1>
+          <p style={{ opacity: 0.8 }}>
+            This account isn’t enabled as staff in Supabase (<code>staff_profiles</code>).
+          </p>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 12 }}>
+            <Link href="/" style={btnOutline()}>
+              Home
+            </Link>
+          </div>
+        </main>
+      </div>
     );
   }
 
@@ -112,8 +137,20 @@ export default function AdminLayout({ children }: PropsWithChildren) {
           <Link href="/admin" style={{ textDecoration: 'none', color: '#0f172a' }}>
             <b>Admin</b>
           </Link>
-          <Link href="/admin/dayplans" style={{ textDecoration: 'none', color: '#2563eb' }}>
+          <Link href="/admin/dayplans" style={navLink('/admin/dayplans', pathname)}>
             Dayplans
+          </Link>
+          <Link href="/admin/block-times" style={navLink('/admin/block-times', pathname)}>
+            Block times
+          </Link>
+          <Link href="/admin/courses" style={navLink('/admin/courses', pathname)}>
+            Courses/Rooms
+          </Link>
+          <Link href="/admin/class-lists" style={navLink('/admin/class-lists', pathname)}>
+            Class lists
+          </Link>
+          <Link href="/admin/publishing" style={navLink('/admin/publishing', pathname)}>
+            Publishing
           </Link>
         </div>
 
@@ -135,6 +172,22 @@ function btn(): React.CSSProperties {
     color: 'white',
     textDecoration: 'none',
     border: 0,
+  };
+}
+
+function navLink(href: string, pathname: string | null): React.CSSProperties {
+  const active = pathname?.startsWith(href);
+  return {
+    textDecoration: 'none',
+    color: active ? '#0f172a' : '#2563eb',
+    fontWeight: active ? 800 : 600,
+  };
+}
+
+function disabledNav(): React.CSSProperties {
+  return {
+    color: '#94a3b8',
+    fontWeight: 600,
   };
 }
 
