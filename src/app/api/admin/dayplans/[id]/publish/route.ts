@@ -48,10 +48,6 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
 
   const planDate = plan.plan_date as string; // YYYY-MM-DD
 
-  // Token generation
-  const token = crypto.randomBytes(32).toString('hex');
-  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-
   // Expiry: 11:59 PM on plan_date in Pacific Time
   const expiresAt = DateTime.fromISO(planDate, { zone: 'America/Vancouver' })
     .endOf('day')
@@ -62,7 +58,7 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
     .from('day_plans')
     .update({
       visibility: 'link',
-      share_token_hash: tokenHash,
+      share_token_hash: null,
       share_expires_at: expiresAt,
       updated_at: new Date().toISOString(),
     })
@@ -72,5 +68,5 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
     return NextResponse.json({ error: updErr.message }, { status: 400 });
   }
 
-  return NextResponse.json({ token, expires_at: expiresAt });
+  return NextResponse.json({ ok: true, expires_at: expiresAt, plan_id: id });
 }

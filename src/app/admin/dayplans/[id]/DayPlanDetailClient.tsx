@@ -22,14 +22,10 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
   const [error, setError] = useState<string | null>(null);
   const [plan, setPlan] = useState<DayPlanRow | null>(null);
 
-  // raw token is only held in memory after publish/rotate
-  const [token, setToken] = useState<string | null>(null);
-
   const publicUrl = useMemo(() => {
-    if (!token) return null;
     if (typeof window === 'undefined') return null;
-    return new URL(`/p/${token}`, window.location.origin).toString();
-  }, [token]);
+    return new URL(`/p/${id}`, window.location.origin).toString();
+  }, [id]);
 
   async function load() {
     setStatus('loading');
@@ -64,7 +60,6 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
       const res = await fetch(`/api/admin/dayplans/${id}/publish`, { method: 'POST' });
       const j = await res.json();
       if (!res.ok) throw new Error(j?.error ?? 'Failed to publish');
-      setToken(j.token);
       await load();
       setStatus('idle');
     } catch (e: any) {
@@ -87,7 +82,6 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
       const res = await fetch(`/api/admin/dayplans/${id}/revoke`, { method: 'POST' });
       const j = await res.json();
       if (!res.ok) throw new Error(j?.error ?? 'Failed to revoke');
-      setToken(null);
       await load();
       setStatus('idle');
     } catch (e: any) {
@@ -147,7 +141,7 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                 </div>
               )}
 
-              {published && token && publicUrl && (
+              {published && publicUrl && (
                 <div style={styles.callout}>
                   <div style={{ fontWeight: 900, color: RCS.deepNavy, marginBottom: 6 }}>Public URL</div>
                   <div style={{ wordBreak: 'break-all' }}>{publicUrl}</div>
@@ -155,16 +149,13 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                     <button onClick={copyLink} style={styles.secondaryBtn}>Copy link</button>
                     <a href={publicUrl} target="_blank" rel="noreferrer" style={styles.primaryLink}>Open</a>
                   </div>
-                  <div style={{ marginTop: 10, fontSize: 12, opacity: 0.9 }}>
-                    Note: the raw token is only shown immediately after publishing. If you refresh, you can “Publish” again to rotate a new link.
-                  </div>
                 </div>
               )}
             </div>
 
             <div style={{ display: 'flex', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
               <button onClick={publish} disabled={status === 'publishing' || status === 'revoking'} style={styles.primaryBtn}>
-                {published ? 'Publish (Rotate Link)' : 'Publish'}
+                {published ? 'Update expiry' : 'Publish'}
               </button>
               <button onClick={revoke} disabled={!published || status === 'publishing' || status === 'revoking'} style={styles.dangerBtn}>
                 Revoke

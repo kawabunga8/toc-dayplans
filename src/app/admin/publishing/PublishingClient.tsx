@@ -46,17 +46,13 @@ export default function PublishingClient() {
 
   const origin = useMemo(() => (typeof window === 'undefined' ? '' : window.location.origin), []);
 
-  async function rotateAndCopy(planId: string) {
+  async function copyLink(planId: string) {
     setStatus('working');
     setError(null);
 
     try {
-      const res = await fetch(`/api/admin/dayplans/${planId}/publish`, { method: 'POST' });
-      const j = await res.json();
-      if (!res.ok) throw new Error(j?.error ?? 'Failed to generate link');
-      const url = `${origin}/p/${j.token}`;
+      const url = `${origin}/p/${planId}`;
       await navigator.clipboard.writeText(url);
-      await load();
       setStatus('idle');
     } catch (e: any) {
       setStatus('error');
@@ -122,7 +118,7 @@ export default function PublishingClient() {
                     <td style={styles.tdRight}>
                       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                         <button
-                          onClick={() => rotateAndCopy(p.id)}
+                          onClick={() => copyLink(p.id)}
                           disabled={status === 'loading' || status === 'working'}
                           style={styles.secondaryBtn}
                         >
@@ -137,7 +133,7 @@ export default function PublishingClient() {
                         </button>
                       </div>
                       <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8, textAlign: 'right' }}>
-                        Copy link rotates a fresh token (raw tokens are not stored).
+                        Public links are plan-id based. Publishing/expiry is the access gate.
                       </div>
                     </td>
                   </tr>

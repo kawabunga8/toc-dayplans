@@ -432,26 +432,24 @@ with check (is_staff());
 -- Returns the minimum safe payload for TOCs by share token.
 -- Token is compared by sha256 hash to day_plans.share_token_hash.
 -- SECURITY DEFINER so anon callers can access without opening table RLS.
-create or replace function get_public_day_plan(token text)
+-- Public dayplan payload (by day_plans.id)
+create or replace function get_public_day_plan_by_id(plan_id uuid)
 returns jsonb
 language plpgsql
 security definer
 set search_path = public
 as $$
 declare
-  token_hash text;
   p record;
   blocks jsonb;
 begin
-  if token is null or length(trim(token)) = 0 then
+  if plan_id is null then
     return null;
   end if;
 
-  token_hash := encode(digest(token, 'sha256'), 'hex');
-
   select * into p
   from day_plans
-  where share_token_hash = token_hash
+  where id = plan_id
     and visibility = 'link'
     and (share_expires_at is null or share_expires_at > now())
   limit 1;
@@ -485,8 +483,47 @@ begin
 end;
 $$;
 
-revoke all on function get_public_day_plan(text) from public;
-grant execute on function get_public_day_plan(text) to anon;
+revoke all on function get_public_day_plan_by_id(uuid) from public;
+grant execute on function get_public_day_plan_by_id(uuid) to anon;
+
+-- Week calendar payload: published plans for Mon–Fri of the given week_start (Monday)
+create or replace function get_public_plans_for_week(week_start date)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  ws date;
+  we date;
+  plans jsonb;
+begin
+  if week_start is null then
+    return '[]'::jsonb;
+  end if;
+
+  ws := week_start;
+  we := week_start + 4; -- Mon..Fri
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+      'id', p.id,
+      'plan_date', p.plan_date,
+      'slot', p.slot,
+      'title', p.title,
+      'share_expires_at', p.share_expires_at
+    ) order by p.plan_date asc, p.slot asc), '[]'::jsonb)
+  into plans
+  from day_plans p
+  where p.visibility = 'link'
+    and p.plan_date between ws and we
+    and (p.share_expires_at is null or p.share_expires_at > now());
+
+  return plans;
+end;
+$$;
+
+revoke all on function get_public_plans_for_week(date) from public;
+grant execute on function get_public_plans_for_week(date) to anon;
 
 -- PUBLIC ACCESS NOTE:
 -- Public TOC links should be served through a *server-side* route or edge function
