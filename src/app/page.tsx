@@ -20,7 +20,7 @@ export default function Home() {
               View Schedule
             </Link>
             <Link href="/login" style={styles.secondaryBtn}>
-              Staff Login
+              Admin Login
             </Link>
           </div>
         </div>
