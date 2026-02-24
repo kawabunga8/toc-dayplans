@@ -103,7 +103,7 @@ export default function TocClient({ weekStart, plans }: { weekStart: string; pla
             ) : (
               <div style={{ display: 'grid', gap: 10, padding: 12 }}>
                 {openPlans.map((p) => (
-                  <Link key={p.id} href={`/p/${p.id}`} style={styles.planCard}>
+                  <a key={p.id} href={`/p/${p.id}`} target="_blank" rel="noopener noreferrer" style={styles.planCard}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
                       <div>
                         <div style={{ fontWeight: 900, color: RCS.deepNavy }}>{p.slot}</div>
@@ -116,7 +116,7 @@ export default function TocClient({ weekStart, plans }: { weekStart: string; pla
                     <div style={{ marginTop: 8, fontSize: 12, opacity: 0.85 }}>
                       Open →
                     </div>
-                  </Link>
+                  </a>
                 ))}
               </div>
             )}

@@ -48,18 +48,13 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
 
   const planDate = plan.plan_date as string; // YYYY-MM-DD
 
-  // Expiry: 11:59 PM on plan_date in Pacific Time
-  const expiresAt = DateTime.fromISO(planDate, { zone: 'America/Vancouver' })
-    .endOf('day')
-    .toUTC()
-    .toISO();
-
+  // No automatic expiry (links only die when explicitly revoked).
   const { error: updErr } = await supabase
     .from('day_plans')
     .update({
       visibility: 'link',
       share_token_hash: null,
-      share_expires_at: expiresAt,
+      share_expires_at: null,
       updated_at: new Date().toISOString(),
     })
     .eq('id', id);
@@ -68,5 +63,5 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
     return NextResponse.json({ error: updErr.message }, { status: 400 });
   }
 
-  return NextResponse.json({ ok: true, expires_at: expiresAt, plan_id: id });
+  return NextResponse.json({ ok: true, expires_at: null, plan_id: id });
 }

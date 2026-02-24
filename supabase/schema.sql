@@ -451,7 +451,6 @@ begin
   from day_plans
   where id = plan_id
     and visibility = 'link'
-    and (share_expires_at is null or share_expires_at > now())
   limit 1;
 
   if not found then
@@ -515,8 +514,7 @@ begin
   into plans
   from day_plans p
   where p.visibility = 'link'
-    and p.plan_date between ws and we
-    and (p.share_expires_at is null or p.share_expires_at > now());
+    and p.plan_date between ws and we;
 
   return plans;
 end;
