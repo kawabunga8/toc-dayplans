@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Kawamura — TOC Day Plans",
+  title: "TOC Day Plans",
   description: "Richmond Christian School — TOC Day Plans",
 };
 
