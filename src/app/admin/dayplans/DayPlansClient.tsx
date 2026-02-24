@@ -77,9 +77,7 @@ export default function DayPlansClient() {
       setStatus('idle');
     } catch (e: any) {
       setStatus('error');
-      // helpful message for unique constraint
-      const msg = e?.message ?? 'Failed to create dayplan';
-      setError(msg);
+      setError(humanizeCreateError(e));
     }
   }
 
@@ -169,10 +167,8 @@ export default function DayPlansClient() {
 
           {error && (
             <div style={{ padding: 12, borderRadius: 10, border: '1px solid #fecaca', background: '#fee2e2' }}>
-              {error}
-              <div style={{ marginTop: 6, opacity: 0.8, fontSize: 12 }}>
-                If this says the date already exists, pick a different date or we’ll add “edit existing” next.
-              </div>
+              <div style={{ fontWeight: 700, marginBottom: 6 }}>Couldn’t create dayplan</div>
+              <div>{error}</div>
             </div>
           )}
         </div>
@@ -227,6 +223,38 @@ function btn(): React.CSSProperties {
 }
 
 const SLOTS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'Flex Block', 'Career Life', 'Chapel', 'Lunch'];
+
+function humanizeCreateError(e: any): string {
+  // supabase-js / PostgREST errors often look like:
+  // { code, message, details, hint }
+  const code = e?.code as string | undefined;
+  const message = (e?.message as string | undefined) ?? '';
+  const details = (e?.details as string | undefined) ?? '';
+
+  // Common DB uniqueness violation
+  if (code === '23505' || /duplicate key value/i.test(message)) {
+    return 'A plan already exists for that Date + Slot (and Friday Type, if Friday). Pick a different slot/date, or open the existing plan.';
+  }
+
+  // Missing column / schema mismatch
+  if (code === '42703' || /column .* does not exist/i.test(message)) {
+    return 'Database schema is out of date (missing columns). Run the latest schema/migration SQL in Supabase, then refresh.';
+  }
+
+  // RLS / permissions
+  if (code === '42501' || /row level security|permission denied/i.test(message)) {
+    return 'Permission denied by Supabase security policy. Make sure you are signed in as an admin and your user is in staff_profiles.';
+  }
+
+  // Invalid API key / env
+  if (/Invalid API key/i.test(message)) {
+    return 'Supabase API key is invalid. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local / Vercel env vars.';
+  }
+
+  // Fallback: keep it short but useful
+  const extra = details ? ` (${details})` : '';
+  return (message || 'Failed to create dayplan.') + extra;
+}
 
 function isFridayLocal(yyyyMmDd: string): boolean {
   // Date("YYYY-MM-DD") is treated as UTC; we want local weekday.
