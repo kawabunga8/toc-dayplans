@@ -302,7 +302,7 @@ function humanizeCreateError(e: any): string {
 
   // Common DB uniqueness violation
   if (code === '23505' || /duplicate key value/i.test(message)) {
-    return 'A plan already exists for that Date + Slot (and Friday Type, if Friday). Pick a different slot/date, or open the existing plan.';
+    return 'A plan already exists for that Date + Block (and Friday Type, if Friday). Pick a different block/date, or open the existing plan.';
   }
 
   // Missing column / schema mismatch
