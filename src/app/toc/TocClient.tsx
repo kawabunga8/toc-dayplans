@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
+import RcsBanner from '@/components/RcsBanner';
 
 type PublicPlanSummary = {
   id: string;
@@ -37,18 +38,13 @@ export default function TocClient({ weekStart, plans }: { weekStart: string; pla
 
   return (
     <div style={styles.shell}>
-      {/* Home-style full-width banner */}
-      <header style={styles.banner}>
-        <div style={styles.bannerInner}>
-          <div style={styles.bannerRow}>
-            <div>
-              <div style={styles.bannerSchool}>Richmond Christian School</div>
-              <div style={styles.bannerApp}>TOC Day Plans</div>
-            </div>
-            <img src="/rcs-wordmark.png" alt="RCS" style={styles.bannerLogo} />
-          </div>
-        </div>
-      </header>
+      <RcsBanner
+        rightSlot={
+          <a href="https://kawamura.webflow.io" target="_blank" rel="noopener noreferrer" style={styles.bannerSiteLink}>
+            Mr. Kawamura’s website
+          </a>
+        }
+      />
 
       <main style={styles.page}>
         <header style={styles.header}>
@@ -214,13 +210,16 @@ const styles: Record<string, React.CSSProperties> = {
   shell: { minHeight: '100vh', background: RCS.white, color: RCS.textDark, fontFamily: 'system-ui' },
   page: { padding: 24, maxWidth: 1100, margin: '0 auto' },
 
-  // Home-style banner (full width)
-  banner: { background: RCS.deepNavy, borderBottom: `4px solid ${RCS.gold}`, padding: '22px 24px' },
-  bannerInner: { maxWidth: 1100, margin: '0 auto' },
-  bannerRow: { display: 'flex', gap: 14, alignItems: 'center', justifyContent: 'space-between' },
-  bannerLogo: { height: 66, width: 'auto', display: 'block' },
-  bannerSchool: { color: RCS.gold, fontWeight: 900, letterSpacing: 0.2, marginBottom: 6 },
-  bannerApp: { color: RCS.white, fontWeight: 900, fontSize: 28 },
+  bannerSiteLink: {
+    padding: '8px 10px',
+    borderRadius: 10,
+    border: `1px solid ${RCS.gold}`,
+    background: 'transparent',
+    color: RCS.white,
+    textDecoration: 'none',
+    fontWeight: 900,
+    whiteSpace: 'nowrap',
+  },
 
   header: {
     border: `1px solid ${RCS.deepNavy}`,

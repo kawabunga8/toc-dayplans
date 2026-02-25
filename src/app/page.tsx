@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import RcsBanner from '@/components/RcsBanner';
 
 export const metadata: Metadata = {
   title: 'Kawamura — TOC Day Plans',
@@ -8,17 +9,7 @@ export const metadata: Metadata = {
 export default function Home() {
   return (
     <main style={styles.page}>
-      <header style={styles.header}>
-        <div style={styles.brandWrap}>
-          <div style={styles.brandRow}>
-            <div>
-              <div style={styles.schoolName}>Richmond Christian School</div>
-              <div style={styles.appName}>TOC Day Plans</div>
-            </div>
-            <img src="/rcs-wordmark.png" alt="RCS" style={styles.logo} />
-          </div>
-        </div>
-      </header>
+      <RcsBanner />
 
       <section style={styles.body}>
         <div style={styles.card}>

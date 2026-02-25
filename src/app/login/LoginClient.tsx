@@ -4,6 +4,7 @@ import { FormEvent, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getSupabaseClient } from '@/lib/supabaseClient';
+import RcsBanner from '@/components/RcsBanner';
 
 type Status = 'idle' | 'signing-in' | 'error' | 'sent';
 
@@ -102,15 +103,7 @@ export default function LoginClient() {
 
   return (
     <main style={styles.page}>
-      <header style={styles.header}>
-        <div style={styles.brandRow}>
-          <div>
-            <div style={styles.schoolName}>Richmond Christian School</div>
-            <div style={styles.appName}>TOC Day Plans</div>
-          </div>
-          <img src="/rcs-wordmark.png" alt="RCS" style={styles.logo} />
-        </div>
-      </header>
+      <RcsBanner />
 
       <section style={styles.body}>
         <div style={styles.card}>
