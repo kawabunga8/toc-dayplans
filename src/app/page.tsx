@@ -1,8 +1,9 @@
 import Link from 'next/link';
+import styles from './page.module.css';
 
 export default function Home() {
   return (
-    <main style={{ padding: 24, maxWidth: 900, margin: '0 auto', fontFamily: 'system-ui' }}>
+    <main className={styles.page}>
       <h1>TOC Dayplans</h1>
       <p>
         Staff: Create dayplans for substitute teachers. TOCs: View schedules, select blocks, and print attendance.
