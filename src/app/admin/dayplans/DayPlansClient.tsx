@@ -97,6 +97,91 @@ export default function DayPlansClient() {
     setDrafts((prev) => ({ ...prev, [classId]: next }));
   }
 
+  async function generateScheduleForDay() {
+    setStatus('saving');
+    setError(null);
+
+    try {
+      if (!selectedDate) throw new Error('Date is required');
+      if (isFridayLocal(selectedDate) && !selectedFridayType) throw new Error('Friday Type is required');
+
+      const supabase = getSupabaseClient();
+
+      let created = 0;
+      let skipped = 0;
+      let openedExisting = 0;
+
+      for (const c of classesForDay) {
+        if (!c.block_label) continue;
+
+        const d = getDraft(c.id, c.name);
+        const title = d.title?.trim() ? d.title.trim() : `${c.name} (Block ${String(c.block_label).trim()})`;
+
+        const payload = {
+          plan_date: selectedDate,
+          slot: String(c.block_label).trim(),
+          friday_type: isFridayLocal(selectedDate) ? (selectedFridayType as 'day1' | 'day2') : null,
+          title,
+          notes: d.notes?.trim() ? d.notes.trim() : null,
+        };
+
+        const { data, error } = await supabase.from('day_plans').insert(payload).select('id').single();
+
+        if (error) {
+          const code = (error as any)?.code as string | undefined;
+          const msg = String((error as any)?.message ?? '');
+          const isDup = code === '23505' || /duplicate key value/i.test(msg);
+
+          if (isDup) {
+            // If existing non-trashed plan exists, just remember it (so Open works).
+            let q = supabase
+              .from('day_plans')
+              .select('id')
+              .eq('plan_date', payload.plan_date)
+              .eq('slot', payload.slot);
+            if (payload.friday_type) q = q.eq('friday_type', payload.friday_type);
+            else q = q.is('friday_type', null);
+            q = q.is('trashed_at', null);
+
+            const { data: rows, error: findErr } = await q.limit(1);
+            const existing = (rows?.[0] as any) ?? null;
+            if (!findErr && existing?.id) {
+              setDraft(c.id, { ...d, createdPlanId: existing.id });
+              openedExisting++;
+            } else {
+              skipped++;
+            }
+
+            continue;
+          }
+
+          throw error;
+        }
+
+        if (data?.id) {
+          setDraft(c.id, { ...d, createdPlanId: data.id });
+          created++;
+        }
+      }
+
+      setStatus('idle');
+      setError(null);
+
+      // Friendly summary
+      if (created || openedExisting || skipped) {
+        const parts = [];
+        if (created) parts.push(`Created: ${created}`);
+        if (openedExisting) parts.push(`Already existed: ${openedExisting}`);
+        if (skipped) parts.push(`Skipped: ${skipped}`);
+        // show in the error box area (as a status message)
+        setError(parts.join(' • '));
+      }
+    } catch (e: any) {
+      setStatus('error');
+      setError(humanizeCreateError(e));
+    }
+  }
+
   async function createDayPlanForClass(klass: ClassRow) {
     if (!klass.block_label) return;
 
@@ -210,9 +295,21 @@ export default function DayPlansClient() {
 
         <div style={styles.rowBetween}>
           <div style={{ fontWeight: 900, color: RCS.deepNavy }}>Classes</div>
-          <button onClick={loadClasses} disabled={status === 'loading' || status === 'saving'} style={styles.secondaryBtn}>
-            Refresh classes
-          </button>
+          {openClassId ? null : (
+            <button
+              onClick={generateScheduleForDay}
+              disabled={
+                isDemo ||
+                status === 'loading' ||
+                status === 'saving' ||
+                !selectedDate ||
+                (isSelectedFriday && !selectedFridayType)
+              }
+              style={styles.secondaryBtn}
+            >
+              {status === 'saving' ? 'Generating…' : 'Generate schedule'}
+            </button>
+          )}
         </div>
 
         {error && <div style={styles.errorBox}>{error}</div>}
