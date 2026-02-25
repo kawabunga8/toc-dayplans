@@ -44,13 +44,30 @@ export default function TocClient({ weekStart, plans }: { weekStart: string; pla
           <div style={styles.headerSub}>Published plans only. Click a day to view.</div>
         </div>
 
-        <div style={styles.navBtns}>
-          <a href={`/toc?week=${shiftWeek(weekStart, -7)}`} style={styles.secondaryLink}>
-            ← Prev
-          </a>
-          <a href={`/toc?week=${shiftWeek(weekStart, 7)}`} style={styles.secondaryLink}>
-            Next →
-          </a>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-end' }}>
+          <div style={styles.navBtns}>
+            <a href={`/toc?week=${shiftWeek(weekStart, -7)}`} style={styles.secondaryLink}>
+              ← Prev
+            </a>
+            <a href={`/toc?week=${shiftWeek(weekStart, 7)}`} style={styles.secondaryLink}>
+              Next →
+            </a>
+          </div>
+
+          <label style={{ display: 'grid', gap: 6, minWidth: 220 }}>
+            <span style={{ fontSize: 12, fontWeight: 900, color: RCS.midBlue }}>Jump to date</span>
+            <input
+              type="date"
+              defaultValue={today}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (!v) return;
+                const monday = mondayOf(v);
+                window.location.href = `/toc?week=${monday}`;
+              }}
+              style={styles.dateInput}
+            />
+          </label>
         </div>
       </header>
 
@@ -153,6 +170,15 @@ function shiftWeek(weekStart: string, deltaDays: number) {
   return base.toISOString().slice(0, 10);
 }
 
+function mondayOf(yyyyMmDd: string): string {
+  const [y, m, d] = yyyyMmDd.split('-').map((x) => Number(x));
+  const dt = new Date(y, m - 1, d);
+  const day = dt.getDay(); // Sun=0..Sat=6
+  const diff = (day === 0 ? -6 : 1) - day;
+  dt.setDate(dt.getDate() + diff);
+  return dt.toISOString().slice(0, 10);
+}
+
 const RCS = {
   deepNavy: '#1F4E79',
   midBlue: '#2E75B6',
@@ -187,6 +213,14 @@ const styles: Record<string, React.CSSProperties> = {
     background: RCS.white,
     color: RCS.deepNavy,
     textDecoration: 'none',
+    fontWeight: 900,
+  },
+  dateInput: {
+    padding: '8px 10px',
+    borderRadius: 10,
+    border: `1px solid ${RCS.deepNavy}`,
+    background: RCS.white,
+    color: RCS.textDark,
     fontWeight: 900,
   },
   weekGrid: {
