@@ -11,8 +11,6 @@ type Status = 'idle' | 'loading' | 'saving' | 'error';
 type ClassRow = { id: string; block_label: string | null; name: string; room: string | null; sort_order: number | null };
 
 type Draft = {
-  planDate: string;
-  fridayType: '' | 'day1' | 'day2';
   title: string;
   notes: string;
   createdPlanId?: string;
@@ -27,6 +25,10 @@ export default function DayPlansClient() {
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
   const [classes, setClasses] = useState<ClassRow[]>([]);
+
+  const [selectedDate, setSelectedDate] = useState(today);
+  const [selectedFridayType, setSelectedFridayType] = useState<'' | 'day1' | 'day2'>('');
+
   const [openClassId, setOpenClassId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
 
@@ -34,6 +36,36 @@ export default function DayPlansClient() {
     void loadClasses();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // When the chosen date changes, reset the open panel + per-class "created" ids
+  useEffect(() => {
+    setOpenClassId(null);
+    setDrafts({});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDate, selectedFridayType]);
+
+  const isSelectedFriday = useMemo(() => isFridayLocal(selectedDate), [selectedDate]);
+
+  const classesForDay = useMemo(() => {
+    const wanted = scheduleBlockLabelsForDate(selectedDate, selectedFridayType);
+    const index = new Map<string, number>();
+    wanted.forEach((b, i) => index.set(b.toUpperCase(), i));
+
+    const filtered = classes
+      .filter((c) => {
+        const bl = (c.block_label ?? '').toUpperCase();
+        return index.has(bl);
+      })
+      .slice();
+
+    filtered.sort((a, b) => {
+      const ai = index.get(String(a.block_label).toUpperCase()) ?? 999;
+      const bi = index.get(String(b.block_label).toUpperCase()) ?? 999;
+      return ai - bi;
+    });
+
+    return filtered;
+  }, [classes, selectedDate, selectedFridayType]);
 
   async function loadClasses() {
     try {
@@ -55,8 +87,6 @@ export default function DayPlansClient() {
   function getDraft(classId: string, klassName: string): Draft {
     return (
       drafts[classId] ?? {
-        planDate: today,
-        fridayType: '',
         title: klassName,
         notes: '',
       }
@@ -75,16 +105,16 @@ export default function DayPlansClient() {
 
     try {
       const d = getDraft(klass.id, klass.name);
-      if (!d.planDate) throw new Error('Date is required');
-      if (isFridayLocal(d.planDate) && !d.fridayType) throw new Error('Friday Type is required');
+      if (!selectedDate) throw new Error('Date is required');
+      if (isFridayLocal(selectedDate) && !selectedFridayType) throw new Error('Friday Type is required');
       if (!d.title.trim()) throw new Error('Title is required');
 
       const supabase = getSupabaseClient();
 
       const payload = {
-        plan_date: d.planDate,
+        plan_date: selectedDate,
         slot: String(klass.block_label).trim(),
-        friday_type: isFridayLocal(d.planDate) ? (d.fridayType as 'day1' | 'day2') : null,
+        friday_type: isFridayLocal(selectedDate) ? (selectedFridayType as 'day1' | 'day2') : null,
         title: d.title.trim(),
         notes: d.notes.trim() ? d.notes.trim() : null,
       };
@@ -142,8 +172,41 @@ export default function DayPlansClient() {
       </p>
 
       <section style={styles.card}>
-        <div style={styles.sectionHeader}>Create a dayplan</div>
-        <p style={styles.mutedSmall}>Choose a class, then click “Create plan” to open the inputs (pre-filled from that class).</p>
+        <div style={styles.sectionHeader}>Create dayplans</div>
+
+        <div style={{ display: 'grid', gap: 10 }}>
+          <label style={{ display: 'grid', gap: 6, maxWidth: 320 }}>
+            <span style={styles.label}>Date</span>
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => {
+                setSelectedDate(e.target.value);
+                setSelectedFridayType('');
+              }}
+              style={styles.input}
+            />
+          </label>
+
+          {isSelectedFriday ? (
+            <label style={{ display: 'grid', gap: 6, maxWidth: 240 }}>
+              <span style={styles.label}>Friday Type</span>
+              <select value={selectedFridayType} onChange={(e) => setSelectedFridayType(e.target.value as any)} style={styles.input}>
+                <option value="">Select…</option>
+                <option value="day1">Day 1</option>
+                <option value="day2">Day 2</option>
+              </select>
+            </label>
+          ) : null}
+
+          <div style={styles.mutedSmall}>
+            {isSelectedFriday
+              ? selectedFridayType
+                ? 'Showing classes in the order for this Friday.'
+                : 'Choose Day 1 or Day 2 to show the correct blocks.'
+              : 'Showing classes in the order for this day.'}
+          </div>
+        </div>
 
         <div style={styles.rowBetween}>
           <div style={{ fontWeight: 900, color: RCS.deepNavy }}>Classes</div>
@@ -154,7 +217,7 @@ export default function DayPlansClient() {
 
         {error && <div style={styles.errorBox}>{error}</div>}
 
-        {classes.length > 0 ? (
+        {classesForDay.length > 0 ? (
           <div style={{ overflowX: 'auto', marginTop: 12 }}>
             <table style={styles.table}>
               <thead>
@@ -166,10 +229,10 @@ export default function DayPlansClient() {
                 </tr>
               </thead>
               <tbody>
-                {classes.map((c, i) => {
+                {classesForDay.map((c, i) => {
                   const open = openClassId === c.id;
                   const d = getDraft(c.id, c.name);
-                  const isFri = isFridayLocal(d.planDate);
+                  const isFri = isSelectedFriday;
 
                   return (
                     <tr key={c.id} style={i % 2 === 0 ? styles.trEven : styles.trOdd}>
@@ -193,60 +256,32 @@ export default function DayPlansClient() {
 
                         {open && (
                           <div style={styles.inlineForm}>
-                            <label style={styles.field}>
-                              <span style={styles.label}>Date</span>
-                              <input
-                                type="date"
-                                value={d.planDate}
-                                onChange={(e) =>
-                                  setDraft(c.id, { ...d, planDate: e.target.value, fridayType: '' })
-                                }
-                                style={styles.input}
-                              />
-                            </label>
-
-                            {isFri && (
-                              <label style={styles.field}>
-                                <span style={styles.label}>Friday Type</span>
-                                <select
-                                  value={d.fridayType}
-                                  onChange={(e) => setDraft(c.id, { ...d, fridayType: e.target.value as any })}
-                                  style={styles.input}
-                                >
-                                  <option value="">Select…</option>
-                                  <option value="day1">Day 1</option>
-                                  <option value="day2">Day 2</option>
-                                </select>
-                              </label>
-                            )}
-
                             <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
                               <span style={styles.label}>Title</span>
-                              <input
-                                value={d.title}
-                                onChange={(e) => setDraft(c.id, { ...d, title: e.target.value })}
-                                style={styles.input}
-                              />
+                              <input value={d.title} onChange={(e) => setDraft(c.id, { ...d, title: e.target.value })} style={styles.input} />
                             </label>
 
                             <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
                               <span style={styles.label}>Notes (optional)</span>
-                              <textarea
-                                value={d.notes}
-                                onChange={(e) => setDraft(c.id, { ...d, notes: e.target.value })}
-                                rows={3}
-                                style={styles.textarea}
-                              />
+                              <textarea value={d.notes} onChange={(e) => setDraft(c.id, { ...d, notes: e.target.value })} rows={3} style={styles.textarea} />
                             </label>
 
-                            <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                            <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
                               <button
                                 onClick={() => createDayPlanForClass(c)}
-                                disabled={isDemo || status === 'saving' || (isFri && !d.fridayType)}
+                                disabled={
+                                  isDemo ||
+                                  status === 'saving' ||
+                                  !selectedDate ||
+                                  (isSelectedFriday && !selectedFridayType)
+                                }
                                 style={styles.primaryBtn}
                               >
                                 {status === 'saving' ? 'Creating…' : 'Create'}
                               </button>
+                              {isSelectedFriday && !selectedFridayType ? (
+                                <div style={{ fontSize: 12, opacity: 0.85 }}>Choose Day 1/Day 2 first.</div>
+                              ) : null}
                             </div>
                           </div>
                         )}
@@ -371,6 +406,32 @@ function isFridayLocal(yyyyMmDd: string): boolean {
   if (!y || !m || !d) return false;
   const dt = new Date(y, m - 1, d);
   return dt.getDay() === 5;
+}
+
+function weekdayLocal(yyyyMmDd: string): number {
+  const [y, m, d] = yyyyMmDd.split('-').map((x) => Number(x));
+  const dt = new Date(y, m - 1, d);
+  return dt.getDay();
+}
+
+/**
+ * Returns the block labels that run on the selected day, in order.
+ * This is used to filter/sort the class list so staff plan in daily order.
+ */
+function scheduleBlockLabelsForDate(planDate: string, friType: '' | 'day1' | 'day2'): string[] {
+  const dow = weekdayLocal(planDate);
+
+  // Fri requires Day 1/Day 2 choice.
+  if (dow === 5) {
+    if (friType === 'day2') return ['E', 'F', 'G', 'H'];
+    return ['A', 'B', 'C', 'D'];
+  }
+
+  // Mon..Thu rotation (based on the earlier schedule mapping)
+  if (dow === 1) return ['A', 'B', 'C', 'D']; // Mon
+  if (dow === 2) return ['E', 'F', 'G', 'H']; // Tue
+  if (dow === 3) return ['C', 'D', 'A', 'B']; // Wed
+  return ['E', 'F', 'G', 'H']; // Thu (and fallback)
 }
 
 // legacy helpers removed; styles are centralized above.

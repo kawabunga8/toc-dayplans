@@ -401,9 +401,11 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                 <button onClick={savePlanMeta} disabled={status !== 'idle'} style={styles.primaryBtn}>
                   {status === 'saving' ? 'Saving…' : 'Save'}
                 </button>
-                <button onClick={generateSchedule} disabled={status !== 'idle'} style={styles.secondaryBtn}>
-                  {status === 'generating' ? 'Generating…' : 'Generate schedule'}
-                </button>
+                {blocks.length === 0 ? (
+                  <button onClick={generateSchedule} disabled={status !== 'idle'} style={styles.secondaryBtn}>
+                    {status === 'generating' ? 'Generating…' : 'Generate schedule'}
+                  </button>
+                ) : null}
               </div>
 
               {error && <div style={styles.errorBox}>{error}</div>}
