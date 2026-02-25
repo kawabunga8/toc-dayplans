@@ -10,6 +10,10 @@ type StudentRow = { id: string; first_name: string; last_name: string; photo_url
 
 type Status = 'loading' | 'idle' | 'working' | 'error';
 
+// IMPORTANT: This must match the Supabase Storage bucket name exactly.
+// Shingo created: "Student Photos"
+const STUDENT_PHOTOS_BUCKET = 'Student Photos';
+
 export default function ClassListsClient() {
   const { isDemo } = useDemo();
   const [status, setStatus] = useState<Status>('loading');
@@ -157,9 +161,9 @@ export default function ClassListsClient() {
       if (!path) continue;
       if (signedPhotoUrlByStudentId[s.id]) continue;
 
-      // We store photo_url as a storage object path inside the `student-photos` bucket.
+      // We store photo_url as a storage object path inside the student photos bucket.
       // Create a short-lived signed URL for display in admin.
-      const { data, error } = await supabase.storage.from('student-photos').createSignedUrl(path, 60 * 60); // 1 hour
+      const { data, error } = await supabase.storage.from(STUDENT_PHOTOS_BUCKET).createSignedUrl(path, 60 * 60); // 1 hour
       if (!error && data?.signedUrl) {
         next[s.id] = data.signedUrl;
       }
@@ -185,7 +189,7 @@ export default function ClassListsClient() {
       const objectPath = `students/${student.id}.${ext}`;
 
       const { error: upErr } = await supabase.storage
-        .from('student-photos')
+        .from(STUDENT_PHOTOS_BUCKET)
         .upload(objectPath, file, { upsert: true, contentType: file.type || 'image/jpeg' });
       if (upErr) throw upErr;
 
