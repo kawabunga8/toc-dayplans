@@ -37,6 +37,19 @@ export default function TocClient({ weekStart, plans }: { weekStart: string; pla
 
   return (
     <main style={styles.page}>
+      {/* Home-style banner */}
+      <header style={styles.banner}>
+        <div style={styles.bannerInner}>
+          <div style={styles.bannerRow}>
+            <div>
+              <div style={styles.bannerSchool}>Richmond Christian School</div>
+              <div style={styles.bannerApp}>TOC Day Plans</div>
+            </div>
+            <img src="/rcs-wordmark.png" alt="RCS" style={styles.bannerLogo} />
+          </div>
+        </div>
+      </header>
+
       <header style={styles.header}>
         <div>
           <div style={styles.headerKicker}>TOC Calendar</div>
@@ -197,6 +210,15 @@ const RCS = {
 
 const styles: Record<string, React.CSSProperties> = {
   page: { padding: 24, maxWidth: 1100, margin: '0 auto', fontFamily: 'system-ui', background: RCS.white, color: RCS.textDark },
+
+  // Home-style banner
+  banner: { background: RCS.deepNavy, borderBottom: `4px solid ${RCS.gold}`, padding: '22px 24px', borderRadius: 12 },
+  bannerInner: { maxWidth: 1100, margin: '0 auto' },
+  bannerRow: { display: 'flex', gap: 14, alignItems: 'center', justifyContent: 'space-between' },
+  bannerLogo: { height: 44, width: 'auto', display: 'block' },
+  bannerSchool: { color: RCS.gold, fontWeight: 900, letterSpacing: 0.2, marginBottom: 6 },
+  bannerApp: { color: RCS.white, fontWeight: 900, fontSize: 28 },
+
   header: {
     border: `1px solid ${RCS.deepNavy}`,
     borderRadius: 12,
@@ -207,6 +229,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 16,
     flexWrap: 'wrap',
     alignItems: 'flex-start',
+    marginTop: 16,
   },
   headerKicker: { fontWeight: 900, color: RCS.midBlue, marginBottom: 6 },
   headerTitle: { fontWeight: 900, color: RCS.deepNavy, fontSize: 22, marginBottom: 4 },
