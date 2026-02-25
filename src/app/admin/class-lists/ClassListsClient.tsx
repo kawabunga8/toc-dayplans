@@ -18,8 +18,9 @@ export default function ClassListsClient() {
 
   const [roster, setRoster] = useState<StudentRow[]>([]);
 
-  const [allStudents, setAllStudents] = useState<StudentRow[]>([]);
   const [search, setSearch] = useState('');
+  const [searchResults, setSearchResults] = useState<StudentRow[]>([]);
+  const [searchStatus, setSearchStatus] = useState<'idle' | 'searching' | 'error'>('idle');
 
   async function loadClassesAndStudents() {
     setStatus('loading');
@@ -28,16 +29,12 @@ export default function ClassListsClient() {
     try {
       const supabase = getSupabaseClient();
 
-      const [{ data: classData, error: classErr }, { data: studentData, error: studentErr }] = await Promise.all([
-        supabase
-          .from('classes')
-          .select('id,name,room,block_label,sort_order')
-          .order('sort_order', { ascending: true, nullsFirst: false }),
-        supabase.from('students').select('id,first_name,last_name').order('last_name', { ascending: true }).order('first_name', { ascending: true }),
-      ]);
+      const { data: classData, error: classErr } = await supabase
+        .from('classes')
+        .select('id,name,room,block_label,sort_order')
+        .order('sort_order', { ascending: true, nullsFirst: false });
 
       if (classErr) throw classErr;
-      if (studentErr) throw studentErr;
 
       const cls = (classData ?? []).map((c: any) => ({
         id: c.id,
@@ -47,7 +44,6 @@ export default function ClassListsClient() {
       })) as ClassRow[];
 
       setClasses(cls);
-      setAllStudents((studentData ?? []) as StudentRow[]);
 
       if (!selectedClassId && cls.length > 0) {
         setSelectedClassId(cls[0]!.id);
@@ -99,6 +95,37 @@ export default function ClassListsClient() {
     void loadRoster(selectedClassId);
   }, [selectedClassId]);
 
+  useEffect(() => {
+    const q = search.trim();
+    if (!q) {
+      setSearchResults([]);
+      setSearchStatus('idle');
+      return;
+    }
+
+    const t = window.setTimeout(async () => {
+      setSearchStatus('searching');
+      try {
+        const supabase = getSupabaseClient();
+        // server-side search so we don't miss students due to default row limits
+        const { data, error } = await supabase
+          .from('students')
+          .select('id,first_name,last_name')
+          .or(`first_name.ilike.%${escapeLike(q)}%,last_name.ilike.%${escapeLike(q)}%`)
+          .order('last_name', { ascending: true })
+          .order('first_name', { ascending: true })
+          .limit(25);
+        if (error) throw error;
+        setSearchResults((data ?? []) as StudentRow[]);
+        setSearchStatus('idle');
+      } catch (e) {
+        setSearchStatus('error');
+      }
+    }, 200);
+
+    return () => window.clearTimeout(t);
+  }, [search]);
+
   const selectedClass = useMemo(() => classes.find((c) => c.id === selectedClassId) ?? null, [classes, selectedClassId]);
 
   const filtered = useMemo(() => {
@@ -106,13 +133,8 @@ export default function ClassListsClient() {
     if (!q) return [];
 
     const already = new Set(roster.map((s) => s.id));
-    const hits = allStudents
-      .filter((s) => !already.has(s.id))
-      .filter((s) => `${s.first_name} ${s.last_name}`.toLowerCase().includes(q) || `${s.last_name}, ${s.first_name}`.toLowerCase().includes(q))
-      .slice(0, 10);
-
-    return hits;
-  }, [search, allStudents, roster]);
+    return (searchResults ?? []).filter((s) => !already.has(s.id)).slice(0, 10);
+  }, [search, roster, searchResults]);
 
   async function addStudent(student: StudentRow) {
     if (!selectedClassId) return;
@@ -231,7 +253,11 @@ export default function ClassListsClient() {
             </div>
           ) : search.trim() ? (
             <div style={{ marginTop: 8, opacity: 0.85, fontSize: 12 }}>
-              No matches. Try a last name (e.g. “Smith”), or that student may not be in the student list yet.
+              {searchStatus === 'searching'
+                ? 'Searching…'
+                : searchStatus === 'error'
+                  ? 'Search failed. (Are you signed in as staff?)'
+                  : 'No matches. Try a last name (e.g. “Smith”), or that student may not be in the student list yet.'}
             </div>
           ) : null}
         </div>
@@ -251,6 +277,11 @@ export default function ClassListsClient() {
       </section>
     </main>
   );
+}
+
+function escapeLike(s: string): string {
+  // escape % and _ for SQL LIKE; also backslash itself
+  return s.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
 }
 
 function humanizeError(e: any): string {
