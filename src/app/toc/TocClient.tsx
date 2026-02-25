@@ -36,8 +36,8 @@ export default function TocClient({ weekStart, plans }: { weekStart: string; pla
   const openPlans = openDate ? plansByDate.get(openDate) ?? [] : [];
 
   return (
-    <main style={styles.page}>
-      {/* Home-style banner */}
+    <div style={styles.shell}>
+      {/* Home-style full-width banner */}
       <header style={styles.banner}>
         <div style={styles.bannerInner}>
           <div style={styles.bannerRow}>
@@ -50,7 +50,8 @@ export default function TocClient({ weekStart, plans }: { weekStart: string; pla
         </div>
       </header>
 
-      <header style={styles.header}>
+      <main style={styles.page}>
+        <header style={styles.header}>
         <div>
           <div style={styles.headerKicker}>TOC Calendar</div>
           <div style={styles.headerTitle}>Week of {weekStart}</div>
@@ -165,7 +166,8 @@ export default function TocClient({ weekStart, plans }: { weekStart: string; pla
           .no-print { display: none !important; }
         }
       `}</style>
-    </main>
+      </main>
+    </div>
   );
 }
 
@@ -209,10 +211,11 @@ const RCS = {
 } as const;
 
 const styles: Record<string, React.CSSProperties> = {
-  page: { padding: 24, maxWidth: 1100, margin: '0 auto', fontFamily: 'system-ui', background: RCS.white, color: RCS.textDark },
+  shell: { minHeight: '100vh', background: RCS.white, color: RCS.textDark, fontFamily: 'system-ui' },
+  page: { padding: 24, maxWidth: 1100, margin: '0 auto' },
 
-  // Home-style banner
-  banner: { background: RCS.deepNavy, borderBottom: `4px solid ${RCS.gold}`, padding: '22px 24px', borderRadius: 12 },
+  // Home-style banner (full width)
+  banner: { background: RCS.deepNavy, borderBottom: `4px solid ${RCS.gold}`, padding: '22px 24px' },
   bannerInner: { maxWidth: 1100, margin: '0 auto' },
   bannerRow: { display: 'flex', gap: 14, alignItems: 'center', justifyContent: 'space-between' },
   bannerLogo: { height: 66, width: 'auto', display: 'block' },
@@ -229,7 +232,6 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 16,
     flexWrap: 'wrap',
     alignItems: 'flex-start',
-    marginTop: 16,
   },
   headerKicker: { fontWeight: 900, color: RCS.midBlue, marginBottom: 6 },
   headerTitle: { fontWeight: 900, color: RCS.deepNavy, fontSize: 22, marginBottom: 4 },
