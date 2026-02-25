@@ -26,6 +26,7 @@ export default function ClassListsClient() {
 
   const [signedPhotoUrlByStudentId, setSignedPhotoUrlByStudentId] = useState<Record<string, string>>({});
   const [uploadingStudentId, setUploadingStudentId] = useState<string | null>(null);
+  const [showMissingOnly, setShowMissingOnly] = useState(false);
 
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState<StudentRow[]>([]);
@@ -143,6 +144,9 @@ export default function ClassListsClient() {
   }, [search]);
 
   const selectedClass = useMemo(() => classes.find((c) => c.id === selectedClassId) ?? null, [classes, selectedClassId]);
+
+  const missingCount = useMemo(() => roster.filter((s) => !s.photo_url).length, [roster]);
+  const displayRoster = useMemo(() => (showMissingOnly ? roster.filter((s) => !s.photo_url) : roster), [roster, showMissingOnly]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -304,11 +308,23 @@ export default function ClassListsClient() {
       <section style={styles.card}>
         <div style={styles.sectionHeader}>Roster</div>
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
           <div style={{ opacity: 0.9 }}>
             Students: <b>{roster.length}</b>
+            {missingCount > 0 ? (
+              <span style={{ marginLeft: 10, fontSize: 12, opacity: 0.85 }}>
+                Missing photos: <b>{missingCount}</b>
+              </span>
+            ) : null}
           </div>
-          <div style={{ opacity: 0.85, fontSize: 12 }}>{status === 'working' ? 'Saving…' : status === 'loading' ? 'Loading…' : ''}</div>
+
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 900, color: RCS.midBlue, fontSize: 12 }}>
+              <input type="checkbox" checked={showMissingOnly} onChange={(e) => setShowMissingOnly(e.target.checked)} />
+              Show missing photos only
+            </label>
+            <div style={{ opacity: 0.85, fontSize: 12 }}>{status === 'working' ? 'Saving…' : status === 'loading' ? 'Loading…' : ''}</div>
+          </div>
         </div>
 
         <div style={{ marginTop: 12 }}>
@@ -342,7 +358,7 @@ export default function ClassListsClient() {
         </div>
 
         <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>
-          {roster.map((s, idx) => {
+          {displayRoster.map((s, idx) => {
             const signed = signedPhotoUrlByStudentId[s.id];
             const isUploading = uploadingStudentId === s.id;
 
