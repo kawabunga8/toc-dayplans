@@ -109,6 +109,15 @@ export default function DayPlansClient() {
       // - If NOT Friday: ignore friday_type entirely (legacy data may have it set)
       const base = supabase.from('day_plans');
 
+      // Server-side debug snapshot (actual rows visible to staff)
+      try {
+        const dbg = await fetch(`/api/admin/debug/dayplans?date=${encodeURIComponent(selectedDate)}&slot=${encodeURIComponent(slot)}`);
+        const dbgJson = await dbg.json();
+        console.log('DEBUG /api/admin/debug/dayplans', dbg.status, dbgJson);
+      } catch (e) {
+        console.warn('DEBUG fetch failed', e);
+      }
+
       // 1) Prefer non-trashed
       {
         let q = base.select('id').eq('plan_date', selectedDate).eq('slot', slot).is('trashed_at', null);
