@@ -91,7 +91,7 @@ export default function AdminLayout({ children }: PropsWithChildren) {
           }}
         >
           <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-            <Link href="/admin" style={{ textDecoration: 'none', color: '#0f172a' }}>
+            <Link href="/admin" style={{ textDecoration: 'none', color: '#1F4E79' }}>
               <b>Admin</b>
             </Link>
             <span style={disabledNav()}>Dayplans</span>
@@ -195,9 +195,10 @@ function btnOutline(): React.CSSProperties {
   return {
     padding: '10px 12px',
     borderRadius: 10,
-    border: '1px solid #94a3b8',
-    color: '#0f172a',
-    background: 'transparent',
+    border: '1px solid #C9A84C',
+    color: '#1F4E79',
+    background: '#FFFFFF',
     textDecoration: 'none',
+    fontWeight: 900,
   };
 }
