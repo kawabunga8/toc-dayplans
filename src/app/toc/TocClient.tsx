@@ -215,7 +215,7 @@ const styles: Record<string, React.CSSProperties> = {
   banner: { background: RCS.deepNavy, borderBottom: `4px solid ${RCS.gold}`, padding: '22px 24px', borderRadius: 12 },
   bannerInner: { maxWidth: 1100, margin: '0 auto' },
   bannerRow: { display: 'flex', gap: 14, alignItems: 'center', justifyContent: 'space-between' },
-  bannerLogo: { height: 44, width: 'auto', display: 'block' },
+  bannerLogo: { height: 66, width: 'auto', display: 'block' },
   bannerSchool: { color: RCS.gold, fontWeight: 900, letterSpacing: 0.2, marginBottom: 6 },
   bannerApp: { color: RCS.white, fontWeight: 900, fontSize: 28 },
 
