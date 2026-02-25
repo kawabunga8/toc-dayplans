@@ -10,6 +10,7 @@ type Row = {
   title: string;
   share_expires_at: string | null;
   visibility: 'private' | 'link';
+  trashed_at?: string | null;
 };
 
 type Status = 'loading' | 'idle' | 'working' | 'error';
@@ -29,8 +30,7 @@ export default function PublishingClient() {
       // Back-compat: older DBs may not have day_plans.slot yet.
       let { data, error } = await supabase
         .from('day_plans')
-        .select('id,plan_date,slot,title,share_expires_at,visibility')
-        .eq('visibility', 'link')
+        .select('id,plan_date,slot,title,share_expires_at,visibility,trashed_at')
         .is('trashed_at', null)
         .order('plan_date', { ascending: false })
         .order('slot', { ascending: true });
@@ -39,8 +39,7 @@ export default function PublishingClient() {
         // Retry without slot
         const retry = await supabase
           .from('day_plans')
-          .select('id,plan_date,title,share_expires_at,visibility')
-          .eq('visibility', 'link')
+          .select('id,plan_date,title,share_expires_at,visibility,trashed_at')
           .is('trashed_at', null)
           .order('plan_date', { ascending: false });
         data = retry.data as any;
@@ -76,6 +75,22 @@ export default function PublishingClient() {
     }
   }
 
+  async function publish(planId: string) {
+    setStatus('working');
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/admin/dayplans/${planId}/publish`, { method: 'POST' });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j?.error ?? 'Failed to publish');
+      await load();
+      setStatus('idle');
+    } catch (e: any) {
+      setStatus('error');
+      setError(e?.message ?? 'Failed to publish');
+    }
+  }
+
   async function revoke(planId: string) {
     const ok = window.confirm('Revoke this public link?');
     if (!ok) return;
@@ -98,7 +113,7 @@ export default function PublishingClient() {
   return (
     <main style={styles.page}>
       <h1 style={styles.h1}>Publishing</h1>
-      <p style={styles.muted}>All day plans currently published as TOC links (visibility = link).</p>
+      <p style={styles.muted}>All day plans. Publish/unpublish to control what appears on the TOC screen.</p>
 
       <section style={styles.card}>
         <div style={styles.rowBetween}>
@@ -110,7 +125,7 @@ export default function PublishingClient() {
 
         {error && <div style={styles.errorBox}>{error}</div>}
 
-        {status !== 'loading' && items.length === 0 && <div style={{ opacity: 0.85, marginTop: 12 }}>No published plans.</div>}
+        {status !== 'loading' && items.length === 0 && <div style={{ opacity: 0.85, marginTop: 12 }}>No plans yet.</div>}
 
         {items.length > 0 && (
           <div style={{ overflowX: 'auto', marginTop: 12 }}>
@@ -120,40 +135,59 @@ export default function PublishingClient() {
                   <th style={styles.th}>Date</th>
                   <th style={styles.th}>Block</th>
                   <th style={styles.th}>Title</th>
+                  <th style={styles.th}>Status</th>
                   <th style={styles.th}>Expires</th>
                   <th style={styles.th}></th>
                 </tr>
               </thead>
               <tbody>
-                {items.map((p, i) => (
-                  <tr key={p.id} style={i % 2 === 0 ? styles.trEven : styles.trOdd}>
-                    <td style={styles.tdLabel}>{p.plan_date}</td>
-                    <td style={styles.td}>{p.slot ?? '—'}</td>
-                    <td style={styles.td}>{p.title}</td>
-                    <td style={styles.td}>{p.share_expires_at ?? '—'}</td>
-                    <td style={styles.tdRight}>
-                      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                        <button
-                          onClick={() => copyLink(p.id)}
-                          disabled={status === 'loading' || status === 'working'}
-                          style={styles.secondaryBtn}
-                        >
-                          Copy link
-                        </button>
-                        <button
-                          onClick={() => revoke(p.id)}
-                          disabled={status === 'loading' || status === 'working'}
-                          style={styles.dangerBtn}
-                        >
-                          Revoke
-                        </button>
-                      </div>
-                      <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8, textAlign: 'right' }}>
-                        Public links are plan-id based. Publishing/expiry is the access gate.
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {items.map((p, i) => {
+                  const published = p.visibility === 'link';
+                  return (
+                    <tr key={p.id} style={i % 2 === 0 ? styles.trEven : styles.trOdd}>
+                      <td style={styles.tdLabel}>{p.plan_date}</td>
+                      <td style={styles.td}>{p.slot ?? '—'}</td>
+                      <td style={styles.td}>{p.title}</td>
+                      <td style={styles.td}>
+                        <span style={published ? styles.badgePublished : styles.badgeDraft}>{published ? 'Published' : 'Draft'}</span>
+                      </td>
+                      <td style={styles.td}>{p.share_expires_at ?? '—'}</td>
+                      <td style={styles.tdRight}>
+                        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                          {published ? (
+                            <>
+                              <button
+                                onClick={() => copyLink(p.id)}
+                                disabled={status === 'loading' || status === 'working'}
+                                style={styles.secondaryBtn}
+                              >
+                                Copy link
+                              </button>
+                              <button
+                                onClick={() => revoke(p.id)}
+                                disabled={status === 'loading' || status === 'working'}
+                                style={styles.dangerBtn}
+                              >
+                                Unpublish
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              onClick={() => publish(p.id)}
+                              disabled={status === 'loading' || status === 'working'}
+                              style={styles.primaryBtn}
+                            >
+                              Publish
+                            </button>
+                          )}
+                        </div>
+                        <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8, textAlign: 'right' }}>
+                          Public links are plan-id based. Publishing/expiry is the access gate.
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -194,6 +228,35 @@ const styles: Record<string, React.CSSProperties> = {
   td: { padding: 10, borderBottom: `1px solid ${RCS.deepNavy}`, verticalAlign: 'top' },
   tdRight: { padding: 10, borderBottom: `1px solid ${RCS.deepNavy}`, verticalAlign: 'top' },
   tdLabel: { padding: 10, borderBottom: `1px solid ${RCS.deepNavy}`, color: RCS.midBlue, fontWeight: 800 },
+  badgePublished: {
+    display: 'inline-block',
+    padding: '4px 8px',
+    borderRadius: 999,
+    background: '#DCFCE7',
+    border: '1px solid #166534',
+    color: '#166534',
+    fontWeight: 900,
+    fontSize: 12,
+  },
+  badgeDraft: {
+    display: 'inline-block',
+    padding: '4px 8px',
+    borderRadius: 999,
+    background: '#E5E7EB',
+    border: '1px solid #374151',
+    color: '#111827',
+    fontWeight: 900,
+    fontSize: 12,
+  },
+  primaryBtn: {
+    padding: '8px 10px',
+    borderRadius: 10,
+    border: `1px solid ${RCS.gold}`,
+    background: RCS.deepNavy,
+    color: RCS.white,
+    cursor: 'pointer',
+    fontWeight: 900,
+  },
   secondaryBtn: {
     padding: '8px 10px',
     borderRadius: 10,
