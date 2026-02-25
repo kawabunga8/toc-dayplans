@@ -109,7 +109,7 @@ export default function AdminLayout({ children }: PropsWithChildren) {
         }}
       >
         <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-          <Link href="/" style={{ textDecoration: 'none', color: '#0f172a' }}>
+          <Link href="/toc" style={{ textDecoration: 'none', color: '#0f172a' }}>
             <b>View Schedule</b>
           </Link>
           <Link href="/admin" style={{ textDecoration: 'none', color: '#2563eb' }}>

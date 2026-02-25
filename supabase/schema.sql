@@ -37,6 +37,11 @@ create unique index if not exists day_plans_date_slot_friday_uq
 
 create index if not exists day_plans_trashed_at_idx on day_plans(trashed_at);
 
+-- Add missing columns to existing day_plans table (for migrations)
+alter table day_plans add column if not exists trashed_at timestamptz;
+alter table day_plans add column if not exists visibility text default 'private';
+alter table day_plans add column if not exists slot text default 'General';
+
 -- BLOCKS (schedule entries for the day)
 create table if not exists day_plan_blocks (
   id uuid primary key default gen_random_uuid(),
