@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabaseClient';
+import { useDemo } from '@/app/admin/DemoContext';
 
 type CourseRow = {
   id: string;
@@ -15,6 +16,7 @@ type CourseRow = {
 type Status = 'loading' | 'idle' | 'error';
 
 export default function CoursesClient() {
+  const { isDemo } = useDemo();
   const [items, setItems] = useState<CourseRow[]>([]);
   const [status, setStatus] = useState<Status>('loading');
   const [error, setError] = useState<string | null>(null);

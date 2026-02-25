@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabaseClient';
+import { useDemo } from '@/app/admin/DemoContext';
 
 type ClassRow = { id: string; name: string; room: string | null; block_label: string | null };
 
@@ -10,6 +11,7 @@ type StudentRow = { id: string; first_name: string; last_name: string };
 type Status = 'loading' | 'idle' | 'working' | 'error';
 
 export default function ClassListsClient() {
+  const { isDemo } = useDemo();
   const [status, setStatus] = useState<Status>('loading');
   const [error, setError] = useState<string | null>(null);
 
@@ -246,7 +248,7 @@ export default function ClassListsClient() {
           {filtered.length > 0 ? (
             <div style={styles.searchBox}>
               {filtered.map((s) => (
-                <button key={s.id} onClick={() => addStudent(s)} style={styles.searchItem}>
+                <button key={s.id} onClick={() => addStudent(s)} disabled={isDemo} style={styles.searchItem}>
                   {s.last_name}, {s.first_name}
                 </button>
               ))}
@@ -266,7 +268,7 @@ export default function ClassListsClient() {
           {roster.map((s, idx) => (
             <div key={s.id} style={idx % 2 === 0 ? styles.rowEven : styles.rowOdd}>
               <div style={{ fontWeight: 900 }}>{s.last_name}, {s.first_name}</div>
-              <button onClick={() => removeStudent(s)} disabled={status === 'working' || status === 'loading'} style={styles.dangerBtn}>
+              <button onClick={() => removeStudent(s)} disabled={isDemo || status === 'working' || status === 'loading'} style={styles.dangerBtn}>
                 Remove
               </button>
             </div>

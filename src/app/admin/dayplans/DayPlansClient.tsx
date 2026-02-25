@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import type { DayPlan } from '@/lib/types';
+import { useDemo } from '@/app/admin/DemoContext';
 
 type Status = 'idle' | 'loading' | 'saving' | 'error';
 
@@ -18,6 +19,7 @@ type Draft = {
 };
 
 export default function DayPlansClient() {
+  const { isDemo } = useDemo();
   const router = useRouter();
   const [items, setItems] = useState<DayPlan[]>([]);
   const [status, setStatus] = useState<Status>('loading');
@@ -227,7 +229,7 @@ export default function DayPlansClient() {
                             <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                               <button
                                 onClick={() => createDayPlanForClass(c)}
-                                disabled={status === 'saving' || (isFri && !d.fridayType)}
+                                disabled={isDemo || status === 'saving' || (isFri && !d.fridayType)}
                                 style={styles.primaryBtn}
                               >
                                 {status === 'saving' ? 'Creating…' : 'Create'}

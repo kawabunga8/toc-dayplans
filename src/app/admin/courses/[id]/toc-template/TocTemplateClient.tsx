@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { getSupabaseClient } from '@/lib/supabaseClient';
+import { useDemo } from '@/app/admin/DemoContext';
 
 type PlanMode = 'lesson_flow' | 'activity_options';
 
@@ -52,6 +53,7 @@ type WhatIfItem = { id?: string; scenario_text: string; response_text: string };
 type Status = 'loading' | 'idle' | 'saving' | 'error';
 
 export default function TocTemplateClient({ classId }: { classId?: string }) {
+  const { isDemo } = useDemo();
   const params = useParams<{ id?: string }>();
   const effectiveClassId = (classId || params?.id || '') as string;
 
@@ -928,6 +930,7 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
 
             <button
               onClick={() => setWhatIfItems((prev) => [...prev, { scenario_text: '', response_text: '' }])}
+              disabled={isDemo}
               style={styles.secondaryBtn}
             >
               + Add what-if item
@@ -942,7 +945,7 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
             </div>
 
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 12, alignItems: 'center' }}>
-              <button onClick={saveAll} disabled={status === 'saving'} style={styles.primaryBtn}>
+              <button onClick={saveAll} disabled={isDemo || status === 'saving'} style={styles.primaryBtn}>
                 {status === 'saving' ? 'Saving…' : 'Save'}
               </button>
               {template?.id && (

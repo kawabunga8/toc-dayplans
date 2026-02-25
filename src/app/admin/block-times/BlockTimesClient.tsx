@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabaseClient';
+import { useDemo } from '@/app/admin/DemoContext';
 
 type TemplateKey = 'mon_thu' | 'fri';
 
@@ -21,6 +22,7 @@ const DEFAULT_SLOTS_MON_THU = ['P1', 'P2', 'Flex', 'Lunch', 'P5', 'P6'];
 const DEFAULT_SLOTS_FRI = ['P1', 'P2', 'Chapel', 'Lunch', 'P5', 'P6'];
 
 export default function BlockTimesClient() {
+  const { isDemo } = useDemo();
   const [template, setTemplate] = useState<TemplateKey>('mon_thu');
   const [status, setStatus] = useState<Status>('loading');
   const [error, setError] = useState<string | null>(null);
@@ -218,7 +220,7 @@ export default function BlockTimesClient() {
         </div>
 
         <div style={{ display: 'flex', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
-          <button onClick={saveNewEffectiveSet} disabled={status === 'saving' || status === 'loading'} style={styles.primaryBtn}>
+          <button onClick={saveNewEffectiveSet} disabled={isDemo || status === 'saving' || status === 'loading'} style={styles.primaryBtn}>
             {status === 'saving' ? 'Saving…' : 'Save as new defaults'}
           </button>
           <button onClick={loadCurrent} disabled={status === 'saving' || status === 'loading'} style={styles.secondaryBtn}>

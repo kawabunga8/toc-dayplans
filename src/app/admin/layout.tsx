@@ -4,10 +4,11 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { PropsWithChildren, useEffect, useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabaseClient';
+import { DemoProvider } from './DemoContext';
 
 type GuardState =
   | { status: 'loading' }
-  | { status: 'authed' }
+  | { status: 'authed'; role: string | null }
   | { status: 'not-logged-in' }
   | { status: 'not-staff' };
 
@@ -42,7 +43,14 @@ export default function AdminLayout({ children }: PropsWithChildren) {
         return;
       }
 
-      if (!cancelled) setState({ status: 'authed' });
+      // role is optional; if the function doesn't exist yet, keep going.
+      let role: string | null = null;
+      const roleRes = await supabase.rpc('staff_role');
+      if (!roleRes.error) {
+        role = (roleRes.data as any) ?? null;
+      }
+
+      if (!cancelled) setState({ status: 'authed', role });
     }
 
     void check();
@@ -121,46 +129,72 @@ export default function AdminLayout({ children }: PropsWithChildren) {
     );
   }
 
+  const role = state.status === 'authed' ? state.role : null;
+  const isDemo = role === 'demo';
+
   return (
-    <div style={{ fontFamily: 'system-ui' }}>
-      <header
-        style={{
-          padding: '12px 24px',
-          borderBottom: '1px solid #e2e8f0',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 16,
-        }}
-      >
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-          <Link href="/admin" style={{ textDecoration: 'none', color: '#1F4E79' }}>
-            <b>Admin</b>
-          </Link>
-          <Link href="/admin/dayplans" style={navLink('/admin/dayplans', pathname)}>
-            Dayplans
-          </Link>
-          <Link href="/admin/block-times" style={navLink('/admin/block-times', pathname)}>
-            Block times
-          </Link>
-          <Link href="/admin/courses" style={navLink('/admin/courses', pathname)}>
-            Courses/Rooms
-          </Link>
-          <Link href="/admin/class-lists" style={navLink('/admin/class-lists', pathname)}>
-            Class lists
-          </Link>
-          <Link href="/admin/publishing" style={navLink('/admin/publishing', pathname)}>
-            Publishing
-          </Link>
-        </div>
+    <DemoProvider value={{ isDemo, role }}>
+      <div style={{ fontFamily: 'system-ui' }}>
+        <header
+          style={{
+            padding: '12px 24px',
+            borderBottom: '1px solid #e2e8f0',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 16,
+            flexWrap: 'wrap',
+          }}
+        >
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+            <Link href="/admin" style={{ textDecoration: 'none', color: '#1F4E79' }}>
+              <b>Admin</b>
+            </Link>
+            <Link href="/admin/dayplans" style={navLink('/admin/dayplans', pathname)}>
+              Dayplans
+            </Link>
+            <Link href="/admin/block-times" style={navLink('/admin/block-times', pathname)}>
+              Block times
+            </Link>
+            <Link href="/admin/courses" style={navLink('/admin/courses', pathname)}>
+              Courses/Rooms
+            </Link>
+            <Link href="/admin/class-lists" style={navLink('/admin/class-lists', pathname)}>
+              Class lists
+            </Link>
+            <Link href="/admin/publishing" style={navLink('/admin/publishing', pathname)}>
+              Publishing
+            </Link>
+            <Link href="/toc" style={{ textDecoration: 'none', color: '#1F4E79', fontWeight: 800 }}>
+              TOC view
+            </Link>
+          </div>
 
-        <button onClick={logout} style={btnOutline()}>
-          Sign out
-        </button>
-      </header>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            {isDemo ? (
+              <div
+                style={{
+                  padding: '6px 10px',
+                  borderRadius: 999,
+                  border: '1px solid #C9A84C',
+                  background: '#FFF7ED',
+                  color: '#7c2d12',
+                  fontWeight: 900,
+                  fontSize: 12,
+                }}
+              >
+                DEMO MODE — changes are disabled
+              </div>
+            ) : null}
+            <button onClick={logout} style={btnOutline()}>
+              Sign out
+            </button>
+          </div>
+        </header>
 
-      <main>{children}</main>
-    </div>
+        <main style={isDemo ? { filter: 'grayscale(0.35)', opacity: 0.92 } : undefined}>{children}</main>
+      </div>
+    </DemoProvider>
   );
 }
 

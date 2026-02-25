@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabaseClient';
+import { useDemo } from '@/app/admin/DemoContext';
 
 type Row = {
   id: string;
@@ -16,6 +17,7 @@ type Row = {
 type Status = 'loading' | 'idle' | 'working' | 'error';
 
 export default function PublishingClient() {
+  const { isDemo } = useDemo();
   const [status, setStatus] = useState<Status>('loading');
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<Row[]>([]);
@@ -165,7 +167,7 @@ export default function PublishingClient() {
                               </button>
                               <button
                                 onClick={() => revoke(p.id)}
-                                disabled={status === 'loading' || status === 'working'}
+                                disabled={isDemo || status === 'loading' || status === 'working'}
                                 style={styles.dangerBtn}
                               >
                                 Unpublish
@@ -174,7 +176,7 @@ export default function PublishingClient() {
                           ) : (
                             <button
                               onClick={() => publish(p.id)}
-                              disabled={status === 'loading' || status === 'working'}
+                              disabled={isDemo || status === 'loading' || status === 'working'}
                               style={styles.primaryBtn}
                             >
                               Publish
