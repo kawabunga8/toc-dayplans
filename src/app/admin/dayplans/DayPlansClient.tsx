@@ -80,19 +80,49 @@ export default function DayPlansClient() {
       if (!d.title.trim()) throw new Error('Title is required');
 
       const supabase = getSupabaseClient();
-      const { data, error } = await supabase
-        .from('day_plans')
-        .insert({
-          plan_date: d.planDate,
-          slot: String(klass.block_label).trim(),
-          friday_type: isFridayLocal(d.planDate) ? (d.fridayType as 'day1' | 'day2') : null,
-          title: d.title.trim(),
-          notes: d.notes.trim() ? d.notes.trim() : null,
-        })
-        .select('*')
-        .single();
 
-      if (error) throw error;
+      const payload = {
+        plan_date: d.planDate,
+        slot: String(klass.block_label).trim(),
+        friday_type: isFridayLocal(d.planDate) ? (d.fridayType as 'day1' | 'day2') : null,
+        title: d.title.trim(),
+        notes: d.notes.trim() ? d.notes.trim() : null,
+      };
+
+      const { data, error } = await supabase.from('day_plans').insert(payload).select('*').single();
+
+      if (error) {
+        // If a non-trashed plan already exists for this (date, slot, friday_type), open it instead.
+        // If it's trashed, per your preference (B) we do NOT reuse it.
+        const code = (error as any)?.code as string | undefined;
+        const msg = String((error as any)?.message ?? '');
+        const isDup = code === '23505' || /duplicate key value/i.test(msg);
+
+        if (isDup) {
+          let q = supabase
+            .from('day_plans')
+            .select('id')
+            .eq('plan_date', payload.plan_date)
+            .eq('slot', payload.slot);
+
+          if (payload.friday_type) q = q.eq('friday_type', payload.friday_type);
+          else q = q.is('friday_type', null);
+
+          q = q.is('trashed_at', null);
+
+          const { data: rows, error: findErr } = await q.limit(1);
+          const existing = (rows?.[0] as any) ?? null;
+          if (!findErr && existing?.id) {
+            setDraft(klass.id, { ...d, createdPlanId: existing.id });
+            setStatus('idle');
+            setOpenClassId(null);
+            router.push(`/admin/dayplans/${existing.id}`);
+            return;
+          }
+        }
+
+        throw error;
+      }
 
       setDraft(klass.id, { ...d, createdPlanId: (data as any).id });
       setStatus('idle');
