@@ -216,6 +216,15 @@ create unique index if not exists block_time_defaults_uq
 -- TOC BLOCK PLAN CONTENT (standing templates + per-block instances)
 -- Added 2026-02-24
 -- =====================================================================
+-- DESIGN NOTES:
+-- - class_toc_templates: reusable lesson/activity patterns per class.
+--   Multiple is_active=true rows per class allowed; app picks most recent (updated_at desc).
+-- - toc_block_plans: instance per day_plan_blocks row.
+--   Copy-on-open (app logic): populate from template when editor first opens.
+--   Instance edits never mutate template defaults.
+--   source_template_*_id tracks provenance; NULL = custom/manual content.
+--   class_id is nullable to support non-class blocks (Assembly, Lunch, Chapel).
+-- =====================================================================
 
 -- Standing (reusable) class content
 create table if not exists class_toc_templates (
@@ -234,6 +243,21 @@ create table if not exists class_toc_templates (
 );
 
 create index if not exists class_toc_templates_class_id_idx on class_toc_templates(class_id);
+
+-- Helper: get the most recently updated active template for a class
+-- (allows multiple actives; app/queries pick the latest by updated_at desc)
+create or replace function get_active_template_for_class(p_class_id uuid)
+returns uuid
+language sql
+stable
+as $$
+  select id
+  from class_toc_templates
+  where class_id = p_class_id
+    and is_active = true
+  order by updated_at desc
+  limit 1;
+$$;
 
 create table if not exists class_opening_routine_steps (
   id uuid primary key default gen_random_uuid(),
@@ -287,13 +311,18 @@ create table if not exists class_what_to_do_if_items (
 
 create index if not exists class_what_to_do_if_items_template_id_idx on class_what_to_do_if_items(template_id);
 
--- Per scheduled block (plan instance). Copy-on-create from template is recommended.
+-- Per scheduled block (plan instance).
+-- Copy-on-open (app logic in TOC editor): when first opened, populate from template if not yet copied.
+-- NOTE: class_id is nullable to allow TOC content for non-class blocks (Assembly, Lunch, Chapel).
+-- When class_id IS NULL, content is custom; no student roster attached.
 create table if not exists toc_block_plans (
   id uuid primary key default gen_random_uuid(),
   day_plan_block_id uuid not null references day_plan_blocks(id) on delete cascade,
-  class_id uuid not null references classes(id) on delete restrict,
+  class_id uuid references classes(id) on delete set null,
   template_id uuid references class_toc_templates(id) on delete set null,
   plan_mode text not null,
+  -- Override fields: NULL = inherit from template (if template_id set)
+  -- Non-NULL = use override value instead of template
   override_teacher_name text,
   override_ta_name text,
   override_ta_role text,
@@ -303,9 +332,6 @@ create table if not exists toc_block_plans (
   updated_at timestamptz not null default now(),
   constraint toc_block_plans_plan_mode_check check (plan_mode in ('lesson_flow','activity_options'))
 );
-
--- NOTE: toc_block_plans.class_id should match day_plan_blocks.class_id.
-create unique index if not exists toc_block_plans_day_plan_block_id_uq on toc_block_plans(day_plan_block_id);
 create index if not exists toc_block_plans_class_id_idx on toc_block_plans(class_id);
 create index if not exists toc_block_plans_template_id_idx on toc_block_plans(template_id);
 
@@ -527,6 +553,10 @@ $$;
 
 revoke all on function get_public_day_plan_by_id(uuid) from public;
 grant execute on function get_public_day_plan_by_id(uuid) to anon;
+
+-- Helper for staff queries to get current active template
+revoke all on function get_active_template_for_class(uuid) from public;
+grant execute on function get_active_template_for_class(uuid) to authenticated;
 
 -- Week calendar payload: published plans for Mon–Fri of the given week_start (Monday)
 create or replace function get_public_plans_for_week(week_start date)
