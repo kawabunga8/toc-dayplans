@@ -8,7 +8,7 @@ import { DemoProvider } from './DemoContext';
 
 type GuardState =
   | { status: 'loading' }
-  | { status: 'authed'; role: string | null }
+  | { status: 'authed'; role: string | null; email: string | null }
   | { status: 'not-logged-in' }
   | { status: 'not-staff' };
 
@@ -50,7 +50,9 @@ export default function AdminLayout({ children }: PropsWithChildren) {
         role = (roleRes.data as any) ?? null;
       }
 
-      if (!cancelled) setState({ status: 'authed', role });
+      const email = (data.session.user?.email as string | undefined) ?? null;
+
+      if (!cancelled) setState({ status: 'authed', role, email });
     }
 
     void check();
@@ -130,6 +132,7 @@ export default function AdminLayout({ children }: PropsWithChildren) {
   }
 
   const role = state.status === 'authed' ? state.role : null;
+  const email = state.status === 'authed' ? state.email : null;
   const isDemo = role === 'demo';
 
   return (
@@ -171,6 +174,11 @@ export default function AdminLayout({ children }: PropsWithChildren) {
           </div>
 
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            {email ? (
+              <div style={{ fontSize: 12, fontWeight: 900, color: '#1F4E79', opacity: 0.9 }}>
+                {email}
+              </div>
+            ) : null}
             {isDemo ? (
               <div
                 style={{
