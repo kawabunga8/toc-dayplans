@@ -6,7 +6,7 @@ import { useDemo } from '@/app/admin/DemoContext';
 
 type ClassRow = { id: string; name: string; room: string | null; block_label: string | null };
 
-type StudentRow = { id: string; first_name: string; last_name: string };
+type StudentRow = { id: string; first_name: string; last_name: string; photo_url?: string | null };
 
 type Status = 'loading' | 'idle' | 'working' | 'error';
 
@@ -19,6 +19,9 @@ export default function ClassListsClient() {
   const [selectedClassId, setSelectedClassId] = useState<string>('');
 
   const [roster, setRoster] = useState<StudentRow[]>([]);
+
+  const [signedPhotoUrlByStudentId, setSignedPhotoUrlByStudentId] = useState<Record<string, string>>({});
+  const [uploadingStudentId, setUploadingStudentId] = useState<string | null>(null);
 
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState<StudentRow[]>([]);
@@ -66,7 +69,7 @@ export default function ClassListsClient() {
       const supabase = getSupabaseClient();
       const { data, error } = await supabase
         .from('enrollments')
-        .select('student:students(id,first_name,last_name)')
+        .select('student:students(id,first_name,last_name,photo_url)')
         .eq('class_id', classId);
       if (error) throw error;
 
@@ -98,6 +101,13 @@ export default function ClassListsClient() {
   }, [selectedClassId]);
 
   useEffect(() => {
+    // refresh signed URLs for any students we currently have in memory
+    const students = [...roster, ...searchResults];
+    void ensureSignedUrls(students);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roster, searchResults]);
+
+  useEffect(() => {
     const q = search.trim();
     if (!q) {
       setSearchResults([]);
@@ -112,7 +122,7 @@ export default function ClassListsClient() {
         // server-side search so we don't miss students due to default row limits
         const { data, error } = await supabase
           .from('students')
-          .select('id,first_name,last_name')
+          .select('id,first_name,last_name,photo_url')
           .or(`first_name.ilike.%${escapeLike(q)}%,last_name.ilike.%${escapeLike(q)}%`)
           .order('last_name', { ascending: true })
           .order('first_name', { ascending: true })
@@ -137,6 +147,69 @@ export default function ClassListsClient() {
     const already = new Set(roster.map((s) => s.id));
     return (searchResults ?? []).filter((s) => !already.has(s.id)).slice(0, 10);
   }, [search, roster, searchResults]);
+
+  async function ensureSignedUrls(students: StudentRow[]) {
+    const supabase = getSupabaseClient();
+
+    const next: Record<string, string> = {};
+    for (const s of students) {
+      const path = s.photo_url ?? null;
+      if (!path) continue;
+      if (signedPhotoUrlByStudentId[s.id]) continue;
+
+      // We store photo_url as a storage object path inside the `student-photos` bucket.
+      // Create a short-lived signed URL for display in admin.
+      const { data, error } = await supabase.storage.from('student-photos').createSignedUrl(path, 60 * 60); // 1 hour
+      if (!error && data?.signedUrl) {
+        next[s.id] = data.signedUrl;
+      }
+    }
+
+    if (Object.keys(next).length > 0) {
+      setSignedPhotoUrlByStudentId((prev) => ({ ...prev, ...next }));
+    }
+  }
+
+  async function uploadStudentPhoto(student: StudentRow, file: File) {
+    if (isDemo) return;
+
+    setUploadingStudentId(student.id);
+    setError(null);
+
+    try {
+      const supabase = getSupabaseClient();
+
+      // Keep storage paths stable so re-uploads overwrite cleanly.
+      // (We don't use names here to avoid leaking PII in object keys.)
+      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+      const objectPath = `students/${student.id}.${ext}`;
+
+      const { error: upErr } = await supabase.storage
+        .from('student-photos')
+        .upload(objectPath, file, { upsert: true, contentType: file.type || 'image/jpeg' });
+      if (upErr) throw upErr;
+
+      // Persist the object path on the student row.
+      const { error: dbErr } = await supabase.from('students').update({ photo_url: objectPath }).eq('id', student.id);
+      if (dbErr) throw dbErr;
+
+      // Update local roster/search state
+      setRoster((prev) => prev.map((s) => (s.id === student.id ? { ...s, photo_url: objectPath } : s)));
+      setSearchResults((prev) => prev.map((s) => (s.id === student.id ? { ...s, photo_url: objectPath } : s)));
+
+      // Refresh signed URL
+      setSignedPhotoUrlByStudentId((prev) => {
+        const copy = { ...prev };
+        delete copy[student.id];
+        return copy;
+      });
+      await ensureSignedUrls([{ ...student, photo_url: objectPath }]);
+    } catch (e: any) {
+      setError(humanizeError(e));
+    } finally {
+      setUploadingStudentId(null);
+    }
+  }
 
   async function addStudent(student: StudentRow) {
     if (!selectedClassId) return;
@@ -265,14 +338,47 @@ export default function ClassListsClient() {
         </div>
 
         <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>
-          {roster.map((s, idx) => (
-            <div key={s.id} style={idx % 2 === 0 ? styles.rowEven : styles.rowOdd}>
-              <div style={{ fontWeight: 900 }}>{s.last_name}, {s.first_name}</div>
-              <button onClick={() => removeStudent(s)} disabled={isDemo || status === 'working' || status === 'loading'} style={styles.dangerBtn}>
-                Remove
-              </button>
-            </div>
-          ))}
+          {roster.map((s, idx) => {
+            const signed = signedPhotoUrlByStudentId[s.id];
+            const isUploading = uploadingStudentId === s.id;
+
+            return (
+              <div key={s.id} style={idx % 2 === 0 ? styles.rowEven : styles.rowOdd}>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                  <div style={styles.avatarWrap}>
+                    {signed ? <img src={signed} alt={`${s.first_name} ${s.last_name}`} style={styles.avatarImg} /> : <div style={styles.avatarPlaceholder}>No photo</div>}
+                  </div>
+
+                  <div style={{ display: 'grid', gap: 6 }}>
+                    <div style={{ fontWeight: 900 }}>
+                      {s.last_name}, {s.first_name}
+                    </div>
+                    <label style={{ fontSize: 12, opacity: 0.85 }}>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        disabled={isDemo || isUploading}
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (!f) return;
+                          void uploadStudentPhoto(s, f);
+                          e.currentTarget.value = '';
+                        }}
+                      />
+                      {isUploading ? ' Uploading…' : ''}
+                    </label>
+                    <div style={{ fontSize: 11, opacity: 0.7 }}>
+                      Photos are stored for admin/class lists only (not shown on public TOC pages).
+                    </div>
+                  </div>
+                </div>
+
+                <button onClick={() => removeStudent(s)} disabled={isDemo || status === 'working' || status === 'loading'} style={styles.dangerBtn}>
+                  Remove
+                </button>
+              </div>
+            );
+          })}
 
           {status !== 'loading' && roster.length === 0 && <div style={{ opacity: 0.85 }}>No students in this class yet.</div>}
         </div>
@@ -334,6 +440,9 @@ const styles: Record<string, React.CSSProperties> = {
   dangerBtn: { padding: '8px 10px', borderRadius: 10, border: '1px solid #991b1b', background: '#FEE2E2', color: '#7F1D1D', cursor: 'pointer', fontWeight: 900 },
   rowEven: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: 10, border: `1px solid ${RCS.deepNavy}`, borderRadius: 12, background: RCS.white },
   rowOdd: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: 10, border: `1px solid ${RCS.deepNavy}`, borderRadius: 12, background: RCS.lightGray },
+  avatarWrap: { width: 56, height: 56, borderRadius: 12, overflow: 'hidden', border: `1px solid ${RCS.deepNavy}`, background: RCS.paleGold, display: 'grid', placeItems: 'center' },
+  avatarImg: { width: '100%', height: '100%', objectFit: 'cover', display: 'block' },
+  avatarPlaceholder: { fontSize: 10, opacity: 0.7, fontWeight: 800 },
   errorBox: { marginTop: 12, padding: 12, borderRadius: 10, background: '#FEE2E2', border: '1px solid #991b1b', color: '#7F1D1D', whiteSpace: 'pre-wrap' },
   searchBox: {
     border: `2px solid ${RCS.deepNavy}`,
