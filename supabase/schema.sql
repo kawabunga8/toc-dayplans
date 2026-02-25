@@ -30,6 +30,13 @@ create table if not exists day_plans (
   constraint friday_type_check check (friday_type in ('day1','day2') or friday_type is null)
 );
 
+-- Migrations/back-compat: older DBs may be missing columns
+alter table day_plans add column if not exists slot text not null default 'General';
+alter table day_plans add column if not exists visibility text not null default 'private';
+alter table day_plans add column if not exists share_token_hash text;
+alter table day_plans add column if not exists share_expires_at timestamptz;
+alter table day_plans add column if not exists trashed_at timestamptz;
+
 -- Allow multiple plans per day; prevent duplicates per (date, slot, friday_type)
 -- Use COALESCE so non-Friday (null friday_type) still participates in uniqueness.
 create unique index if not exists day_plans_date_slot_friday_uq
