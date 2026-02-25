@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { getSupabaseClient } from '@/lib/supabaseClient';
-import TocBlockPlanInlineEditor from './TocBlockPlanInlineEditor';
+import TocBlockPlanInstanceEditor from './TocBlockPlanInstanceEditor';
 
 type DayPlanRow = {
   id: string;
@@ -460,7 +460,7 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                     </div>
 
                     {b.class_id && b.id && (
-                      <TocBlockPlanInlineEditor dayPlanBlockId={b.id} classId={b.class_id} />
+                      <TocBlockPlanInstanceEditor dayPlanBlockId={b.id} classId={b.class_id} />
                     )}
 
                     {b.class_id && !b.id && (
