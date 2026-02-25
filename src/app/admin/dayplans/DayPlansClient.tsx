@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { getSupabaseClient } from '@/lib/supabaseClient';
+// supabase client calls are done via server routes on this page (to avoid RLS issues)
 import { useDemo } from '@/app/admin/DemoContext';
 
 type ClassRow = {
@@ -33,16 +33,10 @@ export default function DayPlansClient() {
 
   async function loadClasses() {
     try {
-      const supabase = getSupabaseClient();
-      const { data, error } = await supabase
-        .from('classes')
-        .select('id,block_label,name,room,sort_order')
-        .not('block_label', 'is', null)
-        .order('sort_order', { ascending: true, nullsFirst: false })
-        .order('name', { ascending: true });
-
-      if (error) throw error;
-      setClasses((data ?? []) as ClassRow[]);
+      const res = await fetch('/api/admin/classes');
+      const j = await res.json();
+      if (!res.ok) throw new Error(j?.error ?? 'Failed to load classes');
+      setClasses((j?.rows ?? []) as ClassRow[]);
     } catch (e) {
       // No error UI on this page by design.
       console.error('Failed to load classes', e);

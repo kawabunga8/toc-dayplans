@@ -43,12 +43,8 @@ export default function AdminLayout({ children }: PropsWithChildren) {
         return;
       }
 
-      // role is optional; if the function doesn't exist yet, keep going.
-      let role: string | null = null;
-      const roleRes = await supabase.rpc('staff_role');
-      if (!roleRes.error) {
-        role = (roleRes.data as any) ?? null;
-      }
+      // role is optional (and the RPC may not exist); skip to avoid noisy 404s in console.
+      const role: string | null = null;
 
       const email = (data.session.user?.email as string | undefined) ?? null;
 
