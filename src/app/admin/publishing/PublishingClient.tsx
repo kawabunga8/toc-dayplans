@@ -93,6 +93,25 @@ export default function PublishingClient() {
     }
   }
 
+  async function trash(planId: string) {
+    const ok = window.confirm('Delete (trash) this day plan?');
+    if (!ok) return;
+
+    setStatus('working');
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/admin/dayplans/${planId}/trash`, { method: 'POST' });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j?.error ?? 'Failed to delete');
+      await load();
+      setStatus('idle');
+    } catch (e: any) {
+      setStatus('error');
+      setError(e?.message ?? 'Failed to delete');
+    }
+  }
+
   async function revoke(planId: string) {
     const ok = window.confirm('Revoke this public link?');
     if (!ok) return;
@@ -172,15 +191,31 @@ export default function PublishingClient() {
                               >
                                 Unpublish
                               </button>
+                              <button
+                                onClick={() => trash(p.id)}
+                                disabled={isDemo || status === 'loading' || status === 'working'}
+                                style={styles.dangerBtn}
+                              >
+                                Delete
+                              </button>
                             </>
                           ) : (
-                            <button
-                              onClick={() => publish(p.id)}
-                              disabled={isDemo || status === 'loading' || status === 'working'}
-                              style={styles.primaryBtn}
-                            >
-                              Publish
-                            </button>
+                            <>
+                              <button
+                                onClick={() => publish(p.id)}
+                                disabled={isDemo || status === 'loading' || status === 'working'}
+                                style={styles.primaryBtn}
+                              >
+                                Publish
+                              </button>
+                              <button
+                                onClick={() => trash(p.id)}
+                                disabled={isDemo || status === 'loading' || status === 'working'}
+                                style={styles.dangerBtn}
+                              >
+                                Delete
+                              </button>
+                            </>
                           )}
                         </div>
                         <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8, textAlign: 'right' }}>

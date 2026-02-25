@@ -76,21 +76,33 @@ export default function DayPlansClient() {
     });
 
     return filtered;
-  }, [classes, selectedDate]);
+  }, [classes, selectedDate, selectedFridayType]);
 
   async function openOrCreatePlanForClass(c: ClassRow) {
-    if (!c.block_label) return;
-    if (isDemo) return;
+    const clickTs = new Date().toISOString();
+    const slot = String(c.block_label ?? '').trim();
+    const fridayType = isSelectedFriday ? (selectedFridayType as 'day1' | 'day2') : null;
 
-    if (isSelectedFriday && !selectedFridayType) return; // require explicit choice on Fridays
-
-    setOpeningClassId(c.id);
+    console.groupCollapsed(`[Dayplans/Open] ${clickTs} block=${slot || '∅'} classId=${c.id}`);
+    console.log({ selectedDate, isSelectedFriday, selectedFridayType, fridayType, slot, class: c });
 
     try {
-      const supabase = getSupabaseClient();
+      if (!c.block_label) {
+        console.warn('No block_label on class row; abort');
+        return;
+      }
+      if (isDemo) {
+        console.warn('Demo mode; abort');
+        return;
+      }
+      if (isSelectedFriday && !selectedFridayType) {
+        console.warn('Friday selected but no Friday Type chosen; abort');
+        return;
+      }
 
-      const slot = String(c.block_label).trim();
-      const fridayType = isSelectedFriday ? (selectedFridayType as 'day1' | 'day2') : null;
+      setOpeningClassId(c.id);
+
+      const supabase = getSupabaseClient();
 
       // Check if plan exists for date + block
       // - If Friday: match friday_type
@@ -103,11 +115,14 @@ export default function DayPlansClient() {
         if (isSelectedFriday) q = q.eq('friday_type', fridayType);
 
         const { data: rows, error: findErr } = await q.limit(1);
+        console.log('lookup non-trashed result', { rows, findErr });
         if (findErr) throw findErr;
 
         const existing = (rows?.[0] as any) ?? null;
         if (existing?.id) {
-          router.push(`/admin/dayplans/${existing.id}?auto=1`);
+          const url = `/admin/dayplans/${existing.id}?auto=1`;
+          console.log('NAVIGATE existing', url);
+          router.push(url);
           return;
         }
       }
@@ -118,6 +133,7 @@ export default function DayPlansClient() {
         if (isSelectedFriday) q = q.eq('friday_type', fridayType);
 
         const { data: rows, error: findErr } = await q.limit(1);
+        console.log('lookup trashed result', { rows, findErr });
         if (findErr) throw findErr;
 
         const trashed = (rows?.[0] as any) ?? null;
@@ -126,9 +142,12 @@ export default function DayPlansClient() {
             .from('day_plans')
             .update({ trashed_at: null, updated_at: new Date().toISOString() })
             .eq('id', trashed.id);
+          console.log('restore trashed result', { restoreErr });
           if (restoreErr) throw restoreErr;
 
-          router.push(`/admin/dayplans/${trashed.id}?auto=1`);
+          const url = `/admin/dayplans/${trashed.id}?auto=1`;
+          console.log('NAVIGATE restored', url);
+          router.push(url);
           return;
         }
       }
@@ -144,14 +163,24 @@ export default function DayPlansClient() {
       };
 
       const { data: created, error: insErr } = await supabase.from('day_plans').insert(payload).select('id').single();
+      console.log('insert result', { created, insErr });
       if (insErr) throw insErr;
 
-      router.push(`/admin/dayplans/${(created as any).id}?auto=1`);
-    } catch (e) {
+      const url = `/admin/dayplans/${(created as any).id}?auto=1`;
+      console.log('NAVIGATE created', url);
+      router.push(url);
+    } catch (e: any) {
       // No error UI on this page by design.
-      console.error('Open/Create failed', e);
+      console.error('Open/Create failed', {
+        message: e?.message,
+        code: e?.code,
+        details: e?.details,
+        hint: e?.hint,
+        raw: e,
+      });
     } finally {
       setOpeningClassId(null);
+      console.groupEnd();
     }
   }
 
