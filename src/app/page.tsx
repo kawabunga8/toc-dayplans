@@ -5,22 +5,34 @@ export default function Home() {
     <main style={{ padding: 24, maxWidth: 900, margin: '0 auto', fontFamily: 'system-ui' }}>
       <h1>TOC Dayplans</h1>
       <p>
-        Create dayplans for TOCs. Share a print-friendly link that expires end-of-day.
+        Staff: Create dayplans for substitute teachers. TOCs: View schedules, select blocks, and print attendance.
       </p>
 
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
         <Link href="/login" style={btn()}>Admin login</Link>
-        <Link href="/admin" style={btnOutline()}>Admin</Link>
-        <Link href="/p/demo" style={btnOutline()}>Sample public plan link (demo)</Link>
+        <Link href="/toc" style={btnOutline()}>View Schedule (Public)</Link>
       </div>
 
       <hr style={{ margin: '18px 0', opacity: 0.25 }} />
 
-      <h2>Next steps</h2>
+      <h2>How it works</h2>
+      <ul>
+        <li><strong>Staff:</strong> Create a dayplan for a date (e.g., "Monday, Jan 13 — Block A") and mark it as "Public"</li>
+        <li><strong>Staff:</strong> Add schedule blocks with class names, rooms, times, and any special notes</li>
+        <li><strong>Staff (Optional):</strong> Link student rosters to blocks for attendance tracking</li>
+        <li><strong>TOC:</strong> Visit /toc to see the calendar of published plans</li>
+        <li><strong>TOC:</strong> Click a plan to open it, select which blocks apply to them, and print what they need</li>
+        <li><strong>TOC:</strong> Expand attendance lists to take attendance and print class rosters</li>
+      </ul>
+
+      <hr style={{ margin: '18px 0', opacity: 0.25 }} />
+
+      <h2>Setup</h2>
       <ol>
         <li>Create a Supabase project</li>
-        <li>Add env vars in Vercel: NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY</li>
+        <li>Add env vars: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY (and optionally SUPABASE_SERVICE_ROLE_KEY for the server APIs)</li>
         <li>Run the SQL in <code>supabase/schema.sql</code> to create tables + policies</li>
+        <li>Add yourself as a staff member in the <code>staff_profiles</code> table</li>
       </ol>
     </main>
   );

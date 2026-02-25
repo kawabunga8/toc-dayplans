@@ -24,4 +24,22 @@ export interface ClassBlock {
   room: string;
   class_name: string;
   details: string | null;
+  class_id: string | null;
 }
+
+export interface Student {
+  id: string;
+  first_name: string;
+  last_name: string;
+  photo_url: string | null;
+}
+
+export interface Class {
+  id: string;
+  name: string;
+  room: string | null;
+}
+
+export interface Enrollment {
+  student_id: string;
+  student: Student;}

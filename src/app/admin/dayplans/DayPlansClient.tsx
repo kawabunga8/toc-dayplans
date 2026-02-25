@@ -1,15 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
+import { useMemo, useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabaseClient';
-import type { DayPlan } from '@/lib/types';
 
-type Status = 'idle' | 'loading' | 'saving' | 'error';
+type Status = 'idle' | 'saving' | 'error';
 
 export default function DayPlansClient() {
-  const [items, setItems] = useState<DayPlan[]>([]);
-  const [status, setStatus] = useState<Status>('loading');
+  const [status, setStatus] = useState<Status>('idle');
   const [error, setError] = useState<string | null>(null);
 
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
@@ -18,31 +15,7 @@ export default function DayPlansClient() {
   const [fridayType, setFridayType] = useState<'day1' | 'day2' | ''>('');
   const [title, setTitle] = useState('');
   const [notes, setNotes] = useState('');
-
-  async function load() {
-    setStatus('loading');
-    setError(null);
-
-    try {
-      const supabase = getSupabaseClient();
-      const { data, error } = await supabase
-        .from('day_plans')
-        .select('*')
-        .order('plan_date', { ascending: false });
-
-      if (error) throw error;
-      setItems((data ?? []) as DayPlan[]);
-      setStatus('idle');
-    } catch (e: any) {
-      setStatus('error');
-      setError(e?.message ?? 'Failed to load dayplans');
-    }
-  }
-
-  useEffect(() => {
-    void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const [visibility, setVisibility] = useState<'private' | 'link'>('private');
 
   const isFriday = useMemo(() => isFridayLocal(planDate), [planDate]);
 
@@ -65,6 +38,7 @@ export default function DayPlansClient() {
           friday_type: isFriday ? (fridayType as 'day1' | 'day2') : null,
           title: title.trim(),
           notes: notes.trim() ? notes.trim() : null,
+          visibility: visibility,
         })
         .select('*')
         .single();
@@ -73,8 +47,8 @@ export default function DayPlansClient() {
 
       setTitle('');
       setNotes('');
-      setItems((prev) => [data as DayPlan, ...prev]);
       setStatus('idle');
+      setError(null);
     } catch (e: any) {
       setStatus('error');
       // helpful message for unique constraint
@@ -85,7 +59,9 @@ export default function DayPlansClient() {
 
   return (
     <main style={{ padding: 24, maxWidth: 900, margin: '0 auto', fontFamily: 'system-ui' }}>
-      <h1>Dayplans</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, gap: 12, flexWrap: 'wrap' }}>
+        <h1 style={{ margin: 0 }}>Create Dayplan</h1>
+      </div>
       <p style={{ opacity: 0.8 }}>
         Create a dayplan for a date + slot (e.g., A, Flex Block, Lunch). Fridays require Day 1/Day 2.
       </p>
@@ -158,12 +134,21 @@ export default function DayPlansClient() {
             />
           </label>
 
+          <label style={{ display: 'grid', gap: 6 }}>
+            <span>Visibility</span>
+            <select
+              value={visibility}
+              onChange={(e) => setVisibility(e.target.value as 'private' | 'link')}
+              style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #cbd5e1' }}
+            >
+              <option value="private">Private (staff only)</option>
+              <option value="link">Public (TOC can see)</option>
+            </select>
+          </label>
+
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <button onClick={createDayPlan} disabled={status === 'saving' || status === 'loading'} style={btn()}>
+            <button onClick={createDayPlan} disabled={status === 'saving'} style={btn()}>
               {status === 'saving' ? 'Creating…' : 'Create'}
-            </button>
-            <button onClick={load} disabled={status === 'saving' || status === 'loading'} style={btnOutline()}>
-              Refresh
             </button>
           </div>
 
@@ -175,39 +160,6 @@ export default function DayPlansClient() {
               </div>
             </div>
           )}
-        </div>
-      </section>
-
-      <hr style={{ margin: '18px 0', opacity: 0.25 }} />
-
-      <section>
-        <h2>Existing</h2>
-
-        {status === 'loading' && <div>Loading…</div>}
-
-        {status !== 'loading' && items.length === 0 && (
-          <div style={{ opacity: 0.8 }}>No dayplans yet.</div>
-        )}
-
-        <div style={{ display: 'grid', gap: 10 }}>
-          {items.map((p) => (
-            <div key={p.id} style={{ border: '1px solid #cbd5e1', borderRadius: 12, padding: 12 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-                <div>
-                  <div style={{ fontWeight: 700 }}>
-                    {p.plan_date} • {p.slot}
-                    {p.friday_type ? ` • ${p.friday_type === 'day1' ? 'Fri Day 1' : 'Fri Day 2'}` : ''}
-                  </div>
-                  <div>{p.title}</div>
-                </div>
-                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                  <Link href={`/admin/dayplans/${p.id}`} style={btnOutline()}>
-                    Open
-                  </Link>
-                </div>
-              </div>
-            </div>
-          ))}
         </div>
       </section>
     </main>
@@ -234,16 +186,4 @@ function isFridayLocal(yyyyMmDd: string): boolean {
   if (!y || !m || !d) return false;
   const dt = new Date(y, m - 1, d);
   return dt.getDay() === 5;
-}
-
-function btnOutline(): React.CSSProperties {
-  return {
-    padding: '10px 12px',
-    borderRadius: 10,
-    border: '1px solid #94a3b8',
-    color: '#0f172a',
-    background: 'transparent',
-    textDecoration: 'none',
-    cursor: 'pointer',
-  };
 }
