@@ -85,6 +85,12 @@ export default function DayPlansClient() {
 
     console.groupCollapsed(`[Dayplans/Open] ${clickTs} block=${slot || '∅'} classId=${c.id}`);
     console.log({ selectedDate, isSelectedFriday, selectedFridayType, fridayType, slot, class: c });
+    console.log('query intent', {
+      plan_date: selectedDate,
+      slot,
+      friday_type: isSelectedFriday ? fridayType : null,
+      trashed_at: 'prefer null; else restore',
+    });
 
     try {
       if (!c.block_label) {
@@ -102,81 +108,24 @@ export default function DayPlansClient() {
 
       setOpeningClassId(c.id);
 
-      const supabase = getSupabaseClient();
+      // Use a server route to do the open/create/restore work.
+      // This avoids client-side RLS/permission edge cases that otherwise look like a no-op.
+      const res = await fetch('/api/admin/dayplans/open', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          date: selectedDate,
+          slot,
+          friday_type: isSelectedFriday ? fridayType : null,
+          title: `${c.name} (Block ${slot})`,
+        }),
+      });
+      const j = await res.json();
+      console.log('open endpoint result', res.status, j);
+      if (!res.ok) throw new Error(j?.error ?? 'Open failed');
 
-      // Check if plan exists for date + block
-      // - If Friday: match friday_type
-      // - If NOT Friday: ignore friday_type entirely (legacy data may have it set)
-      const base = supabase.from('day_plans');
-
-      // Server-side debug snapshot (actual rows visible to staff)
-      try {
-        const dbg = await fetch(`/api/admin/debug/dayplans?date=${encodeURIComponent(selectedDate)}&slot=${encodeURIComponent(slot)}`);
-        const dbgJson = await dbg.json();
-        console.log('DEBUG /api/admin/debug/dayplans', dbg.status, dbgJson);
-      } catch (e) {
-        console.warn('DEBUG fetch failed', e);
-      }
-
-      // 1) Prefer non-trashed
-      {
-        let q = base.select('id').eq('plan_date', selectedDate).eq('slot', slot).is('trashed_at', null);
-        if (isSelectedFriday) q = q.eq('friday_type', fridayType);
-
-        const { data: rows, error: findErr } = await q.limit(1);
-        console.log('lookup non-trashed result', { rows, findErr });
-        if (findErr) throw findErr;
-
-        const existing = (rows?.[0] as any) ?? null;
-        if (existing?.id) {
-          const url = `/admin/dayplans/${existing.id}?auto=1`;
-          console.log('NAVIGATE existing', url);
-          router.push(url);
-          return;
-        }
-      }
-
-      // 2) If a matching plan exists but is trashed, restore it and open it
-      {
-        let q = base.select('id').eq('plan_date', selectedDate).eq('slot', slot).not('trashed_at', 'is', null);
-        if (isSelectedFriday) q = q.eq('friday_type', fridayType);
-
-        const { data: rows, error: findErr } = await q.limit(1);
-        console.log('lookup trashed result', { rows, findErr });
-        if (findErr) throw findErr;
-
-        const trashed = (rows?.[0] as any) ?? null;
-        if (trashed?.id) {
-          const { error: restoreErr } = await supabase
-            .from('day_plans')
-            .update({ trashed_at: null, updated_at: new Date().toISOString() })
-            .eq('id', trashed.id);
-          console.log('restore trashed result', { restoreErr });
-          if (restoreErr) throw restoreErr;
-
-          const url = `/admin/dayplans/${trashed.id}?auto=1`;
-          console.log('NAVIGATE restored', url);
-          router.push(url);
-          return;
-        }
-      }
-
-      // Create, then navigate
-      const title = `${c.name} (Block ${slot})`;
-      const payload = {
-        plan_date: selectedDate,
-        slot,
-        friday_type: fridayType,
-        title,
-        notes: null,
-      };
-
-      const { data: created, error: insErr } = await supabase.from('day_plans').insert(payload).select('id').single();
-      console.log('insert result', { created, insErr });
-      if (insErr) throw insErr;
-
-      const url = `/admin/dayplans/${(created as any).id}?auto=1`;
-      console.log('NAVIGATE created', url);
+      const url = `/admin/dayplans/${j.id}?auto=1`;
+      console.log('NAVIGATE', url, j.action);
       router.push(url);
     } catch (e: any) {
       // No error UI on this page by design.
