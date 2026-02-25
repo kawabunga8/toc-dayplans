@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from 'react';
 
+type Student = { id: string; first_name: string; last_name: string };
+
 type Block = {
   id: string;
   start_time: string;
@@ -10,6 +12,7 @@ type Block = {
   class_name: string;
   details: string | null;
   class_id: string | null;
+  students?: Student[];
 };
 
 type PublicPlan = {
@@ -30,6 +33,11 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
     return init;
   });
 
+  // Attendance state is client-side only (no persistence yet).
+  const [attendanceOpen, setAttendanceOpen] = useState<Record<string, boolean>>({});
+  const [attendance, setAttendance] = useState<Record<string, Record<string, boolean>>>({});
+  const [printAttendanceForBlockId, setPrintAttendanceForBlockId] = useState<string | null>(null);
+
   const selectedCount = useMemo(() => allIds.filter((id) => selected[id]).length, [allIds, selected]);
 
   function toggle(id: string) {
@@ -44,8 +52,48 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
     });
   }
 
+  function toggleAttendance(blockId: string) {
+    setAttendanceOpen((prev) => ({ ...prev, [blockId]: !prev[blockId] }));
+  }
+
+  function ensureAttendanceDefaults(block: Block) {
+    if (!block.students?.length) return;
+    setAttendance((prev) => {
+      if (prev[block.id]) return prev;
+      const map: Record<string, boolean> = {};
+      for (const s of block.students ?? []) map[s.id] = true; // present by default
+      return { ...prev, [block.id]: map };
+    });
+  }
+
+  function setStudentPresent(blockId: string, studentId: string, present: boolean) {
+    setAttendance((prev) => {
+      const cur = prev[blockId] ?? {};
+      return { ...prev, [blockId]: { ...cur, [studentId]: present } };
+    });
+  }
+
+  function printAttendance(block: Block) {
+    if (!block.students?.length) return;
+    ensureAttendanceDefaults(block);
+
+    setPrintAttendanceForBlockId(block.id);
+
+    // afterprint: restore normal view
+    const handler = () => {
+      setPrintAttendanceForBlockId(null);
+      window.removeEventListener('afterprint', handler);
+    };
+    window.addEventListener('afterprint', handler);
+
+    // allow state to flush
+    setTimeout(() => window.print(), 50);
+  }
+
+  const printMode: 'blocks' | 'attendance' = printAttendanceForBlockId ? 'attendance' : 'blocks';
+
   return (
-    <main style={styles.page}>
+    <main style={styles.page} data-print-mode={printMode}>
       <header style={styles.header}>
         <div style={styles.headerTopRow}>
           <div>
@@ -79,9 +127,17 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
         {plan.blocks.map((b) => {
           const isOn = !!selected[b.id];
           const label = blockLabelFromClassName(b.class_name);
+          const showAttendance = !!b.class_id;
+          const open = !!attendanceOpen[b.id];
+          const isPrintingAttendance = printAttendanceForBlockId === b.id;
 
           return (
-            <section key={b.id} data-selected={isOn ? 'true' : 'false'} style={styles.blockCard}>
+            <section
+              key={b.id}
+              data-selected={isOn ? 'true' : 'false'}
+              data-print-attendance={isPrintingAttendance ? 'true' : 'false'}
+              style={styles.blockCard}
+            >
               <div style={styles.blockHeader}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                   <div style={styles.blockBadge}>{label}</div>
@@ -92,19 +148,61 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
                   <div style={styles.blockRoom}>Room {b.room}</div>
                 </div>
 
-                <label className="no-print" style={styles.checkboxLabel}>
-                  <input type="checkbox" checked={isOn} onChange={() => toggle(b.id)} />
-                  <span>Print</span>
-                </label>
+                <div className="no-print" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                  {showAttendance && (
+                    <button
+                      onClick={() => {
+                        ensureAttendanceDefaults(b);
+                        toggleAttendance(b.id);
+                      }}
+                      style={styles.secondaryBtn}
+                    >
+                      {open ? 'Hide attendance' : 'Attendance list'}
+                    </button>
+                  )}
+
+                  <label style={styles.checkboxLabel}>
+                    <input type="checkbox" checked={isOn} onChange={() => toggle(b.id)} />
+                    <span>Print</span>
+                  </label>
+                </div>
               </div>
 
               {b.details?.trim() ? <div style={styles.blockDetails}>{b.details}</div> : null}
+
+              {showAttendance && open && (
+                <div className="attendanceWrap" style={styles.attendanceWrap}>
+                  <div style={styles.attendanceHeader}>
+                    <div style={{ fontWeight: 900, color: RCS.deepNavy }}>Attendance List</div>
+                    <button onClick={() => printAttendance(b)} style={styles.primaryBtn}>
+                      Print Attendance
+                    </button>
+                  </div>
+
+                  <div style={{ display: 'grid', gap: 6 }}>
+                    {(b.students ?? []).map((s) => {
+                      const present = attendance[b.id]?.[s.id] ?? true;
+                      return (
+                        <label key={s.id} style={styles.studentRow}>
+                          <input
+                            type="checkbox"
+                            checked={present}
+                            onChange={(e) => setStudentPresent(b.id, s.id, e.target.checked)}
+                          />
+                          <span style={{ fontWeight: 800 }}>{s.last_name},</span>
+                          <span>{s.first_name}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </section>
           );
         })}
       </div>
 
-      <div className="no-print" style={styles.stickyBar}>
+      <div className="no-print stickyBar" style={styles.stickyBar}>
         <div style={{ opacity: 0.9 }}>
           Selected: <b>{selectedCount}</b> / {plan.blocks.length}
         </div>
@@ -119,9 +217,18 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
 
       <style>{`
         @media print {
-          .no-print { display: none !important; }
-          [data-selected="false"] { display: none !important; }
           body { background: white !important; }
+          .no-print { display: none !important; }
+
+          /* Default print mode: print selected block cards */
+          main[data-print-mode="blocks"] [data-selected="false"] { display: none !important; }
+
+          /* Attendance print mode: print only the attendance list for the requested block */
+          main[data-print-mode="attendance"] header { display: none !important; }
+          main[data-print-mode="attendance"] .stickyBar { display: none !important; }
+          main[data-print-mode="attendance"] section[data-print-attendance="false"] { display: none !important; }
+          main[data-print-mode="attendance"] section[data-print-attendance="true"] [data-selected] { display: block !important; }
+          main[data-print-mode="attendance"] section[data-print-attendance="true"] .attendanceWrap { display: block !important; }
         }
       `}</style>
     </main>
@@ -216,6 +323,9 @@ const styles: Record<string, React.CSSProperties> = {
   blockRoom: { opacity: 0.9 },
   checkboxLabel: { display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, color: RCS.textDark },
   blockDetails: { padding: 14, whiteSpace: 'pre-wrap' },
+  attendanceWrap: { padding: 14, background: RCS.white },
+  attendanceHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 10 },
+  studentRow: { display: 'flex', gap: 10, alignItems: 'center' },
   stickyBar: {
     position: 'sticky',
     bottom: 0,

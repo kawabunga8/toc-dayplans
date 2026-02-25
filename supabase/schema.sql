@@ -468,7 +468,16 @@ begin
       'room', b.room,
       'class_name', b.class_name,
       'details', b.details,
-      'class_id', b.class_id
+      'class_id', b.class_id,
+      'students', (
+        select coalesce(jsonb_agg(
+          jsonb_build_object('id', s.id, 'first_name', s.first_name, 'last_name', s.last_name)
+          order by s.last_name, s.first_name
+        ), '[]'::jsonb)
+        from enrollments e
+        join students s on s.id = e.student_id
+        where e.class_id = b.class_id
+      )
     ) order by b.start_time asc), '[]'::jsonb)
   into blocks
   from day_plan_blocks b
