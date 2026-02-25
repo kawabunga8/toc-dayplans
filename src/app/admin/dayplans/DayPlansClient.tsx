@@ -98,6 +98,12 @@ export default function DayPlansClient() {
   }
 
   async function generateScheduleForDay() {
+    if (openClassId) {
+      const ok = window.confirm('Generate schedule will create/open plans for all blocks on this day. Continue?');
+      if (!ok) return;
+      setOpenClassId(null);
+    }
+
     setStatus('saving');
     setError(null);
 
@@ -295,21 +301,19 @@ export default function DayPlansClient() {
 
         <div style={styles.rowBetween}>
           <div style={{ fontWeight: 900, color: RCS.deepNavy }}>Classes</div>
-          {openClassId ? null : (
-            <button
-              onClick={generateScheduleForDay}
-              disabled={
-                isDemo ||
-                status === 'loading' ||
-                status === 'saving' ||
-                !selectedDate ||
-                (isSelectedFriday && !selectedFridayType)
-              }
-              style={styles.secondaryBtn}
-            >
-              {status === 'saving' ? 'Generating…' : 'Generate schedule'}
-            </button>
-          )}
+          <button
+            onClick={generateScheduleForDay}
+            disabled={
+              isDemo ||
+              status === 'loading' ||
+              status === 'saving' ||
+              !selectedDate ||
+              (isSelectedFriday && !selectedFridayType)
+            }
+            style={styles.secondaryBtn}
+          >
+            {status === 'saving' ? 'Generating…' : 'Generate schedule'}
+          </button>
         </div>
 
         {error && <div style={styles.errorBox}>{error}</div>}
