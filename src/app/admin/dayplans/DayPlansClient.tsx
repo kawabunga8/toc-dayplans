@@ -129,8 +129,8 @@ export default function DayPlansClient() {
       setStatus('idle');
       router.push(`/admin/dayplans/${(created as any).id}?auto=1`);
     } catch (e: any) {
-      setStatus('error');
-      setError(humanizeCreateError(e));
+      setStatus('idle');
+      setInfo(humanizeCreateError(e));
     }
   }
 
@@ -189,8 +189,8 @@ export default function DayPlansClient() {
       setStatus('idle');
       setInfo(`Generated schedule for ${selectedDate}: created ${created}, already existed ${already}.`);
     } catch (e: any) {
-      setStatus('error');
-      setError(humanizeCreateError(e));
+      setStatus('idle');
+      setInfo(humanizeCreateError(e));
     }
   }
 
@@ -202,7 +202,7 @@ export default function DayPlansClient() {
       <p style={styles.muted}>Choose a date (and Friday Type if Friday), then open each block to plan.</p>
 
       <section style={styles.card}>
-        <div style={styles.sectionHeader}>Create dayplans</div>
+        <div style={styles.sectionHeader}>Dayplans</div>
 
         <div style={{ display: 'grid', gap: 10 }}>
           <label style={{ display: 'grid', gap: 6, maxWidth: 320 }}>
@@ -243,7 +243,7 @@ export default function DayPlansClient() {
           </div>
         </div>
 
-        {error && <div style={styles.errorBox}>{error}</div>}
+        {/* No error banner on this screen; Open/Create logic should handle all cases. */}
         {info && <div style={styles.infoBox}>{info}</div>}
 
         <div style={{ ...styles.rowBetween, marginTop: 12 }}>
