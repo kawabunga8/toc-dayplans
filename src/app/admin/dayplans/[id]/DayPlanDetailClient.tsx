@@ -401,11 +401,6 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                 <button onClick={savePlanMeta} disabled={status !== 'idle'} style={styles.primaryBtn}>
                   {status === 'saving' ? 'Saving…' : 'Save'}
                 </button>
-                {blocks.length === 0 ? (
-                  <button onClick={generateSchedule} disabled={status !== 'idle'} style={styles.secondaryBtn}>
-                    {status === 'generating' ? 'Generating…' : 'Generate schedule'}
-                  </button>
-                ) : null}
               </div>
 
               {error && <div style={styles.errorBox}>{error}</div>}
@@ -415,7 +410,14 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
           <section style={styles.card}>
             <div style={styles.sectionHeader}>Schedule blocks</div>
             {blocks.length === 0 ? (
-              <div style={{ opacity: 0.85 }}>No blocks yet. Click “Generate schedule”.</div>
+              <div style={{ display: 'grid', gap: 10 }}>
+                <div style={{ opacity: 0.85 }}>No blocks yet.</div>
+                <div>
+                  <button onClick={generateSchedule} disabled={status !== 'idle'} style={styles.secondaryBtn}>
+                    {status === 'generating' ? 'Generating…' : 'Generate schedule'}
+                  </button>
+                </div>
+              </div>
             ) : (
               <div style={{ display: 'grid', gap: 10 }}>
                 {blocks.map((b, idx) => (
