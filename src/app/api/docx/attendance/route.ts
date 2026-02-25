@@ -75,13 +75,16 @@ export async function GET(req: Request) {
   const dateLine = plan.plan_date;
   const timeLine = `${formatTime(block.start_time)}–${formatTime(block.end_time)}`;
   const roomLine = block.room ? `Room ${block.room}` : 'Room —';
-  const blockLine = plan.slot ? `Block ${plan.slot}` : 'Block';
 
-  const classLine = `${block.class_name} — ${blockLine}`;
-  const detailLine = `${roomLine} • ${timeLine}`;
+  const inferredBlock = inferBlockLabel(block.class_name) ?? (plan.slot ? String(plan.slot) : null);
+  const blockLine = inferredBlock ? `Block ${inferredBlock}` : 'Block';
+
+  const teacherLine = ''; // prompt doesn't require teacher; keep the title block clean
+  const classLine = String(block.class_name ?? '').trim() || 'Class';
+  const detailLine = `${blockLine}  •  ${roomLine}  •  ${formatLongDate(dateLine)}  •  ${timeLine}`;
 
   const children = [
-    titleBlock(dateLine, classLine, 'Attendance Sheet', detailLine),
+    titleBlock(teacherLine, classLine, 'Attendance Sheet', detailLine),
     spacer(),
     attendanceSheetTable(students),
     spacer(),
@@ -103,4 +106,16 @@ export async function GET(req: Request) {
 
 function formatTime(t: string) {
   return (t ?? '').slice(0, 5) || t;
+}
+
+function inferBlockLabel(className: string | null | undefined): string | null {
+  const m = /\bBlock\s+([A-Z]+|CLE)\b/i.exec(String(className ?? ''));
+  return m?.[1] ? String(m[1]).toUpperCase() : null;
+}
+
+function formatLongDate(yyyyMmDd: string): string {
+  // Render like: Wednesday, February 25, 2026 (local)
+  const [y, m, d] = String(yyyyMmDd).split('-').map((x) => Number(x));
+  const dt = new Date(y, (m || 1) - 1, d || 1);
+  return dt.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 }
