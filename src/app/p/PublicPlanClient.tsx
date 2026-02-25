@@ -95,6 +95,12 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
           </div>
 
           <div className="no-print" style={styles.headerControls}>
+            <a href="/toc" style={styles.secondaryBtn}>
+              ← Back to schedule
+            </a>
+            <a href="/admin" style={styles.secondaryBtn}>
+              Staff admin
+            </a>
             <button onClick={() => selectAll(true)} style={styles.secondaryBtn}>
               Select all
             </button>

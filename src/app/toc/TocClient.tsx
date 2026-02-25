@@ -49,6 +49,9 @@ export default function TocClient({ weekStart, plans }: { weekStart: string; pla
             <a href="/" style={styles.secondaryLink}>
               Home
             </a>
+            <a href="/admin" style={styles.secondaryLink}>
+              Staff admin
+            </a>
             <a href={`/toc?week=${shiftWeek(weekStart, -7)}`} style={styles.secondaryLink}>
               ← Prev
             </a>
