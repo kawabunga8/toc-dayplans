@@ -21,7 +21,7 @@ const styles: Record<string, React.CSSProperties> = {
   page: { minHeight: '100vh', background: RCS.white, color: RCS.textDark, fontFamily: 'system-ui' },
   header: { background: RCS.deepNavy, borderBottom: `4px solid ${RCS.gold}`, padding: '18px 24px' },
   brandRow: { maxWidth: 980, margin: '0 auto', display: 'flex', gap: 14, alignItems: 'center', justifyContent: 'space-between' },
-  logo: { height: 40, width: 'auto', display: 'block' },
+  logo: { height: 66, width: 'auto', display: 'block' },
   schoolName: { color: RCS.gold, fontWeight: 900, letterSpacing: 0.2, marginBottom: 4 },
   appName: { color: RCS.white, fontWeight: 900, fontSize: 22 },
   body: { padding: 24 },
