@@ -776,3 +776,119 @@ export function activityBox(
     ],
   });
 }
+
+// 13) ATTENDANCE SHEET TABLE (Word)
+export function attendanceSheetTable(students: Array<{ first_name: string; last_name: string }>) {
+  const colW = {
+    num: 520,
+    name: 4020,
+    present: 860,
+    absent: 860,
+    late: 860,
+    notes: 2240,
+  };
+
+  const headerRow = new TableRow({
+    children: [
+      attendanceHeaderCell('#', colW.num),
+      attendanceHeaderCell('Student Name', colW.name),
+      attendanceHeaderCell('Present', colW.present),
+      attendanceHeaderCell('Absent', colW.absent),
+      attendanceHeaderCell('Late', colW.late),
+      attendanceHeaderCell('Notes', colW.notes),
+    ],
+  });
+
+  const bodyRows = (students ?? []).map((s, i) => {
+    const fill = i % 2 === 0 ? COLOR.LIGHT_BLUE : COLOR.WHITE;
+    const n = String(i + 1);
+    const full = `${String(s.last_name ?? '').trim()}, ${String(s.first_name ?? '').trim()}`.trim();
+
+    return new TableRow({
+      children: [
+        attendanceBodyCell(n, colW.num, fill, AlignmentType.CENTER),
+        attendanceBodyCell(full, colW.name, fill, AlignmentType.LEFT),
+        attendanceBodyCell('', colW.present, fill, AlignmentType.CENTER),
+        attendanceBodyCell('', colW.absent, fill, AlignmentType.CENTER),
+        attendanceBodyCell('', colW.late, fill, AlignmentType.CENTER),
+        attendanceBodyCell('', colW.notes, fill, AlignmentType.LEFT),
+      ],
+    });
+  });
+
+  const totalsFill = COLOR.LIGHT_GOLD;
+  const totalsRow = new TableRow({
+    children: [
+      attendanceBodyCell('', colW.num, totalsFill, AlignmentType.CENTER),
+      attendanceBodyCell('Totals', colW.name, totalsFill, AlignmentType.LEFT, true),
+      attendanceBodyCell('', colW.present, totalsFill, AlignmentType.CENTER),
+      attendanceBodyCell('', colW.absent, totalsFill, AlignmentType.CENTER),
+      attendanceBodyCell('', colW.late, totalsFill, AlignmentType.CENTER),
+      attendanceBodyCell('', colW.notes, totalsFill, AlignmentType.LEFT),
+    ],
+  });
+
+  const signatureRow = new TableRow({
+    children: [
+      new TableCell({
+        columnSpan: 6,
+        width: { size: CONTENT_WIDTH_DXA, type: WidthType.DXA },
+        borders: cellBorders,
+        shading: { fill: COLOR.WHITE, type: ShadingType.CLEAR },
+        margins: { top: 160, bottom: 160, left: 160, right: 160 },
+        children: [
+          new Paragraph({
+            children: [
+              new TextRun({ text: 'TOC Signature: ', bold: true, font: 'Arial', size: 20, color: COLOR.TEXT_DARK }),
+              new TextRun({
+                text: '______________________________',
+                font: 'Arial',
+                size: 20,
+                color: COLOR.TEXT_DARK,
+                underline: { type: UnderlineType.SINGLE },
+              }),
+            ],
+          }),
+        ],
+      }),
+    ],
+  });
+
+  return new Table({
+    width: { size: CONTENT_WIDTH_DXA, type: WidthType.DXA },
+    columnWidths: [colW.num, colW.name, colW.present, colW.absent, colW.late, colW.notes],
+    rows: [headerRow, ...bodyRows, totalsRow, signatureRow],
+  });
+}
+
+function attendanceHeaderCell(text: string, width: number) {
+  return new TableCell({
+    width: { size: width, type: WidthType.DXA },
+    borders: cellBorders,
+    shading: { fill: COLOR.MID_BLUE, type: ShadingType.CLEAR },
+    margins: { top: 80, bottom: 80, left: 120, right: 80 },
+    children: [
+      new Paragraph({
+        alignment: AlignmentType.LEFT,
+        children: [new TextRun({ text, bold: true, size: 19, font: 'Arial', color: COLOR.WHITE })],
+      }),
+    ],
+  });
+}
+
+type Alignment = (typeof AlignmentType)[keyof typeof AlignmentType];
+
+function attendanceBodyCell(text: string, width: number, fill: string, align: Alignment, bold = false) {
+  return new TableCell({
+    width: { size: width, type: WidthType.DXA },
+    borders: cellBorders,
+    shading: { fill, type: ShadingType.CLEAR },
+    margins: { top: 80, bottom: 80, left: 120, right: 80 },
+    children: [
+      new Paragraph({
+        alignment: align,
+        children: [new TextRun({ text, bold, size: 19, font: 'Arial', color: COLOR.TEXT_DARK })],
+      }),
+    ],
+  });
+}

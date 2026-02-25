@@ -73,21 +73,10 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
     });
   }
 
-  function printAttendance(block: Block) {
-    if (!block.students?.length) return;
-    ensureAttendanceDefaults(block);
-
-    setPrintAttendanceForBlockId(block.id);
-
-    // afterprint: restore normal view
-    const handler = () => {
-      setPrintAttendanceForBlockId(null);
-      window.removeEventListener('afterprint', handler);
-    };
-    window.addEventListener('afterprint', handler);
-
-    // allow state to flush
-    setTimeout(() => window.print(), 50);
+  async function downloadAttendanceDocx(planId: string, blockId: string) {
+    // Public endpoint; will return 404 if plan isn't published.
+    const url = `/api/docx/attendance?planId=${encodeURIComponent(planId)}&blockId=${encodeURIComponent(blockId)}`;
+    window.open(url, '_blank');
   }
 
   const printMode: 'blocks' | 'attendance' = printAttendanceForBlockId ? 'attendance' : 'blocks';
@@ -174,8 +163,11 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
                 <div className="attendanceWrap" style={styles.attendanceWrap}>
                   <div style={styles.attendanceHeader}>
                     <div style={{ fontWeight: 900, color: RCS.deepNavy }}>Attendance List</div>
-                    <button onClick={() => printAttendance(b)} style={styles.primaryBtn}>
-                      Print Attendance
+                    <button
+                      onClick={() => downloadAttendanceDocx(plan.id, b.id)}
+                      style={styles.primaryBtn}
+                    >
+                      Download Attendance (.docx)
                     </button>
                   </div>
 
