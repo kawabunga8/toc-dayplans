@@ -134,7 +134,7 @@ export default function AdminLayout({ children }: PropsWithChildren) {
         }}
       >
         <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-          <Link href="/admin" style={{ textDecoration: 'none', color: '#0f172a' }}>
+          <Link href="/admin" style={{ textDecoration: 'none', color: '#1F4E79' }}>
             <b>Admin</b>
           </Link>
           <Link href="/admin/dayplans" style={navLink('/admin/dayplans', pathname)}>
@@ -179,8 +179,8 @@ function navLink(href: string, pathname: string | null): React.CSSProperties {
   const active = pathname?.startsWith(href);
   return {
     textDecoration: 'none',
-    color: active ? '#0f172a' : '#2563eb',
-    fontWeight: active ? 800 : 600,
+    color: active ? '#C9A84C' : '#1F4E79',
+    fontWeight: active ? 900 : 800,
   };
 }
 
