@@ -221,7 +221,7 @@ export default function ClassListsClient() {
             />
           </label>
 
-          {filtered.length > 0 && (
+          {filtered.length > 0 ? (
             <div style={styles.searchBox}>
               {filtered.map((s) => (
                 <button key={s.id} onClick={() => addStudent(s)} style={styles.searchItem}>
@@ -229,7 +229,11 @@ export default function ClassListsClient() {
                 </button>
               ))}
             </div>
-          )}
+          ) : search.trim() ? (
+            <div style={{ marginTop: 8, opacity: 0.85, fontSize: 12 }}>
+              No matches. Try a last name (e.g. “Smith”), or that student may not be in the student list yet.
+            </div>
+          ) : null}
         </div>
 
         <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>
