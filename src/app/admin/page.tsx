@@ -24,6 +24,11 @@ export default function AdminHome() {
             <div style={styles.tileText}>See all published plans and revoke links.</div>
           </Link>
 
+          <Link href="/toc" style={styles.tile}>
+            <div style={styles.tileTitle}>View schedule</div>
+            <div style={styles.tileText}>Open the TOC week view (public schedule page).</div>
+          </Link>
+
           <Link href="/admin/block-times" style={styles.tile}>
             <div style={styles.tileTitle}>Block times</div>
             <div style={styles.tileText}>Set default bell schedule times.</div>
