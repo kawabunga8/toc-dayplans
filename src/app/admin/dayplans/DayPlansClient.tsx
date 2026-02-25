@@ -86,20 +86,48 @@ export default function DayPlansClient() {
       const slot = String(c.block_label).trim();
 
       // Check if plan exists for date + block (ignore friday_type entirely; this page has no Friday-type notion)
-      const { data: rows, error: findErr } = await supabase
-        .from('day_plans')
-        .select('id')
-        .eq('plan_date', selectedDate)
-        .eq('slot', slot)
-        .is('trashed_at', null)
-        .limit(1);
+      // 1) Prefer non-trashed
+      {
+        const { data: rows, error: findErr } = await supabase
+          .from('day_plans')
+          .select('id')
+          .eq('plan_date', selectedDate)
+          .eq('slot', slot)
+          .is('trashed_at', null)
+          .limit(1);
 
-      if (findErr) throw findErr;
+        if (findErr) throw findErr;
 
-      const existing = (rows?.[0] as any) ?? null;
-      if (existing?.id) {
-        router.push(`/admin/dayplans/${existing.id}?auto=1`);
-        return;
+        const existing = (rows?.[0] as any) ?? null;
+        if (existing?.id) {
+          router.push(`/admin/dayplans/${existing.id}?auto=1`);
+          return;
+        }
+      }
+
+      // 2) If a matching plan exists but is trashed, restore it and open it
+      {
+        const { data: rows, error: findErr } = await supabase
+          .from('day_plans')
+          .select('id')
+          .eq('plan_date', selectedDate)
+          .eq('slot', slot)
+          .not('trashed_at', 'is', null)
+          .limit(1);
+
+        if (findErr) throw findErr;
+
+        const trashed = (rows?.[0] as any) ?? null;
+        if (trashed?.id) {
+          const { error: restoreErr } = await supabase
+            .from('day_plans')
+            .update({ trashed_at: null, updated_at: new Date().toISOString() })
+            .eq('id', trashed.id);
+          if (restoreErr) throw restoreErr;
+
+          router.push(`/admin/dayplans/${trashed.id}?auto=1`);
+          return;
+        }
       }
 
       // Create, then navigate
