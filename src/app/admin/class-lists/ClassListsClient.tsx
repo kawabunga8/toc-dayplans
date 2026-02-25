@@ -300,10 +300,10 @@ const styles: Record<string, React.CSSProperties> = {
   searchBox: {
     border: `1px solid ${RCS.deepNavy}`,
     borderRadius: 12,
-    background: RCS.white,
+    background: RCS.deepNavy,
     marginTop: 8,
     overflow: 'hidden',
-    boxShadow: '0 8px 22px rgba(0,0,0,0.12)',
+    boxShadow: '0 8px 22px rgba(0,0,0,0.18)',
   },
   searchItem: {
     display: 'block',
@@ -311,9 +311,10 @@ const styles: Record<string, React.CSSProperties> = {
     textAlign: 'left',
     padding: 10,
     border: 0,
-    background: RCS.white,
-    color: RCS.textDark,
+    borderBottom: `1px solid rgba(255,255,255,0.15)`,
+    background: RCS.deepNavy,
+    color: RCS.white,
     cursor: 'pointer',
-    fontWeight: 800,
+    fontWeight: 900,
   },
 };
