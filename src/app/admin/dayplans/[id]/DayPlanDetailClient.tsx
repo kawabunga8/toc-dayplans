@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import TocBlockPlanInstanceEditor from './TocBlockPlanInstanceEditor';
 
@@ -40,6 +41,10 @@ type BlockTimeDefaultRow = {
 type Status = 'loading' | 'idle' | 'publishing' | 'revoking' | 'saving' | 'generating' | 'error';
 
 export default function DayPlanDetailClient({ id }: { id: string }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const didAutoRef = useRef(false);
+
   const [status, setStatus] = useState<Status>('loading');
   const [error, setError] = useState<string | null>(null);
   const [plan, setPlan] = useState<DayPlanRow | null>(null);
@@ -118,6 +123,24 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  useEffect(() => {
+    const auto = searchParams.get('auto') === '1';
+    if (!auto) return;
+    if (didAutoRef.current) return;
+    if (status !== 'idle') return;
+    if (!plan) return;
+    if (blocks.length !== 0) return; // leave existing blocks alone
+
+    didAutoRef.current = true;
+
+    void (async () => {
+      await generateSchedule();
+      // Remove the auto flag so refreshes don't re-run it
+      router.replace(`/admin/dayplans/${id}`);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, status, plan, blocks.length, id]);
 
   async function publish() {
     setStatus('publishing');

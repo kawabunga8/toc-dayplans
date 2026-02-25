@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { useDemo } from '@/app/admin/DemoContext';
@@ -237,7 +236,7 @@ export default function DayPlansClient() {
             setDraft(klass.id, { ...d, createdPlanId: existing.id });
             setStatus('idle');
             setOpenClassId(null);
-            router.push(`/admin/dayplans/${existing.id}`);
+            router.push(`/admin/dayplans/${existing.id}?auto=1`);
             return;
           }
         }
@@ -248,7 +247,7 @@ export default function DayPlansClient() {
       setDraft(klass.id, { ...d, createdPlanId: (data as any).id });
       setStatus('idle');
       setOpenClassId(null);
-      router.push(`/admin/dayplans/${(data as any).id}`);
+      router.push(`/admin/dayplans/${(data as any).id}?auto=1`);
     } catch (e: any) {
       setStatus('error');
       setError(humanizeCreateError(e));
@@ -344,7 +343,7 @@ export default function DayPlansClient() {
                         <button
                           onClick={() => {
                             if (d.createdPlanId) {
-                              router.push(`/admin/dayplans/${d.createdPlanId}`);
+                              router.push(`/admin/dayplans/${d.createdPlanId}?auto=1`);
                               return;
                             }
                             setOpenClassId((prev) => (prev === c.id ? null : c.id));
