@@ -6,7 +6,7 @@ import { getSupabaseClient } from '@/lib/supabaseClient';
 type Row = {
   id: string;
   plan_date: string;
-  slot: string;
+  slot?: string | null;
   title: string;
   share_expires_at: string | null;
   visibility: 'private' | 'link';
@@ -25,13 +25,28 @@ export default function PublishingClient() {
 
     try {
       const supabase = getSupabaseClient();
-      const { data, error } = await supabase
+
+      // Back-compat: older DBs may not have day_plans.slot yet.
+      let { data, error } = await supabase
         .from('day_plans')
         .select('id,plan_date,slot,title,share_expires_at,visibility')
         .eq('visibility', 'link')
         .is('trashed_at', null)
         .order('plan_date', { ascending: false })
         .order('slot', { ascending: true });
+
+      if (error && /day_plans\.slot does not exist|column .*slot.* does not exist/i.test(String((error as any)?.message ?? ''))) {
+        // Retry without slot
+        const retry = await supabase
+          .from('day_plans')
+          .select('id,plan_date,title,share_expires_at,visibility')
+          .eq('visibility', 'link')
+          .is('trashed_at', null)
+          .order('plan_date', { ascending: false });
+        data = retry.data as any;
+        error = retry.error as any;
+      }
+
       if (error) throw error;
       setItems((data ?? []) as Row[]);
       setStatus('idle');
@@ -103,7 +118,7 @@ export default function PublishingClient() {
               <thead>
                 <tr>
                   <th style={styles.th}>Date</th>
-                  <th style={styles.th}>Slot</th>
+                  <th style={styles.th}>Block</th>
                   <th style={styles.th}>Title</th>
                   <th style={styles.th}>Expires</th>
                   <th style={styles.th}></th>
@@ -113,7 +128,7 @@ export default function PublishingClient() {
                 {items.map((p, i) => (
                   <tr key={p.id} style={i % 2 === 0 ? styles.trEven : styles.trOdd}>
                     <td style={styles.tdLabel}>{p.plan_date}</td>
-                    <td style={styles.td}>{p.slot}</td>
+                    <td style={styles.td}>{p.slot ?? '—'}</td>
                     <td style={styles.td}>{p.title}</td>
                     <td style={styles.td}>{p.share_expires_at ?? '—'}</td>
                     <td style={styles.tdRight}>
