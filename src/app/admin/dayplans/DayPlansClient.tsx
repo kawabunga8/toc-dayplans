@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { getSupabaseClient } from '@/lib/supabaseClient';
-import type { DayPlan } from '@/lib/types';
 import { useDemo } from '@/app/admin/DemoContext';
 
 type Status = 'idle' | 'loading' | 'saving' | 'error';
@@ -16,12 +15,12 @@ type Draft = {
   fridayType: '' | 'day1' | 'day2';
   title: string;
   notes: string;
+  createdPlanId?: string;
 };
 
 export default function DayPlansClient() {
   const { isDemo } = useDemo();
   const router = useRouter();
-  const [items, setItems] = useState<DayPlan[]>([]);
   const [status, setStatus] = useState<Status>('loading');
   const [error, setError] = useState<string | null>(null);
 
@@ -31,32 +30,10 @@ export default function DayPlansClient() {
   const [openClassId, setOpenClassId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
 
-  const [showTrashed, setShowTrashed] = useState(false);
-
-  async function load() {
-    setStatus('loading');
-    setError(null);
-
-    try {
-      const supabase = getSupabaseClient();
-      let q = supabase.from('day_plans').select('*').order('plan_date', { ascending: false });
-      q = showTrashed ? q : q.is('trashed_at', null);
-
-      const { data, error } = await q;
-      if (error) throw error;
-      setItems((data ?? []) as DayPlan[]);
-      setStatus('idle');
-    } catch (e: any) {
-      setStatus('error');
-      setError(e?.message ?? 'Failed to load dayplans');
-    }
-  }
-
   useEffect(() => {
-    void load();
     void loadClasses();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showTrashed]);
+  }, []);
 
   async function loadClasses() {
     try {
@@ -117,7 +94,7 @@ export default function DayPlansClient() {
 
       if (error) throw error;
 
-      setItems((prev) => [data as DayPlan, ...prev]);
+      setDraft(klass.id, { ...d, createdPlanId: (data as any).id });
       setStatus('idle');
       setOpenClassId(null);
       router.push(`/admin/dayplans/${(data as any).id}`);
@@ -171,11 +148,17 @@ export default function DayPlansClient() {
                       <td style={styles.td}>{c.room || '—'}</td>
                       <td style={styles.tdRight}>
                         <button
-                          onClick={() => setOpenClassId((prev) => (prev === c.id ? null : c.id))}
+                          onClick={() => {
+                            if (d.createdPlanId) {
+                              router.push(`/admin/dayplans/${d.createdPlanId}`);
+                              return;
+                            }
+                            setOpenClassId((prev) => (prev === c.id ? null : c.id));
+                          }}
                           style={open ? styles.secondaryBtn : styles.primaryBtn}
                           disabled={status === 'saving'}
                         >
-                          {open ? 'Close' : 'Create plan'}
+                          {d.createdPlanId ? 'Open' : open ? 'Close' : 'Open'}
                         </button>
 
                         {open && (
@@ -249,44 +232,7 @@ export default function DayPlansClient() {
         )}
       </section>
 
-      <hr style={{ margin: '18px 0', opacity: 0.25 }} />
 
-      <section style={styles.card}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-          <div style={styles.sectionHeader}>Existing</div>
-          <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 800, color: RCS.midBlue }}>
-            <input type="checkbox" checked={showTrashed} onChange={(e) => setShowTrashed(e.target.checked)} />
-            Show trashed
-          </label>
-        </div>
-
-        {status === 'loading' && <div>Loading…</div>}
-
-        {status !== 'loading' && items.length === 0 && (
-          <div style={{ opacity: 0.8 }}>No dayplans yet.</div>
-        )}
-
-        <div style={{ display: 'grid', gap: 10 }}>
-          {items.map((p, idx) => (
-            <div key={p.id} style={idx % 2 === 0 ? styles.itemEven : styles.itemOdd}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-                <div>
-                  <div style={{ fontWeight: 900, color: RCS.deepNavy }}>
-                    {p.plan_date} • {p.slot}
-                    {p.friday_type ? ` • ${p.friday_type === 'day1' ? 'Fri Day 1' : 'Fri Day 2'}` : ''}
-                  </div>
-                  <div style={{ fontWeight: 900 }}>{p.title}</div>
-                </div>
-                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                  <Link href={`/admin/dayplans/${p.id}`} style={styles.secondaryLink}>
-                    Open
-                  </Link>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
     </main>
   );
 }
