@@ -21,6 +21,7 @@ export default function DayPlansClient() {
 
   const [classes, setClasses] = useState<ClassRow[]>([]);
   const [selectedDate, setSelectedDate] = useState(today);
+  const [selectedFridayType, setSelectedFridayType] = useState<'' | 'day1' | 'day2'>('');
 
   // per-row loading state
   const [openingClassId, setOpeningClassId] = useState<string | null>(null);
@@ -51,10 +52,13 @@ export default function DayPlansClient() {
 
   const isSelectedFriday = useMemo(() => isFridayLocal(selectedDate), [selectedDate]);
 
+  useEffect(() => {
+    // reset Friday type when date changes
+    setSelectedFridayType('');
+  }, [selectedDate]);
+
   const classesForDay = useMemo(() => {
-    // This screen intentionally has no Friday-type selector.
-    // On Fridays we default to the Day 1 block set.
-    const wanted = scheduleBlockLabelsForDate(selectedDate);
+    const wanted = scheduleBlockLabelsForDate(selectedDate, selectedFridayType);
     const index = new Map<string, number>();
     wanted.forEach((b, i) => index.set(b.toUpperCase(), i));
 
@@ -78,24 +82,27 @@ export default function DayPlansClient() {
     if (!c.block_label) return;
     if (isDemo) return;
 
+    if (isSelectedFriday && !selectedFridayType) return; // require explicit choice on Fridays
+
     setOpeningClassId(c.id);
 
     try {
       const supabase = getSupabaseClient();
 
       const slot = String(c.block_label).trim();
+      const fridayType = isSelectedFriday ? (selectedFridayType as 'day1' | 'day2') : null;
 
-      // Check if plan exists for date + block (ignore friday_type entirely; this page has no Friday-type notion)
+      // Check if plan exists for date + block
+      // - If Friday: match friday_type
+      // - If NOT Friday: ignore friday_type entirely (legacy data may have it set)
+      const base = supabase.from('day_plans');
+
       // 1) Prefer non-trashed
       {
-        const { data: rows, error: findErr } = await supabase
-          .from('day_plans')
-          .select('id')
-          .eq('plan_date', selectedDate)
-          .eq('slot', slot)
-          .is('trashed_at', null)
-          .limit(1);
+        let q = base.select('id').eq('plan_date', selectedDate).eq('slot', slot).is('trashed_at', null);
+        if (isSelectedFriday) q = q.eq('friday_type', fridayType);
 
+        const { data: rows, error: findErr } = await q.limit(1);
         if (findErr) throw findErr;
 
         const existing = (rows?.[0] as any) ?? null;
@@ -107,14 +114,10 @@ export default function DayPlansClient() {
 
       // 2) If a matching plan exists but is trashed, restore it and open it
       {
-        const { data: rows, error: findErr } = await supabase
-          .from('day_plans')
-          .select('id')
-          .eq('plan_date', selectedDate)
-          .eq('slot', slot)
-          .not('trashed_at', 'is', null)
-          .limit(1);
+        let q = base.select('id').eq('plan_date', selectedDate).eq('slot', slot).not('trashed_at', 'is', null);
+        if (isSelectedFriday) q = q.eq('friday_type', fridayType);
 
+        const { data: rows, error: findErr } = await q.limit(1);
         if (findErr) throw findErr;
 
         const trashed = (rows?.[0] as any) ?? null;
@@ -135,7 +138,7 @@ export default function DayPlansClient() {
       const payload = {
         plan_date: selectedDate,
         slot,
-        friday_type: null,
+        friday_type: fridayType,
         title,
         notes: null,
       };
@@ -173,9 +176,20 @@ export default function DayPlansClient() {
           </label>
 
           {isSelectedFriday ? (
-            <div style={styles.mutedSmall}>
-              Friday detected — this screen defaults to the Day 1 block set.
-            </div>
+            <label style={{ display: 'grid', gap: 6, maxWidth: 240 }}>
+              <span style={styles.label}>Friday Type</span>
+              <select
+                value={selectedFridayType}
+                onChange={(e) => setSelectedFridayType(e.target.value as any)}
+                style={styles.input}
+                disabled={openingClassId !== null}
+              >
+                <option value="">Select…</option>
+                <option value="day1">Day 1</option>
+                <option value="day2">Day 2</option>
+              </select>
+              <span style={styles.mutedSmall}>Required on Fridays.</span>
+            </label>
           ) : null}
         </div>
 
@@ -206,7 +220,11 @@ export default function DayPlansClient() {
                         <button
                           onClick={() => void openOrCreatePlanForClass(c)}
                           style={styles.primaryBtn}
-                          disabled={isDemo || openingClassId !== null}
+                          disabled={
+                            isDemo ||
+                            openingClassId !== null ||
+                            (isSelectedFriday && !selectedFridayType) // require explicit Friday type
+                          }
                         >
                           {busy ? 'Opening…' : 'Open'}
                         </button>
@@ -284,10 +302,12 @@ function weekdayLocal(yyyyMmDd: string): number {
   return dt.getDay();
 }
 
-function scheduleBlockLabelsForDate(planDate: string): string[] {
+function scheduleBlockLabelsForDate(planDate: string, friType: '' | 'day1' | 'day2'): string[] {
   const dow = weekdayLocal(planDate);
-  // Friday defaults to Day 1 blocks here (no selector on this page)
-  if (dow === 5) return ['A', 'B', 'C', 'D'];
+  if (dow === 5) {
+    if (friType === 'day2') return ['E', 'F', 'G', 'H'];
+    return ['A', 'B', 'C', 'D'];
+  }
   if (dow === 1) return ['A', 'B', 'C', 'D'];
   if (dow === 2) return ['E', 'F', 'G', 'H'];
   if (dow === 3) return ['C', 'D', 'A', 'B'];
