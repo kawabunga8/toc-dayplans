@@ -15,7 +15,6 @@ export default function DayPlansClient() {
 
   const [status, setStatus] = useState<Status>('loading');
   const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
 
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
@@ -35,7 +34,6 @@ export default function DayPlansClient() {
   // When the chosen date changes, reset per-class plan ids
   useEffect(() => {
     setPlanIdByClassId({});
-    setInfo(null);
     setError(null);
   }, [selectedDate, selectedFridayType]);
 
@@ -84,7 +82,6 @@ export default function DayPlansClient() {
 
     setStatus('saving');
     setError(null);
-    setInfo(null);
 
     try {
       if (!selectedDate) throw new Error('Date is required');
@@ -130,14 +127,14 @@ export default function DayPlansClient() {
       router.push(`/admin/dayplans/${(created as any).id}?auto=1`);
     } catch (e: any) {
       setStatus('idle');
-      setInfo(humanizeCreateError(e));
+      console.error(e);
+      window.alert(humanizeCreateError(e));
     }
   }
 
   async function generateScheduleForDay() {
     setStatus('saving');
     setError(null);
-    setInfo(null);
 
     try {
       if (!selectedDate) throw new Error('Date is required');
@@ -187,10 +184,12 @@ export default function DayPlansClient() {
       }
 
       setStatus('idle');
-      setInfo(`Generated schedule for ${selectedDate}: created ${created}, already existed ${already}.`);
+      // no banner/no toast; keep this screen quiet
+      console.log(`Generated schedule for ${selectedDate}: created ${created}, already existed ${already}.`);
     } catch (e: any) {
       setStatus('idle');
-      setInfo(humanizeCreateError(e));
+      console.error(e);
+      window.alert(humanizeCreateError(e));
     }
   }
 
@@ -244,7 +243,7 @@ export default function DayPlansClient() {
         </div>
 
         {/* No error banner on this screen; Open/Create logic should handle all cases. */}
-        {info && <div style={styles.infoBox}>{info}</div>}
+        {/* banners removed */}
 
         <div style={{ ...styles.rowBetween, marginTop: 12 }}>
           <div style={{ fontWeight: 900, color: RCS.deepNavy }}>Classes</div>
