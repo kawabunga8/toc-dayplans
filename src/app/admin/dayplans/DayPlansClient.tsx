@@ -2,25 +2,32 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import type { DayPlan } from '@/lib/types';
 
 type Status = 'idle' | 'loading' | 'saving' | 'error';
 
+type ClassRow = { id: string; block_label: string | null; name: string; room: string | null; sort_order: number | null };
+
+type Draft = {
+  planDate: string;
+  fridayType: '' | 'day1' | 'day2';
+  title: string;
+  notes: string;
+};
+
 export default function DayPlansClient() {
+  const router = useRouter();
   const [items, setItems] = useState<DayPlan[]>([]);
   const [status, setStatus] = useState<Status>('loading');
   const [error, setError] = useState<string | null>(null);
 
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
-  const [planDate, setPlanDate] = useState(today);
-  const [slot, setSlot] = useState('A');
-  const [fridayType, setFridayType] = useState<'day1' | 'day2' | ''>('');
-  const [title, setTitle] = useState('');
-  const [titleAuto, setTitleAuto] = useState(true);
 
-  const [blocks, setBlocks] = useState<Array<{ block_label: string; name: string }>>([]);
-  const [notes, setNotes] = useState('');
+  const [classes, setClasses] = useState<ClassRow[]>([]);
+  const [openClassId, setOpenClassId] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, Draft>>({});
 
   const [showTrashed, setShowTrashed] = useState(false);
 
@@ -45,72 +52,73 @@ export default function DayPlansClient() {
 
   useEffect(() => {
     void load();
-    void loadBlocks();
+    void loadClasses();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showTrashed]);
 
-  async function loadBlocks() {
+  async function loadClasses() {
     try {
       const supabase = getSupabaseClient();
       const { data, error } = await supabase
         .from('classes')
-        .select('block_label,name,sort_order')
+        .select('id,block_label,name,room,sort_order')
         .not('block_label', 'is', null)
-        .order('sort_order', { ascending: true, nullsFirst: false });
+        .order('sort_order', { ascending: true, nullsFirst: false })
+        .order('name', { ascending: true });
 
       if (error) throw error;
-      const rows = (data ?? []) as any[];
-      const list = rows
-        .map((r) => ({ block_label: String(r.block_label), name: String(r.name) }))
-        .filter((r) => r.block_label);
-      setBlocks(list);
-
-      // If the current selected slot doesn't exist in seeded blocks, fall back to first.
-      if (list.length > 0 && !list.some((b) => b.block_label === slot)) {
-        setSlot(list[0]!.block_label);
-      }
-
-      // Pre-populate title if still auto.
-      const current = list.find((b) => b.block_label === slot);
-      if (current && titleAuto && !title.trim()) {
-        setTitle(current.name);
-      }
+      setClasses((data ?? []) as ClassRow[]);
     } catch {
-      // If classes aren't available yet, keep the legacy defaults.
+      // ignore; dayplans can still function without class seed
     }
   }
 
-  const isFriday = useMemo(() => isFridayLocal(planDate), [planDate]);
+  function getDraft(classId: string, klassName: string): Draft {
+    return (
+      drafts[classId] ?? {
+        planDate: today,
+        fridayType: '',
+        title: klassName,
+        notes: '',
+      }
+    );
+  }
 
-  async function createDayPlan() {
+  function setDraft(classId: string, next: Draft) {
+    setDrafts((prev) => ({ ...prev, [classId]: next }));
+  }
+
+  async function createDayPlanForClass(klass: ClassRow) {
+    if (!klass.block_label) return;
+
     setStatus('saving');
     setError(null);
 
     try {
-      if (!planDate) throw new Error('Date is required');
-      if (!slot.trim()) throw new Error('Slot is required');
-      if (isFriday && !fridayType) throw new Error('Friday Type is required');
-      if (!title.trim()) throw new Error('Title is required');
+      const d = getDraft(klass.id, klass.name);
+      if (!d.planDate) throw new Error('Date is required');
+      if (isFridayLocal(d.planDate) && !d.fridayType) throw new Error('Friday Type is required');
+      if (!d.title.trim()) throw new Error('Title is required');
 
       const supabase = getSupabaseClient();
       const { data, error } = await supabase
         .from('day_plans')
         .insert({
-          plan_date: planDate,
-          slot: slot.trim(),
-          friday_type: isFriday ? (fridayType as 'day1' | 'day2') : null,
-          title: title.trim(),
-          notes: notes.trim() ? notes.trim() : null,
+          plan_date: d.planDate,
+          slot: String(klass.block_label).trim(),
+          friday_type: isFridayLocal(d.planDate) ? (d.fridayType as 'day1' | 'day2') : null,
+          title: d.title.trim(),
+          notes: d.notes.trim() ? d.notes.trim() : null,
         })
         .select('*')
         .single();
 
       if (error) throw error;
 
-      setTitle('');
-      setNotes('');
       setItems((prev) => [data as DayPlan, ...prev]);
       setStatus('idle');
+      setOpenClassId(null);
+      router.push(`/admin/dayplans/${(data as any).id}`);
     } catch (e: any) {
       setStatus('error');
       setError(humanizeCreateError(e));
@@ -125,101 +133,118 @@ export default function DayPlansClient() {
       </p>
 
       <section style={styles.card}>
-        <div style={styles.sectionHeader}>New dayplan</div>
-        <div style={{ display: 'grid', gap: 10 }}>
-          <label style={{ display: 'grid', gap: 6 }}>
-            <span style={styles.label}>Date</span>
-            <input
-              type="date"
-              value={planDate}
-              onChange={(e) => {
-                setPlanDate(e.target.value);
-                // reset friday type when changing dates
-                setFridayType('');
-              }}
-              style={styles.input}
-            />
-          </label>
+        <div style={styles.sectionHeader}>Create a dayplan</div>
+        <p style={styles.mutedSmall}>Choose a class, then click “Create plan” to open the inputs (pre-filled from that class).</p>
 
-          <label style={{ display: 'grid', gap: 6 }}>
-            <span style={styles.label}>Block</span>
-            <select
-              value={slot}
-              onChange={(e) => {
-                const next = e.target.value;
-                setSlot(next);
-
-                // Pre-populate title from the class name for this block.
-                const hit = blocks.find((b) => b.block_label === next);
-                if (hit && titleAuto) {
-                  setTitle(hit.name);
-                }
-              }}
-              style={styles.input}
-            >
-              {(blocks.length ? blocks.map((b) => b.block_label) : SLOTS).map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          {isFriday && (
-            <label style={{ display: 'grid', gap: 6 }}>
-              <span style={styles.label}>Friday Type</span>
-              <select
-                value={fridayType}
-                onChange={(e) => setFridayType(e.target.value as any)}
-                style={styles.input}
-              >
-                <option value="">Select…</option>
-                <option value="day1">Day 1</option>
-                <option value="day2">Day 2</option>
-              </select>
-            </label>
-          )}
-
-          <label style={{ display: 'grid', gap: 6 }}>
-            <span style={styles.label}>Title</span>
-            <input
-              value={title}
-              onChange={(e) => {
-                setTitleAuto(false);
-                setTitle(e.target.value);
-              }}
-              placeholder="e.g., Computer Programming 11/12"
-              style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #cbd5e1' }}
-            />
-          </label>
-
-          <label style={{ display: 'grid', gap: 6 }}>
-            <span style={styles.label}>Notes (optional)</span>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={4}
-              placeholder="Anything important for the office / TOC (general notes for now)"
-              style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #cbd5e1' }}
-            />
-          </label>
-
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <button onClick={createDayPlan} disabled={status === 'saving' || status === 'loading'} style={styles.primaryBtn}>
-              {status === 'saving' ? 'Creating…' : 'Create'}
-            </button>
-            <button onClick={load} disabled={status === 'saving' || status === 'loading'} style={styles.secondaryBtn}>
-              Refresh
-            </button>
-          </div>
-
-          {error && (
-            <div style={styles.errorBox}>
-              <div style={{ fontWeight: 900, marginBottom: 6 }}>Couldn’t create dayplan</div>
-              <div>{error}</div>
-            </div>
-          )}
+        <div style={styles.rowBetween}>
+          <div style={{ fontWeight: 900, color: RCS.deepNavy }}>Classes</div>
+          <button onClick={loadClasses} disabled={status === 'loading' || status === 'saving'} style={styles.secondaryBtn}>
+            Refresh classes
+          </button>
         </div>
+
+        {error && <div style={styles.errorBox}>{error}</div>}
+
+        {classes.length > 0 ? (
+          <div style={{ overflowX: 'auto', marginTop: 12 }}>
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  <th style={styles.th}>Block</th>
+                  <th style={styles.th}>Class</th>
+                  <th style={styles.th}>Room</th>
+                  <th style={styles.th}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {classes.map((c, i) => {
+                  const open = openClassId === c.id;
+                  const d = getDraft(c.id, c.name);
+                  const isFri = isFridayLocal(d.planDate);
+
+                  return (
+                    <tr key={c.id} style={i % 2 === 0 ? styles.trEven : styles.trOdd}>
+                      <td style={styles.tdLabel}>{c.block_label ?? '—'}</td>
+                      <td style={styles.td}>{c.name}</td>
+                      <td style={styles.td}>{c.room || '—'}</td>
+                      <td style={styles.tdRight}>
+                        <button
+                          onClick={() => setOpenClassId((prev) => (prev === c.id ? null : c.id))}
+                          style={open ? styles.secondaryBtn : styles.primaryBtn}
+                          disabled={status === 'saving'}
+                        >
+                          {open ? 'Close' : 'Create plan'}
+                        </button>
+
+                        {open && (
+                          <div style={styles.inlineForm}>
+                            <label style={styles.field}>
+                              <span style={styles.label}>Date</span>
+                              <input
+                                type="date"
+                                value={d.planDate}
+                                onChange={(e) =>
+                                  setDraft(c.id, { ...d, planDate: e.target.value, fridayType: '' })
+                                }
+                                style={styles.input}
+                              />
+                            </label>
+
+                            {isFri && (
+                              <label style={styles.field}>
+                                <span style={styles.label}>Friday Type</span>
+                                <select
+                                  value={d.fridayType}
+                                  onChange={(e) => setDraft(c.id, { ...d, fridayType: e.target.value as any })}
+                                  style={styles.input}
+                                >
+                                  <option value="">Select…</option>
+                                  <option value="day1">Day 1</option>
+                                  <option value="day2">Day 2</option>
+                                </select>
+                              </label>
+                            )}
+
+                            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                              <span style={styles.label}>Title</span>
+                              <input
+                                value={d.title}
+                                onChange={(e) => setDraft(c.id, { ...d, title: e.target.value })}
+                                style={styles.input}
+                              />
+                            </label>
+
+                            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                              <span style={styles.label}>Notes (optional)</span>
+                              <textarea
+                                value={d.notes}
+                                onChange={(e) => setDraft(c.id, { ...d, notes: e.target.value })}
+                                rows={3}
+                                style={styles.textarea}
+                              />
+                            </label>
+
+                            <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                              <button
+                                onClick={() => createDayPlanForClass(c)}
+                                disabled={status === 'saving' || (isFri && !d.fridayType)}
+                                style={styles.primaryBtn}
+                              >
+                                {status === 'saving' ? 'Creating…' : 'Create'}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div style={{ opacity: 0.85, marginTop: 12 }}>No classes found. (Seed the <code>classes</code> table.)</div>
+        )}
       </section>
 
       <hr style={{ margin: '18px 0', opacity: 0.25 }} />
@@ -267,6 +292,7 @@ export default function DayPlansClient() {
 const RCS = {
   deepNavy: '#1F4E79',
   midBlue: '#2E75B6',
+  lightBlue: '#D6E4F0',
   gold: '#C9A84C',
   white: '#FFFFFF',
   lightGray: '#F5F5F5',
@@ -277,7 +303,9 @@ const styles: Record<string, React.CSSProperties> = {
   page: { padding: 24, maxWidth: 1000, margin: '0 auto', fontFamily: 'system-ui', background: RCS.white, color: RCS.textDark },
   h1: { margin: 0, color: RCS.deepNavy },
   muted: { opacity: 0.85, marginTop: 6, marginBottom: 16 },
+  mutedSmall: { opacity: 0.85, fontSize: 12, marginTop: 0, marginBottom: 12 },
   card: { border: `1px solid ${RCS.deepNavy}`, borderRadius: 12, padding: 16, background: RCS.white },
+  rowBetween: { display: 'flex', gap: 16, justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap' },
   sectionHeader: {
     background: RCS.deepNavy,
     color: RCS.white,
@@ -290,10 +318,37 @@ const styles: Record<string, React.CSSProperties> = {
   label: { color: RCS.midBlue, fontWeight: 800, fontSize: 12 },
   input: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.deepNavy}`, background: RCS.white, color: RCS.textDark },
   textarea: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.deepNavy}`, background: RCS.white, color: RCS.textDark, fontFamily: 'inherit' },
-  primaryBtn: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.gold}`, background: RCS.deepNavy, color: RCS.white, cursor: 'pointer', fontWeight: 900 },
-  secondaryBtn: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.gold}`, background: 'transparent', color: RCS.deepNavy, cursor: 'pointer', fontWeight: 900 },
+  primaryBtn: { padding: '8px 10px', borderRadius: 10, border: `1px solid ${RCS.gold}`, background: RCS.deepNavy, color: RCS.white, cursor: 'pointer', fontWeight: 900, whiteSpace: 'nowrap' },
+  secondaryBtn: { padding: '8px 10px', borderRadius: 10, border: `1px solid ${RCS.gold}`, background: 'transparent', color: RCS.deepNavy, cursor: 'pointer', fontWeight: 900, whiteSpace: 'nowrap' },
   secondaryLink: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.gold}`, background: 'transparent', color: RCS.deepNavy, textDecoration: 'none', cursor: 'pointer', fontWeight: 900 },
-  errorBox: { marginTop: 12, padding: 12, borderRadius: 10, background: '#FEE2E2', border: '1px solid #991b1b', color: '#7F1D1D' },
+  errorBox: { marginTop: 12, padding: 12, borderRadius: 10, background: '#FEE2E2', border: '1px solid #991b1b', color: '#7F1D1D', whiteSpace: 'pre-wrap' },
+  table: { width: '100%', borderCollapse: 'collapse', marginTop: 6 },
+  th: {
+    textAlign: 'left',
+    padding: 10,
+    background: RCS.deepNavy,
+    color: RCS.white,
+    borderBottom: `3px solid ${RCS.gold}`,
+    fontSize: 12,
+    letterSpacing: 0.4,
+  },
+  trEven: { background: RCS.white },
+  trOdd: { background: RCS.lightGray },
+  td: { padding: 10, borderBottom: `1px solid ${RCS.deepNavy}`, verticalAlign: 'top' },
+  tdRight: { padding: 10, borderBottom: `1px solid ${RCS.deepNavy}`, textAlign: 'right', verticalAlign: 'top' },
+  tdLabel: { padding: 10, borderBottom: `1px solid ${RCS.deepNavy}`, color: RCS.midBlue, fontWeight: 800, width: 70 },
+  inlineForm: {
+    marginTop: 10,
+    padding: 12,
+    borderRadius: 12,
+    border: `1px solid ${RCS.deepNavy}`,
+    background: RCS.lightBlue,
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: 10,
+    textAlign: 'left',
+  },
+  field: { display: 'grid', gap: 6 },
   itemEven: { border: `1px solid ${RCS.deepNavy}`, borderRadius: 12, padding: 12, background: RCS.white },
   itemOdd: { border: `1px solid ${RCS.deepNavy}`, borderRadius: 12, padding: 12, background: RCS.lightGray },
 };
