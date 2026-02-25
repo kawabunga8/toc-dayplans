@@ -93,12 +93,15 @@ export default function DayPlansClient() {
       const fridayType = isSelectedFriday ? (selectedFridayType as 'day1' | 'day2') : null;
 
       // 1) Find existing, non-trashed
-      let q = supabase.from('day_plans').select('id').eq('plan_date', selectedDate).eq('slot', slot);
-      if (fridayType) q = q.eq('friday_type', fridayType);
-      else q = q.is('friday_type', null);
+      // IMPORTANT: if it's not Friday, we ignore friday_type entirely (legacy data may have it set).
+      let q = supabase.from('day_plans').select('id,friday_type').eq('plan_date', selectedDate).eq('slot', slot);
+      if (isSelectedFriday) {
+        if (!fridayType) throw new Error('Friday Type is required');
+        q = q.eq('friday_type', fridayType);
+      }
       q = q.is('trashed_at', null);
 
-      const { data: rows, error: findErr } = await q.limit(1);
+      const { data: rows, error: findErr } = await q.order('friday_type', { ascending: true, nullsFirst: true }).limit(1);
       if (findErr) throw findErr;
 
       const existing = (rows?.[0] as any) ?? null;
@@ -152,12 +155,15 @@ export default function DayPlansClient() {
         const fridayType = isSelectedFriday ? (selectedFridayType as 'day1' | 'day2') : null;
 
         // Check existing non-trashed
-        let q = supabase.from('day_plans').select('id').eq('plan_date', selectedDate).eq('slot', slot);
-        if (fridayType) q = q.eq('friday_type', fridayType);
-        else q = q.is('friday_type', null);
+        // IMPORTANT: if it's not Friday, we ignore friday_type entirely (legacy data may have it set).
+        let q = supabase.from('day_plans').select('id,friday_type').eq('plan_date', selectedDate).eq('slot', slot);
+        if (isSelectedFriday) {
+          if (!fridayType) throw new Error('Friday Type is required');
+          q = q.eq('friday_type', fridayType);
+        }
         q = q.is('trashed_at', null);
 
-        const { data: rows, error: findErr } = await q.limit(1);
+        const { data: rows, error: findErr } = await q.order('friday_type', { ascending: true, nullsFirst: true }).limit(1);
         if (findErr) throw findErr;
         const existing = (rows?.[0] as any) ?? null;
 
