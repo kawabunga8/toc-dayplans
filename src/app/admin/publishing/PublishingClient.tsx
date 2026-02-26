@@ -63,17 +63,35 @@ export default function PublishingClient() {
 
   const origin = useMemo(() => (typeof window === 'undefined' ? '' : window.location.origin), []);
 
-  async function copyLink(planId: string) {
-    setStatus('working');
-    setError(null);
+  const [shareOpenPlanId, setShareOpenPlanId] = useState<string | null>(null);
+  const [shareCopiedPlanId, setShareCopiedPlanId] = useState<string | null>(null);
 
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setShareOpenPlanId(null);
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  function planShareUrl(planId: string) {
+    return `${origin}/p/${planId}`;
+  }
+
+  async function copyLink(planId: string) {
     try {
-      const url = `${origin}/p/${planId}`;
+      const url = planShareUrl(planId);
       await navigator.clipboard.writeText(url);
-      setStatus('idle');
+      setShareCopiedPlanId(planId);
+      setTimeout(() => setShareCopiedPlanId((cur) => (cur === planId ? null : cur)), 1200);
+      return true;
     } catch (e: any) {
-      setStatus('error');
-      setError(e?.message ?? 'Failed to copy link');
+      try {
+        window.prompt('Copy this link:', planShareUrl(planId));
+      } catch {
+        // ignore
+      }
+      return false;
     }
   }
 
@@ -132,7 +150,13 @@ export default function PublishingClient() {
   }
 
   return (
-    <main style={styles.page}>
+    <main
+      style={styles.page}
+      onClick={() => {
+        // click-away closes share popover
+        if (shareOpenPlanId) setShareOpenPlanId(null);
+      }}
+    >
       <h1 style={styles.h1}>Publishing</h1>
       <p style={styles.muted}>All day plans. Publish/unpublish to control what appears on the TOC screen.</p>
 
@@ -177,13 +201,32 @@ export default function PublishingClient() {
                         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                           {published ? (
                             <>
-                              <button
-                                onClick={() => copyLink(p.id)}
-                                disabled={status === 'loading' || status === 'working'}
-                                style={styles.secondaryBtn}
-                              >
-                                Copy link
-                              </button>
+                              <div style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
+                                <button
+                                  onClick={() => setShareOpenPlanId((cur) => (cur === p.id ? null : p.id))}
+                                  disabled={status === 'loading' || status === 'working'}
+                                  style={styles.secondaryBtn}
+                                >
+                                  Copy link
+                                </button>
+
+                                {shareOpenPlanId === p.id ? (
+                                  <div style={styles.sharePopover}>
+                                    <div style={styles.shareRow}>
+                                      <div style={styles.shareUrl}>{planShareUrl(p.id)}</div>
+                                      <button
+                                        type="button"
+                                        onClick={async () => {
+                                          await copyLink(p.id);
+                                        }}
+                                        style={styles.copyBtn}
+                                      >
+                                        {shareCopiedPlanId === p.id ? 'Copied' : 'Copy'}
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : null}
+                              </div>
                               <button
                                 onClick={() => revoke(p.id)}
                                 disabled={isDemo || status === 'loading' || status === 'working'}
@@ -313,4 +356,30 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 900,
   },
   errorBox: { marginTop: 12, padding: 12, borderRadius: 10, background: '#FEE2E2', border: '1px solid #991b1b', color: '#7F1D1D' },
+
+  sharePopover: {
+    position: 'absolute',
+    right: 0,
+    top: 'calc(100% + 6px)',
+    zIndex: 20,
+    background: RCS.white,
+    border: `1px solid ${RCS.deepNavy}`,
+    borderRadius: 10,
+    padding: 10,
+    minWidth: 320,
+    maxWidth: 440,
+    boxShadow: '0 14px 32px rgba(0,0,0,0.18)',
+  },
+  shareRow: { display: 'flex', gap: 10, alignItems: 'center' },
+  shareUrl: { fontSize: 12, opacity: 0.9, wordBreak: 'break-all', flex: 1 },
+  copyBtn: {
+    padding: '6px 8px',
+    borderRadius: 8,
+    border: `1px solid ${RCS.gold}`,
+    background: RCS.deepNavy,
+    color: RCS.white,
+    cursor: 'pointer',
+    fontWeight: 900,
+    whiteSpace: 'nowrap',
+  },
 };
