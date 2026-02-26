@@ -697,27 +697,42 @@ begin
     return null;
   end if;
 
-  select coalesce(jsonb_agg(jsonb_build_object(
-      'id', b.id,
-      'start_time', b.start_time,
-      'end_time', b.end_time,
-      'room', b.room,
-      'class_name', b.class_name,
-      'details', b.details,
-      'class_id', b.class_id,
-      'students', (
-        select coalesce(jsonb_agg(
-          jsonb_build_object('id', s.id, 'first_name', s.first_name, 'last_name', s.last_name)
-          order by s.last_name, s.first_name
-        ), '[]'::jsonb)
-        from enrollments e
-        join students s on s.id = e.student_id
-        where e.class_id = b.class_id
+  -- Only return the block that matches this plan's slot (e.g. Block F), not the entire day schedule.
+  -- We match via classes.block_label (joined by class_id).
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'id', b.id,
+        'start_time', b.start_time,
+        'end_time', b.end_time,
+        'room', b.room,
+        'class_name', b.class_name,
+        'details', b.details,
+        'class_id', b.class_id,
+        'block_label', c.block_label,
+        'students', (
+          select coalesce(
+            jsonb_agg(
+              jsonb_build_object('id', s.id, 'first_name', s.first_name, 'last_name', s.last_name)
+              order by s.last_name, s.first_name
+            ),
+            '[]'::jsonb
+          )
+          from enrollments e
+          join students s on s.id = e.student_id
+          where e.class_id = b.class_id
+        )
       )
-    ) order by b.start_time asc), '[]'::jsonb)
+      order by b.start_time asc
+    ),
+    '[]'::jsonb
+  )
   into blocks
   from day_plan_blocks b
-  where b.day_plan_id = p.id;
+  left join classes c on c.id = b.class_id
+  where b.day_plan_id = p.id
+    and c.block_label is not null
+    and upper(c.block_label) = upper(p.slot);
 
   return jsonb_build_object(
     'id', p.id,
