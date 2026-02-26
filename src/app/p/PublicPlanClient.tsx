@@ -26,6 +26,19 @@ type PublicPlan = {
 };
 
 export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
+  // Auto-print support: /p/[id]?print=1 will trigger window.print() on load.
+  useEffect(() => {
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      if (sp.get('print') === '1') {
+        // give layout a moment
+        setTimeout(() => window.print(), 250);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
   // Printable view: when opened from the TOC sidebar, users expect to see ONLY the selected plan (one block),
   // not the entire day schedule. We infer the "primary" block by matching "Block X" in the class_name.
   const blocksToShow = useMemo(() => {

@@ -274,7 +274,21 @@ export default function TocClient({
         ) : (
           <>
             <section style={styles.card}>
-              <div style={styles.sectionTitle}>Courses</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+                <div style={styles.sectionTitle}>Courses</div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const ids = (plansByDate.get(selectedDate) ?? []).map((p) => p.id);
+                    if (!ids.length) return;
+                    window.open(`/toc/print?date=${encodeURIComponent(selectedDate)}`, '_blank', 'noopener,noreferrer');
+                  }}
+                  disabled={(plansByDate.get(selectedDate) ?? []).length === 0}
+                  style={(plansByDate.get(selectedDate) ?? []).length === 0 ? styles.primaryBtnDisabled : styles.primaryBtn}
+                >
+                  Print all
+                </button>
+              </div>
 
               <div style={{ overflowX: 'auto', marginTop: 10 }}>
                 <table style={styles.table}>
@@ -300,15 +314,39 @@ export default function TocClient({
                           <td style={styles.td}>{c.room || '—'}</td>
                           <td style={styles.tdRight}>
                             {clickable ? (
-                              <button
-                                type="button"
-                                onClick={() => setOpenPlanId(plan.id)}
-                                style={isOpen ? styles.primaryBtnActive : styles.primaryBtn}
-                              >
-                                View
-                              </button>
+                              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => setOpenPlanId(plan.id)}
+                                  style={isOpen ? styles.primaryBtnActive : styles.primaryBtn}
+                                >
+                                  View
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    const url = `${window.location.origin}/p/${plan.id}`;
+                                    try {
+                                      await navigator.clipboard.writeText(url);
+                                    } catch {
+                                      // fallback
+                                      window.prompt('Copy this link:', url);
+                                    }
+                                  }}
+                                  style={styles.secondaryBtn}
+                                >
+                                  Share
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => window.open(`/p/${plan.id}?print=1`, '_blank', 'noopener,noreferrer')}
+                                  style={styles.secondaryBtn}
+                                >
+                                  Print
+                                </button>
+                              </div>
                             ) : (
-                              <span style={{ opacity: 0.6, fontWeight: 700 }}>Not published</span>
+                              <span style={{ opacity: 0.6, fontWeight: 700 }}>No plan</span>
                             )}
                           </td>
                         </tr>
@@ -547,6 +585,15 @@ const styles: Record<string, React.CSSProperties> = {
     background: RCS.deepNavy,
     color: RCS.white,
     cursor: 'pointer',
+    fontWeight: 900,
+  },
+  primaryBtnDisabled: {
+    padding: '8px 10px',
+    borderRadius: 10,
+    border: `1px solid ${RCS.gold}`,
+    background: RCS.lightGray,
+    color: '#64748b',
+    cursor: 'not-allowed',
     fontWeight: 900,
   },
 
