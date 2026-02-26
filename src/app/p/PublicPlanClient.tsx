@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 type Student = { id: string; first_name: string; last_name: string };
 
@@ -26,7 +26,15 @@ type PublicPlan = {
 };
 
 export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
-  const allIds = useMemo(() => plan.blocks.map((b) => b.id), [plan.blocks]);
+  // Printable view: when opened from the TOC sidebar, users expect to see ONLY the selected plan (one block),
+  // not the entire day schedule. We infer the "primary" block by matching "Block X" in the class_name.
+  const blocksToShow = useMemo(() => {
+    const wanted = `BLOCK ${String(plan.slot ?? '').toUpperCase()}`;
+    const matches = (plan.blocks ?? []).filter((b) => blockLabelFromClassName(b.class_name).toUpperCase() === wanted);
+    return matches.length ? matches : (plan.blocks ?? []);
+  }, [plan.blocks, plan.slot]);
+
+  const allIds = useMemo(() => blocksToShow.map((b) => b.id), [blocksToShow]);
   const [selected, setSelected] = useState<Record<string, boolean>>(() => {
     const init: Record<string, boolean> = {};
     for (const id of allIds) init[id] = true;
@@ -39,6 +47,18 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
   const [printAttendanceForBlockId, setPrintAttendanceForBlockId] = useState<string | null>(null);
 
   const selectedCount = useMemo(() => allIds.filter((id) => selected[id]).length, [allIds, selected]);
+
+  // If the filtered set changes (rare), ensure selection map includes keys.
+  useEffect(() => {
+    setSelected((prev) => {
+      const next: Record<string, boolean> = { ...prev };
+      for (const id of allIds) if (typeof next[id] === 'undefined') next[id] = true;
+      // remove stale keys
+      for (const k of Object.keys(next)) if (!allIds.includes(k)) delete next[k];
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allIds.join('|')]);
 
   function toggle(id: string) {
     setSelected((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -119,7 +139,7 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
       </header>
 
       <div style={styles.blocksWrap}>
-        {plan.blocks.map((b) => {
+        {blocksToShow.map((b) => {
           const isOn = !!selected[b.id];
           const label = blockLabelFromClassName(b.class_name);
           const showAttendance = !!b.class_id;
@@ -202,7 +222,7 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
 
       <div className="no-print stickyBar" style={styles.stickyBar}>
         <div style={{ opacity: 0.9 }}>
-          Selected: <b>{selectedCount}</b> / {plan.blocks.length}
+          Selected: <b>{selectedCount}</b> / {blocksToShow.length}
         </div>
         <button
           onClick={() => window.print()}
