@@ -30,13 +30,21 @@ export default function BlockTimesClient() {
   const [error, setError] = useState<string | null>(null);
   const [effectiveFrom, setEffectiveFrom] = useState(() => new Date().toISOString().slice(0, 10));
 
-  // Rotation editor state
+  // Rotation editor state (edit all days at once)
   const [rotStatus, setRotStatus] = useState<Status>('idle');
   const [rotError, setRotError] = useState<string | null>(null);
   const [rotEffectiveFrom, setRotEffectiveFrom] = useState(() => new Date().toISOString().slice(0, 10));
-  const [rotDayOfWeek, setRotDayOfWeek] = useState<1 | 2 | 3 | 4 | 5>(1);
-  const [rotFridayType, setRotFridayType] = useState<'day1' | 'day2'>('day1');
-  const [rotBlocks, setRotBlocks] = useState<string[]>(['A', 'B', 'CLE', 'Lunch', 'C', 'D']);
+
+  type RotationKey = 'mon' | 'tue' | 'wed' | 'thu' | 'fri_day1' | 'fri_day2';
+
+  const [rotSets, setRotSets] = useState<Record<RotationKey, string[]>>({
+    mon: ['A', 'B', 'CLE', 'Lunch', 'C', 'D'],
+    tue: ['E', 'F', 'Flex', 'Lunch', 'G', 'H'],
+    wed: ['C', 'D', 'Flex', 'Lunch', 'A', 'B'],
+    thu: ['G', 'H', 'CLE', 'Lunch', 'E', 'F'],
+    fri_day1: ['A', 'B', 'Chapel', 'Lunch', 'C', 'D'],
+    fri_day2: ['E', 'F', 'Chapel', 'Lunch', 'G', 'H'],
+  });
 
   const [rows, setRows] = useState<Array<Omit<BlockTimeRow, 'id' | 'effective_to'>>>((() => {
     // editable draft rows to save as a new effective set
@@ -116,7 +124,7 @@ export default function BlockTimesClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [template]);
 
-  async function loadCurrentRotation() {
+  async function loadCurrentRotationAll() {
     setRotStatus('loading');
     setRotError(null);
 
@@ -124,32 +132,48 @@ export default function BlockTimesClient() {
       const supabase = getSupabaseClient();
       const today = new Date().toISOString().slice(0, 10);
 
-      let q = supabase
-        .from('rotation_defaults')
-        .select('*')
-        .eq('day_of_week', rotDayOfWeek)
-        .lte('effective_from', today)
-        .or(`effective_to.is.null,effective_to.gt.${today}`)
-        .order('effective_from', { ascending: false })
-        .order('slot_order', { ascending: true });
+      const configs: Array<{ key: keyof typeof rotSets; day: 1 | 2 | 3 | 4 | 5; ft: 'day1' | 'day2' | null }> = [
+        { key: 'mon', day: 1, ft: null },
+        { key: 'tue', day: 2, ft: null },
+        { key: 'wed', day: 3, ft: null },
+        { key: 'thu', day: 4, ft: null },
+        { key: 'fri_day1', day: 5, ft: 'day1' },
+        { key: 'fri_day2', day: 5, ft: 'day2' },
+      ];
 
-      if (rotDayOfWeek === 5) {
-        q = q.eq('friday_type', rotFridayType);
-      } else {
-        q = q.is('friday_type', null);
-      }
+      const results = await Promise.all(
+        configs.map(async (c) => {
+          let q = supabase
+            .from('rotation_defaults')
+            .select('*')
+            .eq('day_of_week', c.day)
+            .lte('effective_from', today)
+            .or(`effective_to.is.null,effective_to.gt.${today}`)
+            .order('effective_from', { ascending: false })
+            .order('slot_order', { ascending: true });
 
-      const { data, error } = await q;
-      if (error) throw error;
+          if (c.ft) q = q.eq('friday_type', c.ft);
+          else q = q.is('friday_type', null);
 
-      if ((data?.length ?? 0) === 0) {
-        setRotBlocks((prev) => (prev.length ? prev : ['A', 'B', 'CLE', 'Lunch', 'C', 'D']));
-      } else {
-        // only take the most recent effective_from group
-        const eff = (data as any[])[0]?.effective_from as string;
-        const group = (data as any[]).filter((r) => r.effective_from === eff);
-        setRotBlocks(group.map((r) => String(r.block_label)));
-      }
+          const { data, error } = await q;
+          if (error) throw error;
+
+          const rows = (data ?? []) as any[];
+          if (!rows.length) return { key: c.key, blocks: null as string[] | null };
+
+          const eff = rows[0]!.effective_from as string;
+          const group = rows.filter((r) => r.effective_from === eff);
+          return { key: c.key, blocks: group.map((r) => String(r.block_label)) };
+        })
+      );
+
+      setRotSets((prev) => {
+        const next = { ...prev };
+        for (const r of results) {
+          if (r.blocks && r.blocks.length) (next as any)[r.key] = r.blocks;
+        }
+        return next;
+      });
 
       setRotStatus('idle');
     } catch (e: any) {
@@ -160,11 +184,11 @@ export default function BlockTimesClient() {
 
   useEffect(() => {
     if (template !== 'rotation') return;
-    void loadCurrentRotation();
+    void loadCurrentRotationAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [template, rotDayOfWeek, rotFridayType]);
+  }, [template]);
 
-  async function saveNewRotationSet() {
+  async function saveNewRotationAll() {
     setRotStatus('saving');
     setRotError(null);
 
@@ -173,31 +197,43 @@ export default function BlockTimesClient() {
       const eff = rotEffectiveFrom;
       if (!eff) throw new Error('Effective date is required');
 
+      const configs: Array<{ day: 1 | 2 | 3 | 4 | 5; ft: 'day1' | 'day2' | null; blocks: string[] }> = [
+        { day: 1, ft: null, blocks: rotSets.mon },
+        { day: 2, ft: null, blocks: rotSets.tue },
+        { day: 3, ft: null, blocks: rotSets.wed },
+        { day: 4, ft: null, blocks: rotSets.thu },
+        { day: 5, ft: 'day1', blocks: rotSets.fri_day1 },
+        { day: 5, ft: 'day2', blocks: rotSets.fri_day2 },
+      ];
+
       // close existing active rows at eff date
-      let closeQ = supabase
-        .from('rotation_defaults')
-        .update({ effective_to: eff })
-        .eq('day_of_week', rotDayOfWeek)
-        .is('effective_to', null)
-        .lt('effective_from', eff);
+      for (const c of configs) {
+        let closeQ = supabase
+          .from('rotation_defaults')
+          .update({ effective_to: eff })
+          .eq('day_of_week', c.day)
+          .is('effective_to', null)
+          .lt('effective_from', eff);
+        if (c.ft) closeQ = closeQ.eq('friday_type', c.ft);
+        else closeQ = closeQ.is('friday_type', null);
 
-      if (rotDayOfWeek === 5) closeQ = closeQ.eq('friday_type', rotFridayType);
-      else closeQ = closeQ.is('friday_type', null);
+        const { error: closeErr } = await closeQ;
+        if (closeErr) throw closeErr;
+      }
 
-      const { error: closeErr } = await closeQ;
-      if (closeErr) throw closeErr;
-
-      const payload = rotBlocks
-        .map((b) => String(b).trim())
-        .filter(Boolean)
-        .map((block, idx) => ({
-          day_of_week: rotDayOfWeek,
-          friday_type: rotDayOfWeek === 5 ? rotFridayType : null,
-          slot_order: idx + 1,
-          block_label: block,
-          effective_from: eff,
-          effective_to: null,
-        }));
+      const payload = configs.flatMap((c) =>
+        (c.blocks ?? [])
+          .map((b) => String(b).trim())
+          .filter(Boolean)
+          .map((block, idx) => ({
+            day_of_week: c.day,
+            friday_type: c.ft,
+            slot_order: idx + 1,
+            block_label: block,
+            effective_from: eff,
+            effective_to: null,
+          }))
+      );
 
       const { error: insErr } = await supabase.from('rotation_defaults').insert(payload);
       if (insErr) throw insErr;
@@ -281,27 +317,6 @@ export default function BlockTimesClient() {
 
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end', justifyContent: 'flex-end' }}>
                 <label style={{ display: 'grid', gap: 6 }}>
-                  <div style={styles.label}>Day</div>
-                  <select value={rotDayOfWeek} onChange={(e) => setRotDayOfWeek(Number(e.target.value) as any)} style={styles.input}>
-                    <option value={1}>Monday</option>
-                    <option value={2}>Tuesday</option>
-                    <option value={3}>Wednesday</option>
-                    <option value={4}>Thursday</option>
-                    <option value={5}>Friday</option>
-                  </select>
-                </label>
-
-                {rotDayOfWeek === 5 ? (
-                  <label style={{ display: 'grid', gap: 6 }}>
-                    <div style={styles.label}>Friday Type</div>
-                    <select value={rotFridayType} onChange={(e) => setRotFridayType(e.target.value as any)} style={styles.input}>
-                      <option value={'day1'}>Day 1</option>
-                      <option value={'day2'}>Day 2</option>
-                    </select>
-                  </label>
-                ) : null}
-
-                <label style={{ display: 'grid', gap: 6 }}>
                   <div style={styles.label}>Effective from</div>
                   <input type="date" value={rotEffectiveFrom} onChange={(e) => setRotEffectiveFrom(e.target.value)} style={styles.input} />
                 </label>
@@ -315,48 +330,26 @@ export default function BlockTimesClient() {
                 ))}
               </datalist>
 
-              {rotBlocks.map((b, i) => (
-                <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                  <div style={{ width: 28, fontWeight: 900, color: '#2E75B6' }}>{i + 1}.</div>
-                  <input
-                    value={b}
-                    list="rotation-labels"
-                    onChange={(e) => setRotBlocks((prev) => prev.map((x, idx) => (idx === i ? e.target.value : x)))}
-                    style={{ ...styles.input, flex: 1 }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setRotBlocks((prev) => prev.filter((_, idx) => idx !== i))}
-                    style={styles.secondaryBtn}
-                    disabled={isDemo || rotStatus === 'saving' || rotStatus === 'loading'}
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
+              <RotationEditor title="Monday" blocks={rotSets.mon} onChange={(b) => setRotSets((p) => ({ ...p, mon: b }))} disabled={isDemo || rotStatus === 'saving' || rotStatus === 'loading'} />
+              <RotationEditor title="Tuesday" blocks={rotSets.tue} onChange={(b) => setRotSets((p) => ({ ...p, tue: b }))} disabled={isDemo || rotStatus === 'saving' || rotStatus === 'loading'} />
+              <RotationEditor title="Wednesday" blocks={rotSets.wed} onChange={(b) => setRotSets((p) => ({ ...p, wed: b }))} disabled={isDemo || rotStatus === 'saving' || rotStatus === 'loading'} />
+              <RotationEditor title="Thursday" blocks={rotSets.thu} onChange={(b) => setRotSets((p) => ({ ...p, thu: b }))} disabled={isDemo || rotStatus === 'saving' || rotStatus === 'loading'} />
+              <RotationEditor title="Friday (Day 1)" blocks={rotSets.fri_day1} onChange={(b) => setRotSets((p) => ({ ...p, fri_day1: b }))} disabled={isDemo || rotStatus === 'saving' || rotStatus === 'loading'} />
+              <RotationEditor title="Friday (Day 2)" blocks={rotSets.fri_day2} onChange={(b) => setRotSets((p) => ({ ...p, fri_day2: b }))} disabled={isDemo || rotStatus === 'saving' || rotStatus === 'loading'} />
 
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                 <button
                   type="button"
-                  onClick={() => setRotBlocks((prev) => [...prev, ''])}
-                  style={styles.secondaryBtn}
-                  disabled={isDemo || rotStatus === 'saving' || rotStatus === 'loading'}
-                >
-                  + Add block
-                </button>
-
-                <button
-                  type="button"
-                  onClick={saveNewRotationSet}
+                  onClick={saveNewRotationAll}
                   style={styles.primaryBtn}
                   disabled={isDemo || rotStatus === 'saving' || rotStatus === 'loading'}
                 >
-                  {rotStatus === 'saving' ? 'Saving…' : 'Save as new defaults'}
+                  {rotStatus === 'saving' ? 'Saving…' : 'Save everything'}
                 </button>
 
                 <button
                   type="button"
-                  onClick={loadCurrentRotation}
+                  onClick={loadCurrentRotationAll}
                   style={styles.secondaryBtn}
                   disabled={rotStatus === 'saving' || rotStatus === 'loading'}
                 >
@@ -489,6 +482,55 @@ function defaultTimes(template: TemplateKey, slot: string): { start: string; end
     default:
       return { start: '08:30', end: '09:40' };
   }
+}
+
+function RotationEditor({
+  title,
+  blocks,
+  onChange,
+  disabled,
+}: {
+  title: string;
+  blocks: string[];
+  onChange: (next: string[]) => void;
+  disabled: boolean;
+}) {
+  return (
+    <div style={{ border: '1px solid #1F4E79', borderRadius: 12, padding: 12, background: '#FFFFFF' }}>
+      <div style={{ fontWeight: 900, color: '#1F4E79', marginBottom: 10 }}>{title}</div>
+      <div style={{ display: 'grid', gap: 8 }}>
+        {blocks.map((b, i) => (
+          <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <div style={{ width: 28, fontWeight: 900, color: '#2E75B6' }}>{i + 1}.</div>
+            <input
+              value={b}
+              list="rotation-labels"
+              onChange={(e) => onChange(blocks.map((x, idx) => (idx === i ? e.target.value : x)))}
+              style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #1F4E79', background: '#FFFFFF', color: '#1A1A1A', flex: 1 }}
+              disabled={disabled}
+            />
+            <button
+              type="button"
+              onClick={() => onChange(blocks.filter((_, idx) => idx !== i))}
+              style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #C9A84C', background: 'transparent', color: '#1F4E79', cursor: 'pointer', fontWeight: 900 }}
+              disabled={disabled}
+            >
+              Remove
+            </button>
+          </div>
+        ))}
+
+        <button
+          type="button"
+          onClick={() => onChange([...blocks, ''])}
+          style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #C9A84C', background: 'transparent', color: '#1F4E79', cursor: 'pointer', fontWeight: 900, width: 'fit-content' }}
+          disabled={disabled}
+        >
+          + Add block
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function humanizeError(e: any): string {
