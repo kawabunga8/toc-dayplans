@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { buildDayplansListHref, asFridayType, isYyyyMmDd } from '@/lib/appRules/navigation';
+import { normalizeBlockLabel } from '@/lib/appRules/specialBlocks';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import TocBlockPlanInstanceEditor from './TocBlockPlanInstanceEditor';
 
@@ -252,7 +253,7 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
         const end = (t?.end_time ?? m.fallbackEnd).slice(0, 5);
 
         const labelRaw = String(m.block_label ?? '').trim();
-        const label = labelRaw.toUpperCase();
+        const label = normalizeBlockLabel(labelRaw);
 
         // Flex/Chapel/CLE/Lunch are seeded into the classes table (see schema.sql) so they can have templates.
         // Prefer a real class match when it exists.
