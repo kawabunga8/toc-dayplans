@@ -168,6 +168,7 @@ export default function TocClient({
   }
 
   const [rotationBlocks, setRotationBlocks] = useState<string[]>([]);
+  const [blockTimesBySlot, setBlockTimesBySlot] = useState<Record<string, { start: string; end: string }>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -181,6 +182,22 @@ export default function TocClient({
         if (!cancelled) setRotationBlocks((j?.blocks ?? []) as string[]);
       } catch {
         if (!cancelled) setRotationBlocks([]);
+      }
+
+      try {
+        const res = await fetch(`/api/public/block-times?date=${encodeURIComponent(selectedDate)}`);
+        const j = await res.json();
+        if (!res.ok) throw new Error(j?.error ?? 'Failed');
+        const slots = Array.isArray(j?.slots) ? j.slots : [];
+        const map: Record<string, { start: string; end: string }> = {};
+        for (const s of slots) {
+          const slot = String(s?.slot ?? '').trim();
+          if (!slot) continue;
+          map[slot] = { start: String(s?.start_time ?? '').slice(0, 5), end: String(s?.end_time ?? '').slice(0, 5) };
+        }
+        if (!cancelled) setBlockTimesBySlot(map);
+      } catch {
+        if (!cancelled) setBlockTimesBySlot({});
       }
     })();
     return () => {
@@ -242,6 +259,22 @@ export default function TocClient({
     const matches = (openPlan.blocks ?? []).filter((b) => blockLabelFromClassName(b.class_name).toUpperCase() === wanted);
     return matches.length ? matches : (openPlan.blocks ?? []);
   }, [openPlan]);
+
+  const openPlanTimeRange = useMemo(() => {
+    if (!openPlan) return null;
+    const label = String(openPlan.slot ?? '').trim().toUpperCase();
+    const idx = rotationBlocks.findIndex((b) => String(b).trim().toUpperCase() === label);
+    if (idx < 0) return null;
+
+    const isFri = isFridayLocal(openPlan.plan_date);
+    const slots = isFri ? ['P1', 'P2', 'Chapel', 'Lunch', 'P5', 'P6'] : ['P1', 'P2', 'Flex', 'Lunch', 'P5', 'P6'];
+    const slot = slots[idx] ?? null;
+    if (!slot) return null;
+
+    const t = blockTimesBySlot[slot];
+    if (!t?.start || !t?.end) return null;
+    return { start: t.start, end: t.end, slot };
+  }, [openPlan, rotationBlocks, blockTimesBySlot]);
 
   return (
     <div style={styles.shell}>
@@ -568,7 +601,7 @@ export default function TocClient({
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
                     <div style={{ fontWeight: 900 }}>{b.class_name}</div>
                     <div style={{ opacity: 0.8, fontSize: 12 }}>
-                      {formatTime(b.start_time)}–{formatTime(b.end_time)} • Room {b.room}
+                      {(openPlanTimeRange ? `${openPlanTimeRange.start}–${openPlanTimeRange.end}` : `${formatTime(b.start_time)}–${formatTime(b.end_time)}`)} • Room {b.room}
                     </div>
                   </div>
                   {b.details?.trim() ? (

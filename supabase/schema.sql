@@ -333,6 +333,51 @@ $$;
 revoke all on function get_rotation_for_date(date, text) from public;
 grant execute on function get_rotation_for_date(date, text) to anon;
 
+-- Public block times for a given date (effective-dated).
+-- Returns an array of {slot,start_time,end_time} ordered by start_time.
+create or replace function get_block_times_for_date(plan_date date)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  dow int;
+  tk text;
+  out jsonb;
+begin
+  if plan_date is null then
+    return '[]'::jsonb;
+  end if;
+
+  dow := extract(isodow from plan_date);
+  if dow < 1 or dow > 5 then
+    return '[]'::jsonb;
+  end if;
+
+  tk := case when dow = 5 then 'fri' else 'mon_thu' end;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+      'slot', b.slot,
+      'start_time', to_char(b.start_time, 'HH24:MI'),
+      'end_time', to_char(b.end_time, 'HH24:MI')
+    ) order by b.start_time asc), '[]'::jsonb)
+  into out
+  from block_time_defaults b
+  where b.template_key = tk
+    and b.effective_from <= plan_date
+    and (b.effective_to is null or b.effective_to > plan_date)
+  group by b.effective_from
+  order by b.effective_from desc
+  limit 1;
+
+  return coalesce(out, '[]'::jsonb);
+end;
+$$;
+
+revoke all on function get_block_times_for_date(date) from public;
+grant execute on function get_block_times_for_date(date) to anon;
+
 -- ----------------------
 -- BLOCK TIME DEFAULTS (effective-dated)
 -- ----------------------
