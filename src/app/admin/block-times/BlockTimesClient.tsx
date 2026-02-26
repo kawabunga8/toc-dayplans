@@ -377,7 +377,7 @@ export default function BlockTimesClient() {
                 ))}
               </datalist>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(220px, 260px))', gap: 12, alignItems: 'start', justifyContent: 'space-between' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(100px, 120px))', gap: 12, alignItems: 'start', justifyContent: 'space-between' }}>
                 <RotationColumn title="Mon" blocks={rotSets.mon} onChange={(b) => setRotSets((p) => ({ ...p, mon: b }))} disabled={isDemo || rotStatus === 'saving' || rotStatus === 'loading'} />
                 <RotationColumn title="Tue" blocks={rotSets.tue} onChange={(b) => setRotSets((p) => ({ ...p, tue: b }))} disabled={isDemo || rotStatus === 'saving' || rotStatus === 'loading'} />
                 <RotationColumn title="Wed" blocks={rotSets.wed} onChange={(b) => setRotSets((p) => ({ ...p, wed: b }))} disabled={isDemo || rotStatus === 'saving' || rotStatus === 'loading'} />
