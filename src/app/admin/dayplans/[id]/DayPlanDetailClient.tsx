@@ -421,22 +421,9 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
     }
   }
 
-  async function copyToClipboard(text: string) {
-    try {
-      await navigator.clipboard.writeText(text);
-      return true;
-    } catch {
-      try {
-        window.prompt('Copy this link:', text);
-      } catch {
-        // ignore
-      }
-      return false;
-    }
-  }
-
   async function copyLink() {
     if (!publicUrl) return;
+    const { copyToClipboard } = await import('@/lib/appRules/clipboard');
     await copyToClipboard(publicUrl);
   }
 

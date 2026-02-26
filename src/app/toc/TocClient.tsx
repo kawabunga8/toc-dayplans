@@ -209,17 +209,8 @@ export default function TocClient({
   }
 
   async function copyToClipboard(text: string) {
-    try {
-      await navigator.clipboard.writeText(text);
-      return true;
-    } catch {
-      try {
-        window.prompt('Copy this link:', text);
-      } catch {
-        // ignore
-      }
-      return false;
-    }
+    const { copyToClipboard } = await import('@/lib/appRules/clipboard');
+    return copyToClipboard(text);
   }
 
   const [rotationBlocks, setRotationBlocks] = useState<string[]>([]);
