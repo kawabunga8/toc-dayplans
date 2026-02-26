@@ -466,8 +466,16 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
     }
   }
 
+  const [showAllBlocks, setShowAllBlocks] = useState(false);
+
   const published = plan?.visibility === 'link';
   const trashed = !!plan?.trashed_at;
+
+  const visibleBlocks = useMemo(() => {
+    // Dayplans in this app are per-slot/per-course. If legacy data ever has multiple blocks,
+    // default to showing the first block only (with an opt-in toggle to show all).
+    return showAllBlocks ? blocks : blocks.slice(0, 1);
+  }, [blocks, showAllBlocks]);
 
   return (
     <main style={styles.page}>
@@ -531,19 +539,38 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
           </section>
 
           <section style={styles.card}>
-            <div style={styles.sectionHeader}>Schedule blocks</div>
+            <div style={styles.sectionHeader}>Schedule block</div>
             {blocks.length === 0 ? (
               <div style={{ display: 'grid', gap: 10 }}>
-                <div style={{ opacity: 0.85 }}>No blocks yet.</div>
+                <div style={{ opacity: 0.85 }}>No block yet.</div>
                 <div>
                   <button onClick={generateSchedule} disabled={status !== 'idle'} style={styles.secondaryBtn}>
-                    {status === 'generating' ? 'Generating…' : 'Generate schedule'}
+                    {status === 'generating' ? 'Generating…' : 'Generate block'}
                   </button>
                 </div>
               </div>
             ) : (
               <div style={{ display: 'grid', gap: 10 }}>
-                {blocks.map((b, idx) => (
+                {blocks.length > 1 && (
+                  <div style={{ ...styles.callout, marginTop: 0 }}>
+                    <div style={{ fontWeight: 900, color: RCS.deepNavy, marginBottom: 6 }}>
+                      Multiple blocks found
+                    </div>
+                    <div style={{ fontSize: 12, opacity: 0.9 }}>
+                      This builder is intended to show one block (the course you opened). Extra rows may be legacy data.
+                    </div>
+                    <div style={{ display: 'flex', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
+                      <button onClick={() => setShowAllBlocks((v) => !v)} style={styles.secondaryBtn}>
+                        {showAllBlocks ? 'Show only this course' : `Show all (${blocks.length})`}
+                      </button>
+                      <button onClick={generateSchedule} disabled={status !== 'idle'} style={styles.secondaryBtn}>
+                        Regenerate (keep only this course)
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {visibleBlocks.map((b, idx) => (
                   <div key={b.id ?? idx} style={idx % 2 === 0 ? styles.itemEven : styles.itemOdd}>
                     <div style={styles.rowBetweenTight}>
                       <div style={{ fontWeight: 900, color: RCS.deepNavy }}>
