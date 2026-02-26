@@ -80,6 +80,19 @@ create table if not exists classes (
   created_at timestamptz not null default now()
 );
 
+-- Seed special "non-course" blocks so they can have TOC templates and be referenced by schedule/rotation.
+-- (Safe to run multiple times; only inserts if missing.)
+insert into classes (name, room, sort_order, block_label)
+select v.name, null, v.sort_order, v.block_label
+from (
+  values
+    ('Flex', 900, 'Flex'),
+    ('Career Life Education', 901, 'CLE'),
+    ('Lunch', 902, 'Lunch'),
+    ('Chapel', 903, 'Chapel')
+) as v(name, sort_order, block_label)
+where not exists (select 1 from classes c where upper(c.block_label) = upper(v.block_label));
+
 create table if not exists enrollments (
   class_id uuid not null references classes(id) on delete cascade,
   student_id uuid not null references students(id) on delete cascade,
