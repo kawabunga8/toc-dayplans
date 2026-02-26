@@ -90,26 +90,46 @@ export default function TocClient({
     return m;
   }, [plansByDate, selectedDate]);
 
+  const [rotationBlocks, setRotationBlocks] = useState<string[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const qs = new URLSearchParams({ date: selectedDate });
+        if (isSelectedFriday && selectedFridayType) qs.set('friday_type', selectedFridayType);
+        const res = await fetch(`/api/public/rotation?${qs.toString()}`);
+        const j = await res.json();
+        if (!res.ok) throw new Error(j?.error ?? 'Failed');
+        if (!cancelled) setRotationBlocks((j?.blocks ?? []) as string[]);
+      } catch {
+        if (!cancelled) setRotationBlocks([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDate, isSelectedFriday, selectedFridayType]);
+
   const classesForSelectedDate = useMemo(() => {
-    const wanted = scheduleBlockLabelsForDate(selectedDate, selectedFridayType);
+    const wanted = rotationBlocks.map((b) => String(b).toUpperCase());
     const index = new Map<string, number>();
-    wanted.forEach((b, i) => index.set(b.toUpperCase(), i));
+    wanted.forEach((b, i) => index.set(b, i));
 
-    const filtered = classes
-      .filter((c) => {
-        const bl = (c.block_label ?? '').toUpperCase();
-        return index.has(bl);
-      })
-      .slice();
-
-    filtered.sort((a, b) => {
-      const ai = index.get(String(a.block_label).toUpperCase()) ?? 999;
-      const bi = index.get(String(b.block_label).toUpperCase()) ?? 999;
-      return ai - bi;
+    // Build rows in the exact rotation order.
+    return wanted.map((label) => {
+      const match = classes.find((c) => String(c.block_label ?? '').toUpperCase() === label);
+      if (match) return match;
+      // synthetic row for things like CLE/Lunch if they aren't in classes table
+      return {
+        id: `synthetic-${label}`,
+        block_label: label,
+        name: label,
+        room: null,
+        sort_order: null,
+      } as PublicClass;
     });
-
-    return filtered;
-  }, [classes, selectedDate, selectedFridayType]);
+  }, [classes, rotationBlocks]);
 
   const days = useMemo(() => buildWeekDays(weekStart), [weekStart]);
 
@@ -439,19 +459,7 @@ function weekdayLocal(yyyyMmDd: string): number {
   return dt.getDay();
 }
 
-function scheduleBlockLabelsForDate(planDate: string, friType: '' | 'day1' | 'day2'): string[] {
-  const dow = weekdayLocal(planDate);
-  if (dow === 5) {
-    if (friType === 'day2') return ['E', 'F', 'G', 'H'];
-    return ['A', 'B', 'C', 'D'];
-  }
-  if (dow === 1) return ['A', 'B', 'C', 'D'];
-  if (dow === 2) return ['E', 'F', 'G', 'H'];
-  if (dow === 3) return ['C', 'D', 'A', 'B'];
-  // Thursday rotation
-  if (dow === 4) return ['G', 'H', 'CLE', 'Lunch', 'E', 'F'];
-  return ['E', 'F', 'G', 'H'];
-}
+// Rotation is now resolved via /api/public/rotation (DB-driven); hard-coded mapping removed.
 
 function buildWeekDays(weekStart: string) {
   const [y, m, d] = weekStart.split('-').map((x) => Number(x));

@@ -232,6 +232,95 @@ for delete
 using (can_write());
 
 -- ----------------------
+-- BLOCK ROTATION DEFAULTS (effective-dated)
+-- ----------------------
+create table if not exists rotation_defaults (
+  id uuid primary key default gen_random_uuid(),
+  day_of_week int not null,
+  friday_type text,
+  slot_order int not null,
+  block_label text not null,
+  effective_from date not null,
+  effective_to date,
+  created_at timestamptz not null default now(),
+  constraint rotation_dow_check check (day_of_week between 1 and 5),
+  constraint rotation_friday_type_check check (friday_type in ('day1','day2') or friday_type is null),
+  constraint rotation_friday_type_required check (
+    (day_of_week = 5 and friday_type is not null) or (day_of_week <> 5 and friday_type is null)
+  ),
+  constraint rotation_effective_check check (effective_to is null or effective_to > effective_from)
+);
+
+create index if not exists rotation_defaults_lookup_idx
+  on rotation_defaults(day_of_week, friday_type, effective_from, effective_to);
+
+create unique index if not exists rotation_defaults_unique_row_idx
+  on rotation_defaults(day_of_week, friday_type, effective_from, slot_order);
+
+alter table rotation_defaults enable row level security;
+
+drop policy if exists "rotation_defaults_staff_all" on rotation_defaults;
+create policy "rotation_defaults_staff_select" on rotation_defaults
+for select using (is_staff());
+create policy "rotation_defaults_staff_insert" on rotation_defaults
+for insert with check (can_write());
+create policy "rotation_defaults_staff_update" on rotation_defaults
+for update using (can_write()) with check (can_write());
+create policy "rotation_defaults_staff_delete" on rotation_defaults
+for delete using (can_write());
+
+-- Public schedule rotation for a given date.
+-- SECURITY DEFINER so anon callers can access without opening table RLS.
+create or replace function get_rotation_for_date(plan_date date, friday_type text default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  dow int;
+  ft text;
+  out jsonb;
+begin
+  if plan_date is null then
+    return '[]'::jsonb;
+  end if;
+
+  -- ISO day of week: Monday=1 ... Sunday=7
+  dow := extract(isodow from plan_date);
+
+  if dow < 1 or dow > 5 then
+    return '[]'::jsonb;
+  end if;
+
+  if dow = 5 then
+    if friday_type is null then
+      return '[]'::jsonb;
+    end if;
+    ft := friday_type;
+  else
+    ft := null;
+  end if;
+
+  select coalesce(jsonb_agg(r.block_label order by r.slot_order asc), '[]'::jsonb)
+  into out
+  from rotation_defaults r
+  where r.day_of_week = dow
+    and ((ft is null and r.friday_type is null) or (ft is not null and r.friday_type = ft))
+    and r.effective_from <= plan_date
+    and (r.effective_to is null or r.effective_to > plan_date)
+  group by r.effective_from
+  order by r.effective_from desc
+  limit 1;
+
+  return coalesce(out, '[]'::jsonb);
+end;
+$$;
+
+revoke all on function get_rotation_for_date(date, text) from public;
+grant execute on function get_rotation_for_date(date, text) to anon;
+
+-- ----------------------
 -- BLOCK TIME DEFAULTS (effective-dated)
 -- ----------------------
 create table if not exists block_time_defaults (
