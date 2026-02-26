@@ -37,7 +37,10 @@ export default async function TocPrintPage({ searchParams }: { searchParams: Pro
     const { data: rot, error: rotErr } = await supabase.rpc('get_rotation_for_date', { plan_date: date, friday_type: friType });
     if (!rotErr && Array.isArray(rot)) {
       rotationOrder = rot
-        .map((r: any) => String(r?.block_label ?? r?.label ?? r?.block ?? '').trim())
+        .map((r: any) => {
+          if (typeof r === 'string') return r.trim();
+          return String(r?.block_label ?? r?.label ?? r?.block ?? '').trim();
+        })
         .filter(Boolean);
     }
   } catch {
