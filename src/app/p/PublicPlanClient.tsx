@@ -26,12 +26,50 @@ type PublicPlan = {
 };
 
 export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
+  const [rotationBlocks, setRotationBlocks] = useState<string[]>([]);
+  const [blockTimesBySlot, setBlockTimesBySlot] = useState<Record<string, { start: string; end: string }>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(
+          `/api/public/rotation?date=${encodeURIComponent(plan.plan_date)}${plan.friday_type ? `&friday_type=${encodeURIComponent(plan.friday_type)}` : ''}`
+        );
+        const j = await res.json();
+        if (!res.ok) throw new Error(j?.error ?? 'Failed');
+        if (!cancelled) setRotationBlocks((j?.blocks ?? []) as string[]);
+      } catch {
+        if (!cancelled) setRotationBlocks([]);
+      }
+
+      try {
+        const res = await fetch(`/api/public/block-times?date=${encodeURIComponent(plan.plan_date)}`);
+        const j = await res.json();
+        if (!res.ok) throw new Error(j?.error ?? 'Failed');
+        const slots = Array.isArray(j?.slots) ? j.slots : [];
+        const map: Record<string, { start: string; end: string }> = {};
+        for (const s of slots) {
+          const slot = String(s?.slot ?? '').trim();
+          if (!slot) continue;
+          map[slot] = { start: String(s?.start_time ?? '').slice(0, 5), end: String(s?.end_time ?? '').slice(0, 5) };
+        }
+        if (!cancelled) setBlockTimesBySlot(map);
+      } catch {
+        if (!cancelled) setBlockTimesBySlot({});
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [plan.plan_date, plan.friday_type]);
+
   // Auto-print support: /p/[id]?print=1 will trigger window.print() on load.
   useEffect(() => {
     try {
       const sp = new URLSearchParams(window.location.search);
       if (sp.get('print') === '1') {
-        // give layout a moment
         setTimeout(() => window.print(), 250);
       }
     } catch {
@@ -39,13 +77,27 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
     }
   }, []);
 
-  // Printable view: when opened from the TOC sidebar, users expect to see ONLY the selected plan (one block),
-  // not the entire day schedule. We infer the "primary" block by matching "Block X" in the class_name.
+  // Show ONLY the selected plan (one block) when opened from TOC.
   const blocksToShow = useMemo(() => {
     const wanted = `BLOCK ${String(plan.slot ?? '').toUpperCase()}`;
     const matches = (plan.blocks ?? []).filter((b) => blockLabelFromClassName(b.class_name).toUpperCase() === wanted);
     return matches.length ? matches : (plan.blocks ?? []);
   }, [plan.blocks, plan.slot]);
+
+  const computedRange = useMemo(() => {
+    const label = String(plan.slot ?? '').trim().toUpperCase();
+    const idx = rotationBlocks.findIndex((b) => String(b).trim().toUpperCase() === label);
+    if (idx < 0) return null;
+
+    const isFri = isFridayLocal(plan.plan_date);
+    const slots = isFri ? ['P1', 'P2', 'Chapel', 'Lunch', 'P5', 'P6'] : ['P1', 'P2', 'Flex', 'Lunch', 'P5', 'P6'];
+    const slot = slots[idx] ?? null;
+    if (!slot) return null;
+
+    const t = blockTimesBySlot[slot];
+    if (!t?.start || !t?.end) return null;
+    return { start: t.start, end: t.end, slot };
+  }, [plan.plan_date, plan.slot, rotationBlocks, blockTimesBySlot]);
 
   const allIds = useMemo(() => blocksToShow.map((b) => b.id), [blocksToShow]);
   const [selected, setSelected] = useState<Record<string, boolean>>(() => {
@@ -66,7 +118,6 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
     setSelected((prev) => {
       const next: Record<string, boolean> = { ...prev };
       for (const id of allIds) if (typeof next[id] === 'undefined') next[id] = true;
-      // remove stale keys
       for (const k of Object.keys(next)) if (!allIds.includes(k)) delete next[k];
       return next;
     });
@@ -94,7 +145,7 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
     setAttendance((prev) => {
       if (prev[block.id]) return prev;
       const map: Record<string, boolean> = {};
-      for (const s of block.students ?? []) map[s.id] = true; // present by default
+      for (const s of block.students ?? []) map[s.id] = true;
       return { ...prev, [block.id]: map };
     });
   }
@@ -107,7 +158,6 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
   }
 
   async function downloadAttendanceDocx(planId: string, blockId: string) {
-    // Public endpoint; will return 404 if plan isn't published.
     const url = `/api/docx/attendance?planId=${encodeURIComponent(planId)}&blockId=${encodeURIComponent(blockId)}`;
     window.open(url, '_blank');
   }
@@ -118,7 +168,6 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
     <div
       className="no-print backdrop"
       onClick={(e) => {
-        // Clicking outside the plan returns to /toc
         if (e.target === e.currentTarget) window.location.href = '/toc';
       }}
       style={styles.backdrop}
@@ -127,150 +176,138 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
         style={styles.page}
         data-print-mode={printMode}
         onClick={(e) => {
-          // prevent backdrop click
           e.stopPropagation();
         }}
       >
-      <header style={styles.header}>
-        {/* Title Block (style guide) */}
-        <div style={styles.titleBlock}>
-          <div style={styles.titleLogoWrap}>
-            <img src="/LOGO_Full_Colour_RCS_Landscape.png" alt="RCS" style={styles.titleLogo as any} />
-          </div>
-          <div style={styles.titleText}>
-            <div style={styles.titleTeacher}>Mr. Kawamura</div>
-            <div style={styles.titleClass}>{plan.title}</div>
-            <div style={styles.titleSub}>TOC Day Plan</div>
-            <div style={styles.titleDetail}>
-              Block {plan.slot}
-              {plan.friday_type ? ` · ${plan.friday_type === 'day1' ? 'Friday Day 1' : 'Friday Day 2'}` : ''}
-              {' · '} {formatHeaderDate(plan.plan_date)}
+        <header style={styles.header}>
+          <div style={styles.titleBlock}>
+            <div style={styles.titleLogoWrap}>
+              <img src="/LOGO_Full_Colour_RCS_Landscape.png" alt="RCS" style={styles.titleLogo as any} />
+            </div>
+            <div style={styles.titleText}>
+              <div style={styles.titleTeacher}>Mr. Kawamura</div>
+              <div style={styles.titleClass}>{plan.title}</div>
+              <div style={styles.titleSub}>TOC Day Plan</div>
+              <div style={styles.titleDetail}>
+                Block {plan.slot}
+                {plan.friday_type ? ` · ${plan.friday_type === 'day1' ? 'Friday Day 1' : 'Friday Day 2'}` : ''}
+                {' · '} {formatHeaderDate(plan.plan_date)}
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="no-print" style={styles.headerControls}>
-          <a href="/toc" style={styles.secondaryBtn}>
-            ← Back
-          </a>
-          <a href="/admin" style={styles.secondaryBtn}>
-            Staff admin
-          </a>
-          <button onClick={() => selectAll(true)} style={styles.secondaryBtn}>
-            Select all
-          </button>
-          <button onClick={() => selectAll(false)} style={styles.secondaryBtn}>
-            Select none
-          </button>
-        </div>
-
-        {plan.notes?.trim() ? (
-          <div style={styles.notesBox}>
-            <div style={styles.notesLabel}>Note to the TOC</div>
-            <div style={styles.notesText}>{plan.notes}</div>
+          <div className="no-print" style={styles.headerControls}>
+            <a href="/toc" style={styles.secondaryBtn}>
+              ← Back
+            </a>
+            <a href="/admin" style={styles.secondaryBtn}>
+              Staff admin
+            </a>
+            <button onClick={() => selectAll(true)} style={styles.secondaryBtn}>
+              Select all
+            </button>
+            <button onClick={() => selectAll(false)} style={styles.secondaryBtn}>
+              Select none
+            </button>
           </div>
-        ) : null}
-      </header>
 
-      <div style={styles.blocksWrap}>
-        {blocksToShow.map((b) => {
-          const isOn = !!selected[b.id];
-          const label = blockLabelFromClassName(b.class_name);
-          const showAttendance = !!b.class_id;
-          const open = !!attendanceOpen[b.id];
-          const isPrintingAttendance = printAttendanceForBlockId === b.id;
+          {plan.notes?.trim() ? (
+            <div style={styles.notesBox}>
+              <div style={styles.notesLabel}>Note to the TOC</div>
+              <div style={styles.notesText}>{plan.notes}</div>
+            </div>
+          ) : null}
+        </header>
 
-          return (
-            <section
-              key={b.id}
-              data-selected={isOn ? 'true' : 'false'}
-              data-print-attendance={isPrintingAttendance ? 'true' : 'false'}
-              style={styles.blockCard}
-            >
-              <div style={styles.blockHeader}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                  <div style={styles.blockBadge}>{label}</div>
-                  <div style={styles.blockTime}>
-                    {formatTime(b.start_time)}–{formatTime(b.end_time)}
-                  </div>
-                  <div style={styles.blockClass}>{b.class_name}</div>
-                  <div style={styles.blockRoom}>Room {b.room}</div>
-                </div>
+        <div style={styles.blocksWrap}>
+          {blocksToShow.map((b) => {
+            const isOn = !!selected[b.id];
+            const label = blockLabelFromClassName(b.class_name);
+            const showAttendance = !!b.class_id;
+            const open = !!attendanceOpen[b.id];
+            const isPrintingAttendance = printAttendanceForBlockId === b.id;
 
-                <div className="no-print" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                  {showAttendance && (
-                    <button
-                      onClick={() => {
-                        ensureAttendanceDefaults(b);
-                        toggleAttendance(b.id);
-                      }}
-                      style={styles.secondaryBtn}
-                    >
-                      {open ? 'Hide attendance' : 'Attendance list'}
-                    </button>
-                  )}
-
-                  <label style={styles.checkboxLabel}>
-                    <input type="checkbox" checked={isOn} onChange={() => toggle(b.id)} />
-                    <span>Print</span>
-                  </label>
-                </div>
-              </div>
-
-              {b.details?.trim() ? <div style={styles.blockDetails}>{b.details}</div> : null}
-
-              {showAttendance && open && (
-                <div className="attendanceWrap" style={styles.attendanceWrap}>
-                  <div style={styles.attendanceHeader}>
-                    <div style={{ fontWeight: 900, color: RCS.navy }}>Attendance List</div>
-                    <button
-                      onClick={() => downloadAttendanceDocx(plan.id, b.id)}
-                      style={styles.primaryBtn}
-                    >
-                      Download Attendance (.docx)
-                    </button>
+            return (
+              <section
+                key={b.id}
+                data-selected={isOn ? 'true' : 'false'}
+                data-print-attendance={isPrintingAttendance ? 'true' : 'false'}
+                style={styles.blockCard}
+              >
+                <div style={styles.blockHeader}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <div style={styles.blockBadge}>{label}</div>
+                    <div style={styles.blockTime}>
+                      {computedRange ? `${computedRange.start}–${computedRange.end}` : `${formatTime(b.start_time)}–${formatTime(b.end_time)}`}
+                    </div>
+                    <div style={styles.blockClass}>{b.class_name}</div>
+                    <div style={styles.blockRoom}>Room {b.room}</div>
                   </div>
 
-                  <div style={{ display: 'grid', gap: 6 }}>
-                    {(b.students ?? []).map((s) => {
-                      const present = attendance[b.id]?.[s.id] ?? true;
-                      return (
-                        <label key={s.id} style={styles.studentRow}>
-                          <input
-                            type="checkbox"
-                            checked={present}
-                            onChange={(e) => setStudentPresent(b.id, s.id, e.target.checked)}
-                          />
-                          <span style={{ fontWeight: 800 }}>{s.last_name},</span>
-                          <span>{s.first_name}</span>
-                        </label>
-                      );
-                    })}
+                  <div className="no-print" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                    {showAttendance && (
+                      <button
+                        onClick={() => {
+                          ensureAttendanceDefaults(b);
+                          toggleAttendance(b.id);
+                        }}
+                        style={styles.secondaryBtn}
+                      >
+                        {open ? 'Hide attendance' : 'Attendance list'}
+                      </button>
+                    )}
+
+                    <label style={styles.checkboxLabel}>
+                      <input type="checkbox" checked={isOn} onChange={() => toggle(b.id)} />
+                      <span>Print</span>
+                    </label>
                   </div>
                 </div>
-              )}
-            </section>
-          );
-        })}
-      </div>
 
-      <div className="no-print stickyBar" style={styles.stickyBar}>
-        <div style={{ opacity: 0.9 }}>
-          Selected: <b>{selectedCount}</b> / {blocksToShow.length}
+                {b.details?.trim() ? <div style={styles.blockDetails}>{b.details}</div> : null}
+
+                {showAttendance && open && (
+                  <div className="attendanceWrap" style={styles.attendanceWrap}>
+                    <div style={styles.attendanceHeader}>
+                      <div style={{ fontWeight: 900, color: RCS.navy }}>Attendance List</div>
+                      <button onClick={() => downloadAttendanceDocx(plan.id, b.id)} style={styles.primaryBtn}>
+                        Download Attendance (.docx)
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'grid', gap: 6 }}>
+                      {(b.students ?? []).map((s) => {
+                        const present = attendance[b.id]?.[s.id] ?? true;
+                        return (
+                          <label key={s.id} style={styles.studentRow}>
+                            <input type="checkbox" checked={present} onChange={(e) => setStudentPresent(b.id, s.id, e.target.checked)} />
+                            <span style={{ fontWeight: 800 }}>{s.last_name},</span>
+                            <span>{s.first_name}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </section>
+            );
+          })}
         </div>
-        <button
-          onClick={() => window.print()}
-          disabled={selectedCount === 0}
-          style={selectedCount === 0 ? styles.primaryBtnDisabled : styles.primaryBtn}
-        >
-          Print Selected
-        </button>
-      </div>
 
-      <style>{`
+        <div className="no-print stickyBar" style={styles.stickyBar}>
+          <div style={{ opacity: 0.9 }}>
+            Selected: <b>{selectedCount}</b> / {blocksToShow.length}
+          </div>
+          <button onClick={() => window.print()} disabled={selectedCount === 0} style={selectedCount === 0 ? styles.primaryBtnDisabled : styles.primaryBtn}>
+            Print Selected
+          </button>
+        </div>
+
+        <style>{`
         @media print {
           body { background: white !important; }
           .no-print { display: none !important; }
+
           /* Print must match screen */
           html, body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
           main { border: 1px solid #D9D9D9 !important; border-radius: 0 !important; }
@@ -289,7 +326,7 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
           main[data-print-mode="attendance"] section[data-print-attendance="true"] .attendanceWrap { display: block !important; }
         }
       `}</style>
-    </main>
+      </main>
     </div>
   );
 }
@@ -306,6 +343,13 @@ function blockLabelFromClassName(className: string) {
   const m = /\bBlock\s+([A-Z]+|CLE)\b/i.exec(className);
   if (m?.[1]) return `Block ${m[1].toUpperCase()}`;
   return 'Block';
+}
+
+function isFridayLocal(yyyyMmDd: string): boolean {
+  const [y, m, d] = yyyyMmDd.split('-').map((x) => Number(x));
+  if (!y || !m || !d) return false;
+  const dt = new Date(y, m - 1, d);
+  return dt.getDay() === 5;
 }
 
 const RCS = {
@@ -376,7 +420,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   notesLabel: { fontWeight: 700, color: '#7A5000', marginBottom: 6, fontSize: 13 },
   notesText: { whiteSpace: 'pre-wrap', fontSize: 14, color: '#222222' },
-  blocksWrap: { display: 'grid', gap: 12 },
+
+  blocksWrap: { display: 'grid', gap: 12, padding: 12 },
   blockCard: {
     border: `1px solid ${RCS.midGrey}`,
     borderRadius: 10,
@@ -424,6 +469,7 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: 12,
+    margin: 12,
   },
   primaryBtn: {
     padding: '10px 12px',
