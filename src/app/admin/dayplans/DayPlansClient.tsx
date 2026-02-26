@@ -23,13 +23,20 @@ export default function DayPlansClient() {
   const [selectedDate, setSelectedDate] = useState(today);
   const [selectedFridayType, setSelectedFridayType] = useState<'' | 'day1' | 'day2'>('');
 
+  const [rotationBlocks, setRotationBlocks] = useState<string[]>([]);
+
   // per-row loading state
-  const [openingClassId, setOpeningClassId] = useState<string | null>(null);
+  const [openingKey, setOpeningKey] = useState<string | null>(null);
 
   useEffect(() => {
     void loadClasses();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    void loadRotationBlocks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDate, selectedFridayType]);
 
   async function loadClasses() {
     try {
@@ -44,6 +51,36 @@ export default function DayPlansClient() {
     }
   }
 
+  async function loadRotationBlocks() {
+    try {
+      const isFri = isFridayLocal(selectedDate);
+      if (isFri && !selectedFridayType) {
+        setRotationBlocks([]);
+        return;
+      }
+
+      const qs = new URLSearchParams({ date: selectedDate });
+      if (isFri && selectedFridayType) qs.set('friday_type', selectedFridayType);
+
+      const res = await fetch(`/api/public/rotation?${qs.toString()}`);
+      const j = await res.json();
+      if (!res.ok) throw new Error(j?.error ?? 'Failed to load rotation');
+
+      const blocksRaw = j?.blocks ?? [];
+      const blocks: string[] = Array.isArray(blocksRaw)
+        ? blocksRaw
+            .map((x: any) => (typeof x === 'string' ? x : x?.block_label ?? x?.label ?? x?.block ?? ''))
+            .map((s: any) => String(s).trim())
+            .filter(Boolean)
+        : [];
+
+      setRotationBlocks(blocks);
+    } catch (e) {
+      console.error('Failed to load rotation blocks', e);
+      setRotationBlocks([]);
+    }
+  }
+
   const isSelectedFriday = useMemo(() => isFridayLocal(selectedDate), [selectedDate]);
 
   useEffect(() => {
@@ -51,59 +88,36 @@ export default function DayPlansClient() {
     setSelectedFridayType('');
   }, [selectedDate]);
 
-  const classesForDay = useMemo(() => {
-    const wanted = scheduleBlockLabelsForDate(selectedDate, selectedFridayType);
-    const index = new Map<string, number>();
-    wanted.forEach((b, i) => index.set(b.toUpperCase(), i));
+  const slotsForDay = useMemo(() => {
+    // Prefer DB-driven rotation (includes CLE/Flex/Chapel/Lunch), fallback to legacy hardcoded schedule.
+    if (rotationBlocks.length > 0) return rotationBlocks;
+    return scheduleBlockLabelsForDate(selectedDate, selectedFridayType);
+  }, [rotationBlocks, selectedDate, selectedFridayType]);
 
-    const filtered = classes
-      .filter((c) => {
-        const bl = (c.block_label ?? '').toUpperCase();
-        return index.has(bl);
-      })
-      .slice();
+  const classByBlock = useMemo(() => {
+    const m = new Map<string, ClassRow>();
+    for (const c of classes) {
+      const bl = String(c.block_label ?? '').trim();
+      if (bl) m.set(bl.toUpperCase(), c);
+    }
+    return m;
+  }, [classes]);
 
-    filtered.sort((a, b) => {
-      const ai = index.get(String(a.block_label).toUpperCase()) ?? 999;
-      const bi = index.get(String(b.block_label).toUpperCase()) ?? 999;
-      return ai - bi;
-    });
-
-    return filtered;
-  }, [classes, selectedDate, selectedFridayType]);
-
-  async function openOrCreatePlanForClass(c: ClassRow) {
+  async function openOrCreatePlanForSlot(slotRaw: string, classRow?: ClassRow | null) {
     const clickTs = new Date().toISOString();
-    const slot = String(c.block_label ?? '').trim();
+    const slot = String(slotRaw ?? '').trim();
     const fridayType = isSelectedFriday ? (selectedFridayType as 'day1' | 'day2') : null;
 
-    console.groupCollapsed(`[Dayplans/Open] ${clickTs} block=${slot || '∅'} classId=${c.id}`);
-    console.log({ selectedDate, isSelectedFriday, selectedFridayType, fridayType, slot, class: c });
-    console.log('query intent', {
-      plan_date: selectedDate,
-      slot,
-      friday_type: isSelectedFriday ? fridayType : null,
-      trashed_at: 'prefer null; else restore',
-    });
+    console.groupCollapsed(`[Dayplans/Open] ${clickTs} block=${slot || '∅'}`);
+    console.log({ selectedDate, isSelectedFriday, selectedFridayType, fridayType, slot, class: classRow ?? null });
 
     try {
-      if (!c.block_label) {
-        console.warn('No block_label on class row; abort');
-        return;
-      }
-      if (isDemo) {
-        console.warn('Demo mode; abort');
-        return;
-      }
-      if (isSelectedFriday && !selectedFridayType) {
-        console.warn('Friday selected but no Friday Type chosen; abort');
-        return;
-      }
+      if (!slot) return;
+      if (isDemo) return;
+      if (isSelectedFriday && !selectedFridayType) return;
 
-      setOpeningClassId(c.id);
+      setOpeningKey(slot);
 
-      // Use a server route to do the open/create/restore work.
-      // This avoids client-side RLS/permission edge cases that otherwise look like a no-op.
       const res = await fetch('/api/admin/dayplans/open', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -111,27 +125,17 @@ export default function DayPlansClient() {
           date: selectedDate,
           slot,
           friday_type: isSelectedFriday ? fridayType : null,
-          title: `${c.name} (Block ${slot})`,
+          title: classRow?.name ? `${classRow.name} (Block ${slot})` : `Block ${slot}`,
         }),
       });
       const j = await res.json();
-      console.log('open endpoint result', res.status, j);
       if (!res.ok) throw new Error(j?.error ?? 'Open failed');
 
-      const url = `/admin/dayplans/${j.id}?auto=1`;
-      console.log('NAVIGATE', url, j.action);
-      router.push(url);
+      router.push(`/admin/dayplans/${j.id}?auto=1`);
     } catch (e: any) {
-      // No error UI on this page by design.
-      console.error('Open/Create failed', {
-        message: e?.message,
-        code: e?.code,
-        details: e?.details,
-        hint: e?.hint,
-        raw: e,
-      });
+      console.error('Open/Create failed', e);
     } finally {
-      setOpeningClassId(null);
+      setOpeningKey(null);
       console.groupEnd();
     }
   }
@@ -152,7 +156,7 @@ export default function DayPlansClient() {
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
               style={styles.input}
-              disabled={openingClassId !== null}
+              disabled={openingKey !== null}
             />
           </label>
 
@@ -163,7 +167,7 @@ export default function DayPlansClient() {
                 value={selectedFridayType}
                 onChange={(e) => setSelectedFridayType(e.target.value as any)}
                 style={styles.input}
-                disabled={openingClassId !== null}
+                disabled={openingKey !== null}
               >
                 <option value="">Select…</option>
                 <option value="day1">Day 1</option>
@@ -178,7 +182,7 @@ export default function DayPlansClient() {
           <div style={{ fontWeight: 900, color: RCS.deepNavy }}>Classes</div>
         </div>
 
-        {classesForDay.length > 0 ? (
+        {slotsForDay.length > 0 ? (
           <div style={{ overflowX: 'auto', marginTop: 12 }}>
             <table style={styles.table}>
               <thead>
@@ -190,20 +194,21 @@ export default function DayPlansClient() {
                 </tr>
               </thead>
               <tbody>
-                {classesForDay.map((c, i) => {
-                  const busy = openingClassId === c.id;
+                {slotsForDay.map((slot, i) => {
+                  const c = classByBlock.get(String(slot).toUpperCase()) ?? null;
+                  const busy = openingKey === slot;
                   return (
-                    <tr key={c.id} style={i % 2 === 0 ? styles.trEven : styles.trOdd}>
-                      <td style={styles.tdLabel}>{c.block_label ?? '—'}</td>
-                      <td style={styles.td}>{c.name}</td>
-                      <td style={styles.td}>{c.room || '—'}</td>
+                    <tr key={`${slot}-${i}`} style={i % 2 === 0 ? styles.trEven : styles.trOdd}>
+                      <td style={styles.tdLabel}>{slot}</td>
+                      <td style={styles.td}>{c?.name ?? '—'}</td>
+                      <td style={styles.td}>{c?.room || '—'}</td>
                       <td style={styles.tdRight}>
                         <button
-                          onClick={() => void openOrCreatePlanForClass(c)}
+                          onClick={() => void openOrCreatePlanForSlot(slot, c)}
                           style={styles.primaryBtn}
                           disabled={
                             isDemo ||
-                            openingClassId !== null ||
+                            openingKey !== null ||
                             (isSelectedFriday && !selectedFridayType) // require explicit Friday type
                           }
                         >
@@ -216,8 +221,10 @@ export default function DayPlansClient() {
               </tbody>
             </table>
           </div>
+        ) : isSelectedFriday && !selectedFridayType ? (
+          <div style={{ opacity: 0.85, marginTop: 12 }}>Select Friday Type to load blocks.</div>
         ) : (
-          <div style={{ opacity: 0.85, marginTop: 12 }}>No classes found for this day.</div>
+          <div style={{ opacity: 0.85, marginTop: 12 }}>No blocks found for this day.</div>
         )}
       </section>
     </main>
