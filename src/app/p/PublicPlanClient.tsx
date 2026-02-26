@@ -116,7 +116,7 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
 
   return (
     <div
-      className="no-print"
+      className="no-print backdrop"
       onClick={(e) => {
         // Clicking outside the plan returns to /toc
         if (e.target === e.currentTarget) window.location.href = '/toc';
@@ -132,35 +132,41 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
         }}
       >
       <header style={styles.header}>
-        <div style={styles.headerTopRow}>
-          <div>
-            <div style={styles.headerDate}>{formatHeaderDate(plan.plan_date)}</div>
-            <div style={styles.headerTitle}>{plan.title}</div>
-            <div style={styles.headerMeta}>
-              Block: <b>{plan.slot}</b>
-              {plan.friday_type ? ` • ${plan.friday_type === 'day1' ? 'Fri Day 1' : 'Fri Day 2'}` : ''}
+        {/* Title Block (style guide) */}
+        <div style={styles.titleBlock}>
+          <div style={styles.titleLogoWrap}>
+            <img src="/LOGO_Full_Colour_RCS_Landscape.png" alt="RCS" style={styles.titleLogo as any} />
+          </div>
+          <div style={styles.titleText}>
+            <div style={styles.titleTeacher}>Mr. Kawamura</div>
+            <div style={styles.titleClass}>{plan.title}</div>
+            <div style={styles.titleSub}>TOC Day Plan</div>
+            <div style={styles.titleDetail}>
+              Block {plan.slot}
+              {plan.friday_type ? ` · ${plan.friday_type === 'day1' ? 'Friday Day 1' : 'Friday Day 2'}` : ''}
+              {' · '} {formatHeaderDate(plan.plan_date)}
             </div>
           </div>
+        </div>
 
-          <div className="no-print" style={styles.headerControls}>
-            <a href="/toc" style={styles.secondaryBtn}>
-              ← Back to schedule
-            </a>
-            <a href="/admin" style={styles.secondaryBtn}>
-              Staff admin
-            </a>
-            <button onClick={() => selectAll(true)} style={styles.secondaryBtn}>
-              Select all
-            </button>
-            <button onClick={() => selectAll(false)} style={styles.secondaryBtn}>
-              Select none
-            </button>
-          </div>
+        <div className="no-print" style={styles.headerControls}>
+          <a href="/toc" style={styles.secondaryBtn}>
+            ← Back
+          </a>
+          <a href="/admin" style={styles.secondaryBtn}>
+            Staff admin
+          </a>
+          <button onClick={() => selectAll(true)} style={styles.secondaryBtn}>
+            Select all
+          </button>
+          <button onClick={() => selectAll(false)} style={styles.secondaryBtn}>
+            Select none
+          </button>
         </div>
 
         {plan.notes?.trim() ? (
           <div style={styles.notesBox}>
-            <div style={styles.notesLabel}>Notes</div>
+            <div style={styles.notesLabel}>Note to the TOC</div>
             <div style={styles.notesText}>{plan.notes}</div>
           </div>
         ) : null}
@@ -216,7 +222,7 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
               {showAttendance && open && (
                 <div className="attendanceWrap" style={styles.attendanceWrap}>
                   <div style={styles.attendanceHeader}>
-                    <div style={{ fontWeight: 900, color: RCS.deepNavy }}>Attendance List</div>
+                    <div style={{ fontWeight: 900, color: RCS.navy }}>Attendance List</div>
                     <button
                       onClick={() => downloadAttendanceDocx(plan.id, b.id)}
                       style={styles.primaryBtn}
@@ -265,8 +271,12 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
         @media print {
           body { background: white !important; }
           .no-print { display: none !important; }
-          /* ensure the plan prints without the backdrop */
-          main { border: none !important; }
+          /* Print must match screen */
+          html, body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          main { border: 1px solid #D9D9D9 !important; border-radius: 0 !important; }
+          /* remove backdrop padding in print */
+          .no-print.backdrop { display: block !important; padding: 0 !important; background: white !important; }
+          .no-print.backdrop > main { margin: 0 !important; max-width: none !important; width: 100% !important; }
 
           /* Default print mode: print selected block cards */
           main[data-print-mode="blocks"] [data-selected="false"] { display: none !important; }
@@ -299,67 +309,84 @@ function blockLabelFromClassName(className: string) {
 }
 
 const RCS = {
-  deepNavy: '#1F4E79',
-  midBlue: '#2E75B6',
-  lightBlue: '#D6E4F0',
-  gold: '#C9A84C',
+  navy: '#1E3A5F',
+  gold: '#C9973A',
+  blue: '#2E6DA4',
+  lightBlue: '#DEEAF1',
+  lightGold: '#FFF3CD',
+  offWhite: '#F5F8FC',
+  midGrey: '#D9D9D9',
+  text: '#1A1A2E',
   white: '#FFFFFF',
-  lightGray: '#F5F5F5',
-  textDark: '#1A1A1A',
 } as const;
 
 const styles: Record<string, React.CSSProperties> = {
   backdrop: {
     minHeight: '100vh',
-    background: '#EEF2F7',
+    background: '#F0F4F8',
     padding: 24,
     boxSizing: 'border-box',
+    fontFamily: 'Arial, sans-serif',
+    color: RCS.text,
   },
   page: {
-    padding: 24,
+    padding: 0,
     maxWidth: 980,
     margin: '0 auto',
-    fontFamily: 'system-ui',
-    color: RCS.textDark,
+    fontFamily: 'Arial, sans-serif',
+    color: RCS.text,
     background: RCS.white,
-    border: `1px solid ${RCS.deepNavy}`,
-    borderRadius: 12,
-  },
-  header: {
-    border: `1px solid ${RCS.deepNavy}`,
-    borderRadius: 12,
+    border: `1px solid ${RCS.midGrey}`,
+    borderRadius: 10,
     overflow: 'hidden',
-    marginBottom: 16,
   },
-  headerTopRow: {
-    background: RCS.deepNavy,
+  header: { marginBottom: 16 },
+
+  titleBlock: {
+    background: RCS.navy,
     color: RCS.white,
-    padding: 16,
-    borderBottom: `4px solid ${RCS.gold}`,
+    padding: '12px 20px',
     display: 'flex',
-    justifyContent: 'space-between',
-    gap: 16,
-    flexWrap: 'wrap',
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    gap: 20,
+    borderBottom: `4px solid ${RCS.gold}`,
   },
-  headerDate: { fontWeight: 800, color: RCS.gold, marginBottom: 6 },
-  headerTitle: { fontSize: 22, fontWeight: 900, marginBottom: 6 },
-  headerMeta: { opacity: 0.95 },
-  headerControls: { display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' },
-  notesBox: { padding: 16, background: RCS.lightBlue },
-  notesLabel: { fontWeight: 900, color: RCS.deepNavy, marginBottom: 6 },
-  notesText: { whiteSpace: 'pre-wrap' },
+  titleLogoWrap: {
+    width: 230,
+    flexShrink: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingRight: 10,
+  },
+  titleLogo: { maxWidth: 200, height: 'auto' },
+  titleText: { display: 'grid', gap: 3 },
+  titleTeacher: { fontSize: 14, color: RCS.gold },
+  titleClass: { fontSize: 22, fontWeight: 700, color: RCS.white, lineHeight: 1.2 },
+  titleSub: { fontSize: 14, color: RCS.gold },
+  titleDetail: { fontSize: 12, color: '#BBCFDD' },
+
+  headerControls: { display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: 12, background: RCS.white },
+
+  notesBox: {
+    borderLeft: `4px solid ${RCS.blue}`,
+    background: RCS.lightGold,
+    padding: 14,
+    borderTop: `1px solid ${RCS.midGrey}`,
+  },
+  notesLabel: { fontWeight: 700, color: '#7A5000', marginBottom: 6, fontSize: 13 },
+  notesText: { whiteSpace: 'pre-wrap', fontSize: 14, color: '#222222' },
   blocksWrap: { display: 'grid', gap: 12 },
   blockCard: {
-    border: `1px solid ${RCS.deepNavy}`,
-    borderRadius: 12,
+    border: `1px solid ${RCS.midGrey}`,
+    borderRadius: 10,
     background: RCS.white,
     overflow: 'hidden',
   },
   blockHeader: {
-    padding: '12px 14px',
-    background: RCS.lightGray,
-    borderBottom: `2px solid ${RCS.gold}`,
+    padding: '10px 12px',
+    background: RCS.offWhite,
+    borderBottom: `1px solid ${RCS.midGrey}`,
     display: 'flex',
     justifyContent: 'space-between',
     gap: 12,
@@ -367,20 +394,22 @@ const styles: Record<string, React.CSSProperties> = {
     flexWrap: 'wrap',
   },
   blockBadge: {
-    background: RCS.deepNavy,
+    background: RCS.blue,
     color: RCS.white,
-    border: `1px solid ${RCS.gold}`,
-    borderRadius: 999,
-    padding: '6px 10px',
-    fontWeight: 900,
+    borderRadius: 4,
+    padding: '4px 8px',
+    fontWeight: 700,
+    fontSize: 12,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
     whiteSpace: 'nowrap',
   },
-  blockTime: { fontWeight: 900, color: RCS.midBlue },
-  blockClass: { fontWeight: 900 },
-  blockRoom: { opacity: 0.9 },
-  checkboxLabel: { display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, color: RCS.textDark },
-  blockDetails: { padding: 14, whiteSpace: 'pre-wrap' },
-  attendanceWrap: { padding: 14, background: RCS.white },
+  blockTime: { fontWeight: 700, color: RCS.blue, fontSize: 12 },
+  blockClass: { fontWeight: 700, fontSize: 14 },
+  blockRoom: { opacity: 0.9, fontSize: 12 },
+  checkboxLabel: { display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, color: RCS.text, fontSize: 12 },
+  blockDetails: { padding: 12, whiteSpace: 'pre-wrap', fontSize: 14, color: '#222222' },
+  attendanceWrap: { padding: 12, background: RCS.white },
   attendanceHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 10 },
   studentRow: { display: 'flex', gap: 10, alignItems: 'center' },
   stickyBar: {
@@ -388,8 +417,8 @@ const styles: Record<string, React.CSSProperties> = {
     bottom: 0,
     marginTop: 16,
     padding: 12,
-    borderRadius: 12,
-    border: `1px solid ${RCS.deepNavy}`,
+    borderRadius: 10,
+    border: `1px solid ${RCS.midGrey}`,
     background: RCS.white,
     display: 'flex',
     justifyContent: 'space-between',
@@ -398,29 +427,30 @@ const styles: Record<string, React.CSSProperties> = {
   },
   primaryBtn: {
     padding: '10px 12px',
-    borderRadius: 10,
+    borderRadius: 8,
     border: `1px solid ${RCS.gold}`,
-    background: RCS.deepNavy,
+    background: RCS.navy,
     color: RCS.white,
     cursor: 'pointer',
-    fontWeight: 900,
+    fontWeight: 700,
   },
   primaryBtnDisabled: {
     padding: '10px 12px',
-    borderRadius: 10,
-    border: `1px solid ${RCS.lightGray}`,
-    background: RCS.lightGray,
+    borderRadius: 8,
+    border: `1px solid ${RCS.midGrey}`,
+    background: RCS.offWhite,
     color: '#64748b',
     cursor: 'not-allowed',
-    fontWeight: 900,
+    fontWeight: 700,
   },
   secondaryBtn: {
     padding: '8px 10px',
-    borderRadius: 10,
+    borderRadius: 8,
     border: `1px solid ${RCS.gold}`,
     background: RCS.white,
-    color: RCS.deepNavy,
+    color: RCS.navy,
     cursor: 'pointer',
-    fontWeight: 900,
+    fontWeight: 700,
+    textDecoration: 'none',
   },
 };
