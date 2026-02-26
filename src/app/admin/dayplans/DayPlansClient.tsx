@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 // supabase client calls are done via server routes on this page (to avoid RLS issues)
 import { useDemo } from '@/app/admin/DemoContext';
+import { asFridayType, buildDayplanDetailHref, isYyyyMmDd } from '@/lib/appRules/navigation';
 
 type ClassRow = {
   id: string;
@@ -25,13 +26,10 @@ export default function DayPlansClient() {
   // Read initial state from URL so Back from a dayplan returns you to the same working date.
   const initialDate = useMemo(() => {
     const d = searchParams.get('date');
-    return d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : today;
+    return isYyyyMmDd(d) ? d : today;
   }, [searchParams, today]);
 
-  const initialFridayType = useMemo(() => {
-    const ft = searchParams.get('friday_type');
-    return ft === 'day1' || ft === 'day2' ? ft : '';
-  }, [searchParams]);
+  const initialFridayType = useMemo(() => asFridayType(searchParams.get('friday_type')), [searchParams]);
 
   const [selectedDate, setSelectedDate] = useState(initialDate);
   const [selectedFridayType, setSelectedFridayType] = useState<'' | 'day1' | 'day2'>(initialFridayType);
@@ -158,9 +156,14 @@ export default function DayPlansClient() {
       const j = await res.json();
       if (!res.ok) throw new Error(j?.error ?? 'Open failed');
 
-      const qs = new URLSearchParams({ auto: '1', date: selectedDate });
-      if (isSelectedFriday && fridayType) qs.set('friday_type', fridayType);
-      router.push(`/admin/dayplans/${j.id}?${qs.toString()}`);
+      router.push(
+        buildDayplanDetailHref({
+          id: j.id,
+          auto: true,
+          date: selectedDate,
+          fridayType: isSelectedFriday ? fridayType : null,
+        })
+      );
     } catch (e: any) {
       console.error('Open/Create failed', e);
     } finally {

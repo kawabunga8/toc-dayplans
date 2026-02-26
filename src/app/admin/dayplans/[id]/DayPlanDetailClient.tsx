@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { buildDayplansListHref, asFridayType, isYyyyMmDd } from '@/lib/appRules/navigation';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import TocBlockPlanInstanceEditor from './TocBlockPlanInstanceEditor';
 
@@ -61,13 +62,9 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
   }, [id]);
 
   const backHref = useMemo(() => {
-    const qs = new URLSearchParams();
     const d = searchParams.get('date') || plan?.plan_date || '';
-    const ft = searchParams.get('friday_type') || (plan?.friday_type ?? '');
-    if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) qs.set('date', d);
-    if (ft === 'day1' || ft === 'day2') qs.set('friday_type', ft);
-    const s = qs.toString();
-    return s ? `/admin/dayplans?${s}` : '/admin/dayplans';
+    const ft = asFridayType(searchParams.get('friday_type') || (plan?.friday_type ?? ''));
+    return buildDayplansListHref({ date: isYyyyMmDd(d) ? d : null, fridayType: ft || null });
   }, [searchParams, plan]);
 
   async function load() {
@@ -147,11 +144,11 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
     void (async () => {
       await generateSchedule();
       // Remove the auto flag so refreshes don't re-run it (but keep date context for Back)
-      const qs = new URLSearchParams();
       const d = searchParams.get('date');
-      const ft = searchParams.get('friday_type');
-      if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) qs.set('date', d);
-      if (ft === 'day1' || ft === 'day2') qs.set('friday_type', ft);
+      const ft = asFridayType(searchParams.get('friday_type'));
+      const qs = new URLSearchParams();
+      if (isYyyyMmDd(d)) qs.set('date', d);
+      if (ft) qs.set('friday_type', ft);
       const suffix = qs.toString() ? `?${qs.toString()}` : '';
       router.replace(`/admin/dayplans/${id}${suffix}`);
     })();
