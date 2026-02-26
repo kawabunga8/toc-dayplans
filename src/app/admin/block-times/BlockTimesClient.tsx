@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { useDemo } from '@/app/admin/DemoContext';
 
-type TemplateKey = 'mon_thu' | 'fri';
+type TemplateKey = 'mon_thu' | 'fri' | 'rotation';
 
 type BlockTimeRow = {
   id: string;
@@ -24,10 +24,19 @@ const DEFAULT_SLOTS_FRI = ['P1', 'P2', 'Chapel', 'Lunch', 'P5', 'P6'];
 export default function BlockTimesClient() {
   const { isDemo } = useDemo();
   const [template, setTemplate] = useState<TemplateKey>('mon_thu');
+
+  // Block-time editor state
   const [status, setStatus] = useState<Status>('loading');
   const [error, setError] = useState<string | null>(null);
-
   const [effectiveFrom, setEffectiveFrom] = useState(() => new Date().toISOString().slice(0, 10));
+
+  // Rotation editor state
+  const [rotStatus, setRotStatus] = useState<Status>('idle');
+  const [rotError, setRotError] = useState<string | null>(null);
+  const [rotEffectiveFrom, setRotEffectiveFrom] = useState(() => new Date().toISOString().slice(0, 10));
+  const [rotDayOfWeek, setRotDayOfWeek] = useState<1 | 2 | 3 | 4 | 5>(1);
+  const [rotFridayType, setRotFridayType] = useState<'day1' | 'day2'>('day1');
+  const [rotBlocks, setRotBlocks] = useState<string[]>(['A', 'B', 'CLE', 'Lunch', 'C', 'D']);
 
   const [rows, setRows] = useState<Array<Omit<BlockTimeRow, 'id' | 'effective_to'>>>((() => {
     // editable draft rows to save as a new effective set
@@ -44,7 +53,10 @@ export default function BlockTimesClient() {
     });
   })());
 
-  const title = useMemo(() => (template === 'mon_thu' ? 'Mon–Thu Block Times' : 'Friday Block Times'), [template]);
+  const title = useMemo(() => {
+    if (template === 'rotation') return 'Block Rotation';
+    return template === 'mon_thu' ? 'Mon–Thu Block Times' : 'Friday Block Times';
+  }, [template]);
 
   async function loadCurrent() {
     setStatus('loading');
@@ -99,9 +111,104 @@ export default function BlockTimesClient() {
   }
 
   useEffect(() => {
+    if (template === 'rotation') return;
     void loadCurrent();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [template]);
+
+  async function loadCurrentRotation() {
+    setRotStatus('loading');
+    setRotError(null);
+
+    try {
+      const supabase = getSupabaseClient();
+      const today = new Date().toISOString().slice(0, 10);
+
+      let q = supabase
+        .from('rotation_defaults')
+        .select('*')
+        .eq('day_of_week', rotDayOfWeek)
+        .lte('effective_from', today)
+        .or(`effective_to.is.null,effective_to.gt.${today}`)
+        .order('effective_from', { ascending: false })
+        .order('slot_order', { ascending: true });
+
+      if (rotDayOfWeek === 5) {
+        q = q.eq('friday_type', rotFridayType);
+      } else {
+        q = q.is('friday_type', null);
+      }
+
+      const { data, error } = await q;
+      if (error) throw error;
+
+      if ((data?.length ?? 0) === 0) {
+        setRotBlocks((prev) => (prev.length ? prev : ['A', 'B', 'CLE', 'Lunch', 'C', 'D']));
+      } else {
+        // only take the most recent effective_from group
+        const eff = (data as any[])[0]?.effective_from as string;
+        const group = (data as any[]).filter((r) => r.effective_from === eff);
+        setRotBlocks(group.map((r) => String(r.block_label)));
+      }
+
+      setRotStatus('idle');
+    } catch (e: any) {
+      setRotStatus('error');
+      setRotError(humanizeError(e));
+    }
+  }
+
+  useEffect(() => {
+    if (template !== 'rotation') return;
+    void loadCurrentRotation();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [template, rotDayOfWeek, rotFridayType]);
+
+  async function saveNewRotationSet() {
+    setRotStatus('saving');
+    setRotError(null);
+
+    try {
+      const supabase = getSupabaseClient();
+      const eff = rotEffectiveFrom;
+      if (!eff) throw new Error('Effective date is required');
+
+      // close existing active rows at eff date
+      let closeQ = supabase
+        .from('rotation_defaults')
+        .update({ effective_to: eff })
+        .eq('day_of_week', rotDayOfWeek)
+        .is('effective_to', null)
+        .lt('effective_from', eff);
+
+      if (rotDayOfWeek === 5) closeQ = closeQ.eq('friday_type', rotFridayType);
+      else closeQ = closeQ.is('friday_type', null);
+
+      const { error: closeErr } = await closeQ;
+      if (closeErr) throw closeErr;
+
+      const payload = rotBlocks
+        .map((b) => String(b).trim())
+        .filter(Boolean)
+        .map((block, idx) => ({
+          day_of_week: rotDayOfWeek,
+          friday_type: rotDayOfWeek === 5 ? rotFridayType : null,
+          slot_order: idx + 1,
+          block_label: block,
+          effective_from: eff,
+          effective_to: null,
+        }));
+
+      const { error: insErr } = await supabase.from('rotation_defaults').insert(payload);
+      if (insErr) throw insErr;
+
+      setRotStatus('idle');
+    } catch (e: any) {
+      setRotStatus('error');
+      setRotError(humanizeError(e));
+    }
+  }
+
 
   function updateRow(i: number, patch: Partial<(typeof rows)[number]>) {
     setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
@@ -152,35 +259,138 @@ export default function BlockTimesClient() {
       <p style={styles.muted}>Set default block times. These defaults are versioned by effective date.</p>
 
       <div style={styles.tabs}>
-        <button
-          onClick={() => setTemplate('mon_thu')}
-          style={template === 'mon_thu' ? styles.tabActive : styles.tab}
-        >
+        <button onClick={() => setTemplate('mon_thu')} style={template === 'mon_thu' ? styles.tabActive : styles.tab}>
           Mon–Thu
         </button>
         <button onClick={() => setTemplate('fri')} style={template === 'fri' ? styles.tabActive : styles.tab}>
           Friday
         </button>
+        <button onClick={() => setTemplate('rotation')} style={template === 'rotation' ? styles.tabActive : styles.tab}>
+          Block Rotation
+        </button>
       </div>
 
       <section style={styles.card}>
-        <div style={styles.rowBetween}>
-          <div>
-            <div style={styles.sectionTitle}>New default set</div>
-            <div style={styles.mutedSmall}>
-              Choose the date these times become the new defaults. We’ll keep history by closing the previous defaults.
+        {template === 'rotation' ? (
+          <>
+            <div style={styles.rowBetween}>
+              <div>
+                <div style={styles.sectionTitle}>Block rotation defaults</div>
+                <div style={styles.mutedSmall}>Define the ordered blocks for each weekday (and Friday Day 1/Day 2). Effective-dated like block times.</div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end', justifyContent: 'flex-end' }}>
+                <label style={{ display: 'grid', gap: 6 }}>
+                  <div style={styles.label}>Day</div>
+                  <select value={rotDayOfWeek} onChange={(e) => setRotDayOfWeek(Number(e.target.value) as any)} style={styles.input}>
+                    <option value={1}>Monday</option>
+                    <option value={2}>Tuesday</option>
+                    <option value={3}>Wednesday</option>
+                    <option value={4}>Thursday</option>
+                    <option value={5}>Friday</option>
+                  </select>
+                </label>
+
+                {rotDayOfWeek === 5 ? (
+                  <label style={{ display: 'grid', gap: 6 }}>
+                    <div style={styles.label}>Friday Type</div>
+                    <select value={rotFridayType} onChange={(e) => setRotFridayType(e.target.value as any)} style={styles.input}>
+                      <option value={'day1'}>Day 1</option>
+                      <option value={'day2'}>Day 2</option>
+                    </select>
+                  </label>
+                ) : null}
+
+                <label style={{ display: 'grid', gap: 6 }}>
+                  <div style={styles.label}>Effective from</div>
+                  <input type="date" value={rotEffectiveFrom} onChange={(e) => setRotEffectiveFrom(e.target.value)} style={styles.input} />
+                </label>
+              </div>
             </div>
-          </div>
-          <div style={{ display: 'grid', gap: 6 }}>
-            <div style={styles.label}>Effective from</div>
-            <input
-              type="date"
-              value={effectiveFrom}
-              onChange={(e) => setEffectiveFrom(e.target.value)}
-              style={styles.input}
-            />
-          </div>
-        </div>
+
+            <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
+              <datalist id="rotation-labels">
+                {['A','B','C','D','E','F','G','H','CLE','Flex','Chapel','Lunch'].map((x) => (
+                  <option key={x} value={x} />
+                ))}
+              </datalist>
+
+              {rotBlocks.map((b, i) => (
+                <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <div style={{ width: 28, fontWeight: 900, color: '#2E75B6' }}>{i + 1}.</div>
+                  <input
+                    value={b}
+                    list="rotation-labels"
+                    onChange={(e) => setRotBlocks((prev) => prev.map((x, idx) => (idx === i ? e.target.value : x)))}
+                    style={{ ...styles.input, flex: 1 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setRotBlocks((prev) => prev.filter((_, idx) => idx !== i))}
+                    style={styles.secondaryBtn}
+                    disabled={isDemo || rotStatus === 'saving' || rotStatus === 'loading'}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => setRotBlocks((prev) => [...prev, ''])}
+                  style={styles.secondaryBtn}
+                  disabled={isDemo || rotStatus === 'saving' || rotStatus === 'loading'}
+                >
+                  + Add block
+                </button>
+
+                <button
+                  type="button"
+                  onClick={saveNewRotationSet}
+                  style={styles.primaryBtn}
+                  disabled={isDemo || rotStatus === 'saving' || rotStatus === 'loading'}
+                >
+                  {rotStatus === 'saving' ? 'Saving…' : 'Save as new defaults'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={loadCurrentRotation}
+                  style={styles.secondaryBtn}
+                  disabled={rotStatus === 'saving' || rotStatus === 'loading'}
+                >
+                  Reload current defaults
+                </button>
+              </div>
+
+              {rotError && (
+                <div style={styles.errorBox}>
+                  <div style={{ fontWeight: 700, marginBottom: 6 }}>Couldn’t save</div>
+                  <div>{rotError}</div>
+                </div>
+              )}
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={styles.rowBetween}>
+              <div>
+                <div style={styles.sectionTitle}>New default set</div>
+                <div style={styles.mutedSmall}>
+                  Choose the date these times become the new defaults. We’ll keep history by closing the previous defaults.
+                </div>
+              </div>
+              <div style={{ display: 'grid', gap: 6 }}>
+                <div style={styles.label}>Effective from</div>
+                <input
+                  type="date"
+                  value={effectiveFrom}
+                  onChange={(e) => setEffectiveFrom(e.target.value)}
+                  style={styles.input}
+                />
+              </div>
+            </div>
 
         <div style={{ overflowX: 'auto', marginTop: 12 }}>
           <table style={styles.table}>
@@ -233,6 +443,8 @@ export default function BlockTimesClient() {
             <div style={{ fontWeight: 700, marginBottom: 6 }}>Couldn’t save</div>
             <div>{error}</div>
           </div>
+        )}
+          </>
         )}
       </section>
     </main>
