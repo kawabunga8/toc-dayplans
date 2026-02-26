@@ -25,10 +25,13 @@ export default function BlockTimesClient() {
   const { isDemo } = useDemo();
   const [template, setTemplate] = useState<TemplateKey>('mon_thu');
 
-  // Block-time editor state
+  // Block-time editor state (edit Mon–Thu + Friday side-by-side)
   const [status, setStatus] = useState<Status>('loading');
   const [error, setError] = useState<string | null>(null);
   const [effectiveFrom, setEffectiveFrom] = useState(() => new Date().toISOString().slice(0, 10));
+
+  const [monThuRows, setMonThuRows] = useState<Array<{ slot: string; start_time: string; end_time: string }>>([]);
+  const [friRows, setFriRows] = useState<Array<{ slot: string; start_time: string; end_time: string }>>([]);
 
   // Rotation editor state (edit all days at once)
   const [rotStatus, setRotStatus] = useState<Status>('idle');
@@ -46,24 +49,11 @@ export default function BlockTimesClient() {
     fri_day2: ['E', 'F', 'Chapel', 'Lunch', 'G', 'H'],
   });
 
-  const [rows, setRows] = useState<Array<Omit<BlockTimeRow, 'id' | 'effective_to'>>>((() => {
-    // editable draft rows to save as a new effective set
-    const eff = new Date().toISOString().slice(0, 10);
-    return DEFAULT_SLOTS_MON_THU.map((slot) => {
-      const t = defaultTimes('mon_thu', slot);
-      return {
-        template_key: 'mon_thu' as TemplateKey,
-        effective_from: eff,
-        slot,
-        start_time: t.start,
-        end_time: t.end,
-      };
-    });
-  })());
+  // (moved) block time draft rows are now split into monThuRows + friRows
 
   const title = useMemo(() => {
     if (template === 'rotation') return 'Block Rotation';
-    return template === 'mon_thu' ? 'Mon–Thu Block Times' : 'Friday Block Times';
+    return 'Block Times';
   }, [template]);
 
   async function loadCurrent() {
@@ -74,40 +64,61 @@ export default function BlockTimesClient() {
       const supabase = getSupabaseClient();
       const today = new Date().toISOString().slice(0, 10);
 
-      const { data, error } = await supabase
-        .from('block_time_defaults')
-        .select('*')
-        .eq('template_key', template)
-        .lte('effective_from', today)
-        .or(`effective_to.is.null,effective_to.gt.${today}`)
-        .order('start_time', { ascending: true });
+      const [monRes, friRes] = await Promise.all([
+        supabase
+          .from('block_time_defaults')
+          .select('*')
+          .eq('template_key', 'mon_thu')
+          .lte('effective_from', today)
+          .or(`effective_to.is.null,effective_to.gt.${today}`)
+          .order('start_time', { ascending: true }),
+        supabase
+          .from('block_time_defaults')
+          .select('*')
+          .eq('template_key', 'fri')
+          .lte('effective_from', today)
+          .or(`effective_to.is.null,effective_to.gt.${today}`)
+          .order('start_time', { ascending: true }),
+      ]);
 
-      if (error) throw error;
+      if (monRes.error) throw monRes.error;
+      if (friRes.error) throw friRes.error;
 
-      if ((data?.length ?? 0) === 0) {
-        // no defaults yet: start with our real schedule draft
-        const slots = template === 'mon_thu' ? DEFAULT_SLOTS_MON_THU : DEFAULT_SLOTS_FRI;
-        setRows(
-          slots.map((slot) => {
-            const t = defaultTimes(template, slot);
-            return {
-              template_key: template,
-              effective_from: effectiveFrom,
-              slot,
-              start_time: t.start,
-              end_time: t.end,
-            };
+      const monData = (monRes.data ?? []) as BlockTimeRow[];
+      const friData = (friRes.data ?? []) as BlockTimeRow[];
+
+      if (monData.length === 0) {
+        setMonThuRows(
+          DEFAULT_SLOTS_MON_THU.map((slot) => {
+            const t = defaultTimes('mon_thu' as any, slot);
+            return { slot, start_time: t.start, end_time: t.end };
           })
         );
       } else {
-        setRows(
-          (data as BlockTimeRow[]).map((r) => ({
-            template_key: r.template_key,
-            effective_from: effectiveFrom,
-            slot: r.slot,
-            start_time: r.start_time,
-            end_time: r.end_time,
-          }))
+        // normalize to our slots order
+        const bySlot = new Map(monData.map((r) => [r.slot, r]));
+        setMonThuRows(
+          DEFAULT_SLOTS_MON_THU.map((slot) => {
+            const r = bySlot.get(slot);
+            return { slot, start_time: (r?.start_time as any) ?? '08:30', end_time: (r?.end_time as any) ?? '09:40' };
+          })
+        );
+      }
+
+      if (friData.length === 0) {
+        setFriRows(
+          DEFAULT_SLOTS_FRI.map((slot) => {
+            const t = defaultTimes('fri' as any, slot);
+            return { slot, start_time: t.start, end_time: t.end };
+          })
+        );
+      } else {
+        const bySlot = new Map(friData.map((r) => [r.slot, r]));
+        setFriRows(
+          DEFAULT_SLOTS_FRI.map((slot) => {
+            const r = bySlot.get(slot);
+            return { slot, start_time: (r?.start_time as any) ?? '09:10', end_time: (r?.end_time as any) ?? '10:10' };
+          })
         );
       }
 
@@ -246,8 +257,12 @@ export default function BlockTimesClient() {
   }
 
 
-  function updateRow(i: number, patch: Partial<(typeof rows)[number]>) {
-    setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  function updateMonThuRow(i: number, patch: Partial<(typeof monThuRows)[number]>) {
+    setMonThuRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  }
+
+  function updateFriRow(i: number, patch: Partial<(typeof friRows)[number]>) {
+    setFriRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
   }
 
   async function saveNewEffectiveSet() {
@@ -259,19 +274,22 @@ export default function BlockTimesClient() {
       const eff = effectiveFrom;
       if (!eff) throw new Error('Effective date is required');
 
-      // close existing active rows at eff date
-      // Set effective_to = eff for any rows where effective_to is null and effective_from < eff
-      const { error: closeErr } = await supabase
-        .from('block_time_defaults')
-        .update({ effective_to: eff })
-        .eq('template_key', template)
-        .is('effective_to', null)
-        .lt('effective_from', eff);
-      if (closeErr) throw closeErr;
+      // close existing active rows at eff date for BOTH templates
+      for (const tk of ['mon_thu', 'fri'] as const) {
+        const { error: closeErr } = await supabase
+          .from('block_time_defaults')
+          .update({ effective_to: eff })
+          .eq('template_key', tk)
+          .is('effective_to', null)
+          .lt('effective_from', eff);
+        if (closeErr) throw closeErr;
+      }
 
-      // insert new rows
-      const payload = rows.map((r) => ({
-        template_key: template,
+      const monPayload = (monThuRows.length ? monThuRows : DEFAULT_SLOTS_MON_THU.map((slot) => {
+        const t = defaultTimes('mon_thu' as any, slot);
+        return { slot, start_time: t.start, end_time: t.end };
+      })).map((r) => ({
+        template_key: 'mon_thu',
         effective_from: eff,
         effective_to: null,
         slot: r.slot,
@@ -279,7 +297,19 @@ export default function BlockTimesClient() {
         end_time: r.end_time,
       }));
 
-      const { error: insErr } = await supabase.from('block_time_defaults').insert(payload);
+      const friPayload = (friRows.length ? friRows : DEFAULT_SLOTS_FRI.map((slot) => {
+        const t = defaultTimes('fri' as any, slot);
+        return { slot, start_time: t.start, end_time: t.end };
+      })).map((r) => ({
+        template_key: 'fri',
+        effective_from: eff,
+        effective_to: null,
+        slot: r.slot,
+        start_time: r.start_time,
+        end_time: r.end_time,
+      }));
+
+      const { error: insErr } = await supabase.from('block_time_defaults').insert([...monPayload, ...friPayload]);
       if (insErr) throw insErr;
 
       setStatus('idle');
@@ -296,10 +326,7 @@ export default function BlockTimesClient() {
 
       <div style={styles.tabs}>
         <button onClick={() => setTemplate('mon_thu')} style={template === 'mon_thu' ? styles.tabActive : styles.tab}>
-          Mon–Thu
-        </button>
-        <button onClick={() => setTemplate('fri')} style={template === 'fri' ? styles.tabActive : styles.tab}>
-          Friday
+          Block Times
         </button>
         <button onClick={() => setTemplate('rotation')} style={template === 'rotation' ? styles.tabActive : styles.tab}>
           Block Rotation
@@ -390,34 +417,40 @@ export default function BlockTimesClient() {
             <thead>
               <tr>
                 <th style={styles.th}>Slot</th>
-                <th style={styles.th}>Start</th>
-                <th style={styles.th}>End</th>
+                <th style={styles.th}>Mon–Thu Start</th>
+                <th style={styles.th}>Mon–Thu End</th>
+                <th style={styles.th}>Fri Start</th>
+                <th style={styles.th}>Fri End</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((r, i) => (
-                <tr key={`${r.slot}-${i}`}>
-                  <td style={styles.td}>
-                    <input value={r.slot} onChange={(e) => updateRow(i, { slot: e.target.value })} style={styles.input} />
-                  </td>
-                  <td style={styles.td}>
-                    <input
-                      type="time"
-                      value={r.start_time}
-                      onChange={(e) => updateRow(i, { start_time: e.target.value })}
-                      style={styles.input}
-                    />
-                  </td>
-                  <td style={styles.td}>
-                    <input
-                      type="time"
-                      value={r.end_time}
-                      onChange={(e) => updateRow(i, { end_time: e.target.value })}
-                      style={styles.input}
-                    />
-                  </td>
-                </tr>
-              ))}
+              {DEFAULT_SLOTS_MON_THU.map((slot, i) => {
+                const mon = monThuRows[i] ?? { slot, start_time: '', end_time: '' };
+                const friSlot = slot === 'Flex' ? 'Chapel' : slot;
+                const friIndex = DEFAULT_SLOTS_FRI.indexOf(friSlot);
+                const fri = friIndex >= 0 ? (friRows[friIndex] ?? { slot: friSlot, start_time: '', end_time: '' }) : { slot: friSlot, start_time: '', end_time: '' };
+
+                return (
+                  <tr key={`${slot}-${i}`}>
+                    <td style={styles.td}>
+                      <div style={{ fontWeight: 900, color: RCS.midBlue }}>{slot}</div>
+                      {slot === 'Flex' ? <div style={{ fontSize: 12, opacity: 0.8 }}>Friday uses Chapel</div> : null}
+                    </td>
+                    <td style={styles.td}>
+                      <input type="time" value={mon.start_time} onChange={(e) => updateMonThuRow(i, { start_time: e.target.value })} style={styles.input} />
+                    </td>
+                    <td style={styles.td}>
+                      <input type="time" value={mon.end_time} onChange={(e) => updateMonThuRow(i, { end_time: e.target.value })} style={styles.input} />
+                    </td>
+                    <td style={styles.td}>
+                      <input type="time" value={fri.start_time} onChange={(e) => (friIndex >= 0 ? updateFriRow(friIndex, { start_time: e.target.value }) : null)} style={styles.input} />
+                    </td>
+                    <td style={styles.td}>
+                      <input type="time" value={fri.end_time} onChange={(e) => (friIndex >= 0 ? updateFriRow(friIndex, { end_time: e.target.value }) : null)} style={styles.input} />
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
