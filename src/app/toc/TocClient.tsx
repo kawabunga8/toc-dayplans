@@ -448,6 +448,8 @@ function scheduleBlockLabelsForDate(planDate: string, friType: '' | 'day1' | 'da
   if (dow === 1) return ['A', 'B', 'C', 'D'];
   if (dow === 2) return ['E', 'F', 'G', 'H'];
   if (dow === 3) return ['C', 'D', 'A', 'B'];
+  // Thursday rotation: use A–D (matches current TOC expectations; Friday Day 2 remains E–H).
+  if (dow === 4) return ['A', 'B', 'C', 'D'];
   return ['E', 'F', 'G', 'H'];
 }
 
