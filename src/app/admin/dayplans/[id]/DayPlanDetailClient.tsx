@@ -60,6 +60,16 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
     return new URL(`/p/${id}`, window.location.origin).toString();
   }, [id]);
 
+  const backHref = useMemo(() => {
+    const qs = new URLSearchParams();
+    const d = searchParams.get('date') || plan?.plan_date || '';
+    const ft = searchParams.get('friday_type') || (plan?.friday_type ?? '');
+    if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) qs.set('date', d);
+    if (ft === 'day1' || ft === 'day2') qs.set('friday_type', ft);
+    const s = qs.toString();
+    return s ? `/admin/dayplans?${s}` : '/admin/dayplans';
+  }, [searchParams, plan]);
+
   async function load() {
     setStatus('loading');
     setError(null);
@@ -136,8 +146,14 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
 
     void (async () => {
       await generateSchedule();
-      // Remove the auto flag so refreshes don't re-run it
-      router.replace(`/admin/dayplans/${id}`);
+      // Remove the auto flag so refreshes don't re-run it (but keep date context for Back)
+      const qs = new URLSearchParams();
+      const d = searchParams.get('date');
+      const ft = searchParams.get('friday_type');
+      if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) qs.set('date', d);
+      if (ft === 'day1' || ft === 'day2') qs.set('friday_type', ft);
+      const suffix = qs.toString() ? `?${qs.toString()}` : '';
+      router.replace(`/admin/dayplans/${id}${suffix}`);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, status, plan, blocks.length, id]);
@@ -467,7 +483,7 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
             </div>
           )}
         </div>
-        <Link href="/admin/dayplans" style={styles.secondaryLink}>
+        <Link href={backHref} style={styles.secondaryLink}>
           ← Back
         </Link>
       </div>
