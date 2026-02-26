@@ -57,6 +57,15 @@ export default function TocClient({
   const [openPlan, setOpenPlan] = useState<PublicPlanDetail | null>(null);
   const [openPlanLoading, setOpenPlanLoading] = useState(false);
 
+  // Close drawer with ESC
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpenPlanId(null);
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
   const isSelectedFriday = useMemo(() => isFridayLocal(selectedDate), [selectedDate]);
 
   useEffect(() => {
@@ -388,61 +397,86 @@ export default function TocClient({
               </div>
             </section>
 
-            <section style={{ ...styles.card, marginTop: 16 }}>
-              <div style={styles.sectionTitle}>Plan details</div>
-
-              {!openPlanId ? (
-                <div style={{ padding: 12, opacity: 0.8 }}>Select a published plan to view details.</div>
-              ) : openPlanLoading ? (
-                <div style={{ padding: 12, opacity: 0.8 }}>Loading…</div>
-              ) : !openPlan ? (
-                <div style={{ padding: 12, opacity: 0.8 }}>Plan not available.</div>
-              ) : (
-                <div style={{ padding: 12, display: 'grid', gap: 10 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-                    <div>
-                      <div style={{ fontWeight: 900, color: RCS.deepNavy }}>{openPlan.title}</div>
-                      <div style={{ opacity: 0.85, fontSize: 12 }}>
-                        {openPlan.plan_date} • Block <b>{openPlan.slot}</b>
-                        {openPlan.friday_type ? ` • ${openPlan.friday_type}` : ''}
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                      <a href={`/p/${openPlan.id}`} target="_blank" rel="noopener noreferrer" style={styles.secondaryLink}>
-                        Printable view →
-                      </a>
-                      <button type="button" onClick={() => setOpenPlanId(null)} style={styles.secondaryBtn}>
-                        Close
-                      </button>
-                    </div>
-                  </div>
-
-                  {openPlan.notes?.trim() ? (
-                    <div style={styles.notesBox}>
-                      <div style={styles.notesLabel}>Notes</div>
-                      <div style={styles.notesText}>{openPlan.notes}</div>
-                    </div>
-                  ) : null}
-
-                  <div style={{ display: 'grid', gap: 10 }}>
-                    {openPlanPrimaryBlocks.map((b) => (
-                      <div key={b.id} style={styles.planBlockCard}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-                          <div style={{ fontWeight: 900 }}>{b.class_name}</div>
-                          <div style={{ opacity: 0.8, fontSize: 12 }}>
-                            {formatTime(b.start_time)}–{formatTime(b.end_time)} • Room {b.room}
-                          </div>
-                        </div>
-                        {b.details?.trim() ? <div style={{ marginTop: 8, whiteSpace: 'pre-wrap' }}>{b.details}</div> : <div style={{ marginTop: 8, opacity: 0.7 }}>No details.</div>}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </section>
+            {/* Plan details now appear in a slide-in drawer (View → panel). */}
           </>
         )}
       </main>
+
+      {/* Slide-in plan drawer */}
+      <div
+        style={{
+          ...styles.drawerOverlay,
+          opacity: openPlanId ? 1 : 0,
+          pointerEvents: openPlanId ? 'auto' : 'none',
+        }}
+        onClick={() => setOpenPlanId(null)}
+      />
+      <aside
+        aria-hidden={!openPlanId}
+        style={{
+          ...styles.drawer,
+          transform: openPlanId ? 'translateX(0)' : 'translateX(102%)',
+        }}
+      >
+        <div style={styles.drawerHeader}>
+          <div style={{ fontWeight: 900, color: RCS.deepNavy }}>Plan</div>
+          <button type="button" onClick={() => setOpenPlanId(null)} style={styles.secondaryBtn}>
+            Close
+          </button>
+        </div>
+
+        {!openPlanId ? (
+          <div style={{ padding: 12, opacity: 0.8 }}>Select a published plan to view details.</div>
+        ) : openPlanLoading ? (
+          <div style={{ padding: 12, opacity: 0.8 }}>Loading…</div>
+        ) : !openPlan ? (
+          <div style={{ padding: 12, opacity: 0.8 }}>Plan not available.</div>
+        ) : (
+          <div style={{ padding: 12, display: 'grid', gap: 10 }}>
+            <div>
+              <div style={{ fontWeight: 900, color: RCS.deepNavy }}>{openPlan.title}</div>
+              <div style={{ opacity: 0.85, fontSize: 12 }}>
+                {openPlan.plan_date} • Block <b>{openPlan.slot}</b>
+                {openPlan.friday_type ? ` • ${openPlan.friday_type}` : ''}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <a href={`/p/${openPlan.id}`} style={styles.primaryBtn}>
+                Open
+              </a>
+              <a href={`/p/${openPlan.id}?print=1`} target="_blank" rel="noopener noreferrer" style={styles.secondaryLink}>
+                Print
+              </a>
+            </div>
+
+            {openPlan.notes?.trim() ? (
+              <div style={styles.notesBox}>
+                <div style={styles.notesLabel}>Notes</div>
+                <div style={styles.notesText}>{openPlan.notes}</div>
+              </div>
+            ) : null}
+
+            <div style={{ display: 'grid', gap: 10 }}>
+              {openPlanPrimaryBlocks.map((b) => (
+                <div key={b.id} style={styles.planBlockCard}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                    <div style={{ fontWeight: 900 }}>{b.class_name}</div>
+                    <div style={{ opacity: 0.8, fontSize: 12 }}>
+                      {formatTime(b.start_time)}–{formatTime(b.end_time)} • Room {b.room}
+                    </div>
+                  </div>
+                  {b.details?.trim() ? (
+                    <div style={{ marginTop: 8, whiteSpace: 'pre-wrap' }}>{b.details}</div>
+                  ) : (
+                    <div style={{ marginTop: 8, opacity: 0.7 }}>No details.</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </aside>
     </div>
   );
 }
@@ -623,6 +657,37 @@ const styles: Record<string, React.CSSProperties> = {
   notesText: { whiteSpace: 'pre-wrap' },
 
   planBlockCard: { padding: 12, borderRadius: 10, border: `1px solid ${RCS.deepNavy}`, background: RCS.white },
+
+  drawerOverlay: {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0,0,0,0.35)',
+    transition: 'opacity 160ms ease',
+    zIndex: 50,
+  },
+  drawer: {
+    position: 'fixed',
+    top: 0,
+    right: 0,
+    height: '100vh',
+    width: 'min(520px, 92vw)',
+    background: RCS.white,
+    borderLeft: `1px solid ${RCS.deepNavy}`,
+    boxShadow: '0 16px 50px rgba(0,0,0,0.22)',
+    transition: 'transform 180ms ease',
+    zIndex: 60,
+    display: 'grid',
+    gridTemplateRows: 'auto 1fr',
+    overflow: 'auto',
+  },
+  drawerHeader: {
+    padding: 12,
+    borderBottom: `1px solid ${RCS.deepNavy}`,
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+  },
 
   weekGrid: {
     display: 'grid',
