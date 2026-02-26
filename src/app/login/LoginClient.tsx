@@ -54,6 +54,7 @@ export default function LoginClient() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [status, setStatus] = useState<Status>('idle');
   const [error, setError] = useState<string | null>(null);
 
@@ -128,10 +129,14 @@ export default function LoginClient() {
               <input
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 required
                 style={styles.input}
               />
+              <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, opacity: 0.9 }}>
+                <input type="checkbox" checked={showPassword} onChange={(e) => setShowPassword(e.target.checked)} />
+                <span>Show password</span>
+              </label>
             </label>
 
             <button type="submit" disabled={status === 'signing-in'} style={styles.primaryBtn}>
