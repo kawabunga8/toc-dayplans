@@ -35,6 +35,8 @@ export default async function TocPrintPage({ searchParams }: { searchParams: Pro
     if (!error && data) detail.push(data);
   }
 
+  const hasAny = detail.length > 0;
+
   return (
     <main style={{ padding: 24, fontFamily: 'system-ui' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -42,13 +44,15 @@ export default async function TocPrintPage({ searchParams }: { searchParams: Pro
           <div style={{ fontWeight: 900, fontSize: 20 }}>Print all</div>
           <div style={{ opacity: 0.8 }}>{date} (published plans only)</div>
         </div>
-        <button onClick={() => window.print()} style={{ padding: '8px 10px', borderRadius: 10, border: '1px solid #C9A84C', background: '#1F4E79', color: 'white', fontWeight: 900 }}>
-          Print
-        </button>
+        {hasAny ? (
+          <button onClick={() => window.print()} style={{ padding: '8px 10px', borderRadius: 10, border: '1px solid #C9A84C', background: '#1F4E79', color: 'white', fontWeight: 900 }}>
+            Print
+          </button>
+        ) : null}
       </div>
 
       <div style={{ marginTop: 16, display: 'grid', gap: 12 }}>
-        {detail.length === 0 ? <div style={{ opacity: 0.8 }}>No published plans for this date.</div> : null}
+        {!hasAny ? <div className="emptyMsg" style={{ opacity: 0.8 }}>No published plans for this date.</div> : null}
 
         {detail.map((p: any) => (
           <section key={p.id} style={{ border: '1px solid #1F4E79', borderRadius: 12, padding: 12 }}>
@@ -75,6 +79,8 @@ export default async function TocPrintPage({ searchParams }: { searchParams: Pro
       <style>{`
         @media print {
           button { display: none !important; }
+          /* If there are no published plans, printing should produce a blank page */
+          .emptyMsg { display: none !important; }
         }
       `}</style>
     </main>
