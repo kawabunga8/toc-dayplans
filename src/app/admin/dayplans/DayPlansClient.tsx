@@ -97,8 +97,11 @@ export default function DayPlansClient() {
   const isSelectedFriday = useMemo(() => isFridayLocal(selectedDate), [selectedDate]);
 
   useEffect(() => {
-    // reset Friday type when date changes
-    setSelectedFridayType('');
+    // When switching away from Friday, clear the Friday type.
+    // When switching between Fridays, keep the selected type (so Back navigation preserves Day 1/Day 2).
+    if (!isFridayLocal(selectedDate)) {
+      setSelectedFridayType('');
+    }
   }, [selectedDate]);
 
   useEffect(() => {
