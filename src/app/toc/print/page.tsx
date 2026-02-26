@@ -30,8 +30,34 @@ export default async function TocPrintPage({ searchParams }: { searchParams: Pro
   const weekPlans = (weekData ?? []) as any[];
   const dayPlans = weekPlans.filter((p) => p.plan_date === date);
 
+  // Sort plans in the order of the day's rotation (so Print All matches the day schedule)
+  let rotationOrder: string[] = [];
+  try {
+    const friType = (dayPlans.find((p) => p.friday_type)?.friday_type ?? null) as string | null;
+    const { data: rot, error: rotErr } = await supabase.rpc('get_rotation_for_date', { plan_date: date, friday_type: friType });
+    if (!rotErr && Array.isArray(rot)) {
+      rotationOrder = rot
+        .map((r: any) => String(r?.block_label ?? r?.label ?? r?.block ?? '').trim())
+        .filter(Boolean);
+    }
+  } catch {
+    // ignore and fall back to unsorted
+  }
+
+  const orderIndex = new Map<string, number>();
+  rotationOrder.forEach((b, i) => orderIndex.set(b.toUpperCase(), i));
+
+  const sortedDayPlans = dayPlans.slice().sort((a, b) => {
+    const ai = orderIndex.get(String(a.slot ?? '').toUpperCase());
+    const bi = orderIndex.get(String(b.slot ?? '').toUpperCase());
+    if (ai == null && bi == null) return String(a.slot ?? '').localeCompare(String(b.slot ?? ''));
+    if (ai == null) return 1;
+    if (bi == null) return -1;
+    return ai - bi;
+  });
+
   const detail: any[] = [];
-  for (const p of dayPlans) {
+  for (const p of sortedDayPlans) {
     const { data, error } = await supabase.rpc('get_public_day_plan_by_id', { plan_id: p.id });
     if (!error && data) detail.push(data);
   }
