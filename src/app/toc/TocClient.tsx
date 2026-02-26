@@ -546,7 +546,7 @@ export default function TocClient({
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-start' }}>
               <a href={`/p/${openPlan.id}`} style={styles.primaryBtn}>
                 Open
               </a>
@@ -694,6 +694,8 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     lineHeight: 1,
     whiteSpace: 'nowrap',
+    height: 'fit-content',
+    alignSelf: 'flex-start',
   },
   secondaryBtn: {
     padding: '6px 10px',
@@ -708,6 +710,8 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     lineHeight: 1,
     whiteSpace: 'nowrap',
+    height: 'fit-content',
+    alignSelf: 'flex-start',
   },
   dateInput: {
     padding: '8px 10px',
@@ -749,6 +753,8 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     lineHeight: 1,
     whiteSpace: 'nowrap',
+    height: 'fit-content',
+    alignSelf: 'flex-start',
   },
   primaryBtnActive: {
     padding: '8px 10px',
