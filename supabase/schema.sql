@@ -815,6 +815,7 @@ begin
       'plan_date', p.plan_date,
       'slot', p.slot,
       'title', p.title,
+      'notes', p.notes,
       'share_expires_at', p.share_expires_at
     ) order by p.plan_date asc, p.slot asc), '[]'::jsonb)
   into plans

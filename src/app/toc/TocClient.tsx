@@ -8,6 +8,7 @@ type PublicPlanSummary = {
   plan_date: string; // YYYY-MM-DD
   slot: string;
   title: string;
+  notes: string | null;
   share_expires_at: string | null;
 };
 
@@ -317,6 +318,7 @@ export default function TocClient({
                       <th style={styles.th}>Block</th>
                       <th style={styles.th}>Course</th>
                       <th style={styles.th}>Room</th>
+                      <th style={styles.th}>Notes</th>
                       <th style={styles.th}>Plan</th>
                     </tr>
                   </thead>
@@ -332,6 +334,15 @@ export default function TocClient({
                           <td style={styles.tdLabel}>{slot || '—'}</td>
                           <td style={styles.td}>{c.name}</td>
                           <td style={styles.td}>{c.room || '—'}</td>
+                          <td style={styles.td}>
+                            {plan?.notes?.trim() ? (
+                              <div style={{ whiteSpace: 'pre-wrap', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' as any }}>
+                                {plan.notes}
+                              </div>
+                            ) : (
+                              <span style={{ opacity: 0.6, fontWeight: 700 }}>—</span>
+                            )}
+                          </td>
                           <td style={styles.tdRight}>
                             {clickable ? (
                               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
