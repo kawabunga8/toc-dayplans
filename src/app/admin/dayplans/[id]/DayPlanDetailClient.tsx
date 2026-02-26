@@ -254,17 +254,15 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
         const start = (t?.start_time ?? m.fallbackStart).slice(0, 5);
         const end = (t?.end_time ?? m.fallbackEnd).slice(0, 5);
 
-        const label = m.block_label;
-        const isLunch = label === 'LUNCH';
-        const isChapel = label === 'CHAPEL';
-        const isFlex = label === 'FLEX';
-        const isCle = label === 'CLE';
+        const labelRaw = String(m.block_label ?? '').trim();
+        const label = labelRaw.toUpperCase();
 
-        const c = label && !isLunch && !isChapel && !isFlex && !isCle ? classByLabel.get(label) : undefined;
+        // Flex/Chapel/CLE/Lunch are seeded into the classes table (see schema.sql) so they can have templates.
+        // Prefer a real class match when it exists.
+        const c = label ? classByLabel.get(label) : undefined;
 
         const room = c?.room ?? '—';
-        const className =
-          c?.name ?? (isLunch ? 'Lunch' : isChapel ? 'Chapel' : isFlex ? 'Flex' : isCle ? 'CLE' : label);
+        const className = c?.name ?? (labelRaw || '—');
 
         const details = (m as any).details ?? null;
 
