@@ -46,8 +46,23 @@ export async function GET() {
     .order('name', { ascending: true });
 
   if (error) {
-    console.log('[api/admin/classes] query error', { message: error.message, details: (error as any)?.details, hint: (error as any)?.hint, code: (error as any)?.code });
-    return NextResponse.json({ error: error.message, usingServiceRole }, { status: 400 });
+    console.log('[api/admin/classes] query error', {
+      message: error.message,
+      details: (error as any)?.details,
+      hint: (error as any)?.hint,
+      code: (error as any)?.code,
+    });
+    return NextResponse.json(
+      {
+        step: 'select_classes',
+        error: error.message,
+        code: (error as any)?.code,
+        details: (error as any)?.details,
+        hint: (error as any)?.hint,
+        usingServiceRole,
+      },
+      { status: 400 }
+    );
   }
   return NextResponse.json({ rows: data ?? [], usingServiceRole });
 }

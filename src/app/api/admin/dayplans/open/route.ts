@@ -66,7 +66,18 @@ export async function POST(req: Request) {
     if (fridayType) q = q.eq('friday_type', fridayType);
 
     const { data, error } = await q.limit(1);
-    if (error) return NextResponse.json({ error: error.message, usingServiceRole }, { status: 400 });
+    if (error)
+      return NextResponse.json(
+        {
+          step: 'lookup_existing',
+          error: error.message,
+          code: (error as any)?.code,
+          details: (error as any)?.details,
+          hint: (error as any)?.hint,
+          usingServiceRole,
+        },
+        { status: 400 }
+      );
     const row = (data?.[0] as any) ?? null;
     if (row?.id) return NextResponse.json({ id: row.id, action: 'opened', usingServiceRole });
   }
@@ -77,14 +88,36 @@ export async function POST(req: Request) {
     if (fridayType) q = q.eq('friday_type', fridayType);
 
     const { data, error } = await q.limit(1);
-    if (error) return NextResponse.json({ error: error.message, usingServiceRole }, { status: 400 });
+    if (error)
+      return NextResponse.json(
+        {
+          step: 'lookup_trashed',
+          error: error.message,
+          code: (error as any)?.code,
+          details: (error as any)?.details,
+          hint: (error as any)?.hint,
+          usingServiceRole,
+        },
+        { status: 400 }
+      );
     const row = (data?.[0] as any) ?? null;
     if (row?.id) {
       const { error: updErr } = await adminDb
         .from('day_plans')
         .update({ trashed_at: null, updated_at: new Date().toISOString() })
         .eq('id', row.id);
-      if (updErr) return NextResponse.json({ error: updErr.message, usingServiceRole }, { status: 400 });
+      if (updErr)
+        return NextResponse.json(
+          {
+            step: 'restore_trashed',
+            error: updErr.message,
+            code: (updErr as any)?.code,
+            details: (updErr as any)?.details,
+            hint: (updErr as any)?.hint,
+            usingServiceRole,
+          },
+          { status: 400 }
+        );
       return NextResponse.json({ id: row.id, action: 'restored', usingServiceRole });
     }
   }
@@ -99,7 +132,18 @@ export async function POST(req: Request) {
   };
 
   const { data: created, error: insErr } = await adminDb.from('day_plans').insert(payload).select('id').single();
-  if (insErr) return NextResponse.json({ error: insErr.message, usingServiceRole }, { status: 400 });
+  if (insErr)
+    return NextResponse.json(
+      {
+        step: 'insert',
+        error: insErr.message,
+        code: (insErr as any)?.code,
+        details: (insErr as any)?.details,
+        hint: (insErr as any)?.hint,
+        usingServiceRole,
+      },
+      { status: 400 }
+    );
 
   return NextResponse.json({ id: (created as any).id, action: 'created', usingServiceRole });
 }
