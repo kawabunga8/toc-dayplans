@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { useDemo } from '@/app/admin/DemoContext';
+import { inferTemplateDefaults } from '@/lib/appRules/templates';
 
 type PlanMode = 'lesson_flow' | 'activity_options';
 
@@ -132,190 +133,49 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
           setTaName('');
           setTaRole('');
 
+          // Use centralized defaults (shared with Dayplans auto-create)
+          const defaults = inferTemplateDefaults(((classData as any)?.block_label ?? null) as any);
+
           // 3) Default phone policy
-          setPhonePolicy('Not permitted');
+          setPhonePolicy(defaults.phonePolicy);
 
-          // 4) Default note (3–5 short lines, per style guide)
-          const block = ((classData as any)?.block_label ?? '') as string;
-          const isMusic = block === 'B' || block === 'H';
-          const isComputer = block === 'A' || block === 'G';
-          const isWorship = block === 'F';
-          const isCle = block === 'CLE';
-
-          const defaultNote = isComputer
-            ? [
-                'Students are self-sufficient and generally know what they are doing — your main job is to keep the room on task.',
-                'If a student is stuck, ask them to check the course instructions first, then ask their partner.',
-                'Partners are already chosen (students know who they are with).',
-                'Food policy: water is allowed. Food is not allowed unless students ask.',
-                'Audio devices: allowed when a student asks.',
-                'Mr. Kawamura is reachable on Microsoft Teams if anything urgent comes up.',
-              ].join('\n')
-            : isMusic
-              ? [
-                  'Students know the warm-up routine. Keep the rehearsal moving and keep students on task.',
-                  'Take attendance during the warm-up window.',
-                  'Food policy: water is allowed. Food is not allowed unless students ask.',
-                  'Audio devices: allowed when a student asks.',
-                  'If you need support, follow the TA/student leaders when present.',
-                  'Mr. Kawamura is reachable on Microsoft Teams if anything urgent comes up.',
-                ].join('\n')
-              : isWorship
-                ? [
-                    'This class is student-led. Your main job is attendance and supervision.',
-                    'Encourage respectful participation and keep students on task.',
-                    'Food policy: water is allowed. Food is not allowed unless students ask.',
-                    'Audio devices: allowed when a student asks.',
-                    'If something urgent comes up, contact Mr. Kawamura on Microsoft Teams.',
-                  ].join('\n')
-                : isCle
-                  ? [
-                      'This is self-directed work time. Students should know what they are working on.',
-                      'Take attendance, circulate, and keep students on task.',
-                      'Food policy: water is allowed. Food is not allowed unless students ask.',
-                      'Audio devices: allowed when a student asks.',
-                      'If something urgent comes up, contact Mr. Kawamura on Microsoft Teams.',
-                    ].join('\n')
-                  : [
-                      'Take attendance and keep students on task.',
-                      'Follow the plan below. If a TA is present, follow their lead.',
-                      'Food policy: water is allowed. Food is not allowed unless students ask.',
-                      'Audio devices: allowed when a student asks.',
-                      'Mr. Kawamura is reachable on Microsoft Teams if anything urgent comes up.',
-                    ].join('\n');
-
-          setNoteToToc(defaultNote);
+          // 4) Default note
+          setNoteToToc(defaults.noteToToc);
 
           // 5) Default plan mode
-          setPlanMode('lesson_flow');
+          setPlanMode(defaults.planMode);
 
-          // 6) Default opening routine by class type
-          const defaultRoutine: RoutineStep[] = isMusic
-            ? [
-                { text: 'Students enter, unpack instruments, and begin individual warm-up independently' },
-                { text: 'Run the standard full-band warm-up (scales, long tones, rhythm reading)' },
-                { text: 'TOC takes attendance during warm-up' },
-              ]
-            : isComputer
-              ? [
-                  { text: 'Students enter and log into their computers / course environment independently' },
-                  { text: 'TOC takes attendance' },
-                  { text: 'Students begin working on the assigned task — they know what to do' },
-                ]
-              : isWorship
-                ? [
-                    { text: 'Students enter and settle' },
-                    { text: 'TOC takes attendance' },
-                    { text: 'Students begin the planned student-led activity' },
-                  ]
-                : isCle
-                  ? [
-                      { text: 'Students enter and begin their self-directed work' },
-                      { text: 'TOC takes attendance' },
-                      { text: 'Circulate and keep students on task' },
-                    ]
-                  : [
-                      { text: 'Students enter and settle' },
-                      { text: 'TOC takes attendance' },
-                      { text: 'Begin the planned activity' },
-                    ];
+          // 6) Default opening routine
+          setOpeningRoutine(defaults.openingRoutine.map((t) => ({ text: t })));
 
-          setOpeningRoutine(defaultRoutine);
+          // 7) Default lesson flow
+          setLessonFlow(
+            defaults.lessonFlow.map((p: any) => ({
+              time_text: p.time_text,
+              phase_text: p.phase_text,
+              activity_text: p.activity_text,
+              purpose_text: p.purpose_text,
+            }))
+          );
 
-          // 7) Default Lesson Flow (always pre-filled so templates are useful immediately)
-          const defaultFlow: PhaseRow[] = isComputer
-            ? [
-                {
-                  time_text: '0–5 min',
-                  phase_text: 'Settle & Log In',
-                  activity_text: "Students come in and log into their computers and the course environment.\nSay: 'Open the course and continue where you left off.'",
-                  purpose_text: 'Smooth independent start',
-                },
-                {
-                  time_text: '5–60 min',
-                  phase_text: 'Independent Work',
-                  activity_text: 'Students continue the assigned unit/task independently (or with their partner if applicable).\nTOC circulates, answers basic questions, and keeps students on task.',
-                  purpose_text: 'Practice / completion of assigned work',
-                },
-                {
-                  time_text: 'Last 5 min',
-                  phase_text: 'Wrap Up',
-                  activity_text: 'Students save work and clean up their workspace.\nRemind them what to work on next class.',
-                  purpose_text: 'Clear expectations for next time',
-                },
-              ]
-            : [
-                {
-                  time_text: '0–5 min',
-                  phase_text: 'Settle',
-                  activity_text: 'Students enter and settle. Take attendance.',
-                  purpose_text: '',
-                },
-                {
-                  time_text: 'Main block',
-                  phase_text: 'Core Activity',
-                  activity_text: 'Follow the planned activity. Circulate and keep students on task.',
-                  purpose_text: '',
-                },
-                {
-                  time_text: 'Last 5 min',
-                  phase_text: 'Clean Up',
-                  activity_text: 'Clean up materials and ensure the room is left tidy.',
-                  purpose_text: '',
-                },
-              ];
+          // 8) Default activity options
+          setActivityOptions(
+            defaults.activityOptions.map((o: any) => ({
+              title: o.title,
+              description: o.description,
+              details_text: o.details_text,
+              toc_role_text: o.toc_role_text,
+              steps: (o.steps ?? []).map((t: string) => ({ text: t })),
+            }))
+          );
 
-          setLessonFlow(defaultFlow);
-
-          // 8) Default Activity Options (pre-fill a few placeholders for the alternative plan mode)
-          const defaultOptions: ActivityOption[] = isMusic
-            ? [
-                {
-                  title: 'Rehearsal Option A',
-                  description: 'Warm-up + repertoire run-through',
-                  details_text: 'Run standard warm-up, then rehearse the assigned pieces. Focus on problem spots.',
-                  toc_role_text: 'Keep time, run warm-ups, and maintain rehearsal expectations.',
-                  steps: [{ text: 'Warm-up' }, { text: 'Rehearse Piece 1' }, { text: 'Rehearse Piece 2' }],
-                },
-                {
-                  title: 'Rehearsal Option B',
-                  description: 'Sectional focus',
-                  details_text: 'Have students work in sections on assigned measures, then re-combine.',
-                  toc_role_text: 'Circulate and keep students focused; bring the group together to re-run sections.',
-                  steps: [{ text: 'Assign measures' }, { text: 'Sectional work' }, { text: 'Full band run-through' }],
-                },
-              ]
-            : [
-                {
-                  title: 'Option A',
-                  description: 'Independent work',
-                  details_text: 'Students work independently on the assigned task.',
-                  toc_role_text: 'Take attendance, circulate, and keep students on task.',
-                  steps: [{ text: 'Log in' }, { text: 'Work time' }, { text: 'Wrap up' }],
-                },
-              ];
-
-          setActivityOptions(defaultOptions);
-
-          // 9) Default What to Do If… (style guide: last item is urgent contact)
-          setWhatIfItems([
-            {
-              scenario_text: 'A student is disruptive',
-              response_text: 'Have a quiet one-on-one conversation first. If it continues, follow school procedures and contact support if needed.',
-            },
-            {
-              scenario_text: 'A student is injured or unwell',
-              response_text: 'Follow standard school first aid protocol. Send a responsible student to the office if needed.',
-            },
-            {
-              scenario_text: 'A student finishes early',
-              response_text: 'Ask them to review previous material or work ahead quietly.',
-            },
-            {
-              scenario_text: 'Something urgent comes up',
-              response_text: 'Contact Mr. Kawamura on Microsoft Teams or the office if immediate help is needed.',
-            },
-          ]);
+          // 9) Default what-if items
+          setWhatIfItems(
+            defaults.whatIfItems.map((w: any) => ({
+              scenario_text: w.scenario_text,
+              response_text: w.response_text,
+            }))
+          );
 
           setStatus('idle');
           return;
