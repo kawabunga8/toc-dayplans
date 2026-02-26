@@ -377,13 +377,25 @@ export default function BlockTimesClient() {
                 ))}
               </datalist>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(100px, 120px))', gap: 12, alignItems: 'start', justifyContent: 'space-between' }}>
-                <RotationColumn title="Mon" blocks={rotSets.mon} onChange={(b) => setRotSets((p) => ({ ...p, mon: b }))} disabled={isDemo || rotStatus === 'saving' || rotStatus === 'loading'} />
-                <RotationColumn title="Tue" blocks={rotSets.tue} onChange={(b) => setRotSets((p) => ({ ...p, tue: b }))} disabled={isDemo || rotStatus === 'saving' || rotStatus === 'loading'} />
-                <RotationColumn title="Wed" blocks={rotSets.wed} onChange={(b) => setRotSets((p) => ({ ...p, wed: b }))} disabled={isDemo || rotStatus === 'saving' || rotStatus === 'loading'} />
-                <RotationColumn title="Thu" blocks={rotSets.thu} onChange={(b) => setRotSets((p) => ({ ...p, thu: b }))} disabled={isDemo || rotStatus === 'saving' || rotStatus === 'loading'} />
-                <RotationColumn title="Fri D1" blocks={rotSets.fri_day1} onChange={(b) => setRotSets((p) => ({ ...p, fri_day1: b }))} disabled={isDemo || rotStatus === 'saving' || rotStatus === 'loading'} />
-                <RotationColumn title="Fri D2" blocks={rotSets.fri_day2} onChange={(b) => setRotSets((p) => ({ ...p, fri_day2: b }))} disabled={isDemo || rotStatus === 'saving' || rotStatus === 'loading'} />
+              <div style={{ overflowX: 'auto', paddingBottom: 4 }}>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(6, minmax(100px, 120px))',
+                    gap: 12,
+                    alignItems: 'start',
+                    justifyContent: 'start',
+                    width: 'max-content',
+                    minWidth: '100%',
+                  }}
+                >
+                  <RotationColumn title="Mon" blocks={rotSets.mon} onChange={(b) => setRotSets((p) => ({ ...p, mon: b }))} disabled={isDemo || rotStatus === 'saving' || rotStatus === 'loading'} />
+                  <RotationColumn title="Tue" blocks={rotSets.tue} onChange={(b) => setRotSets((p) => ({ ...p, tue: b }))} disabled={isDemo || rotStatus === 'saving' || rotStatus === 'loading'} />
+                  <RotationColumn title="Wed" blocks={rotSets.wed} onChange={(b) => setRotSets((p) => ({ ...p, wed: b }))} disabled={isDemo || rotStatus === 'saving' || rotStatus === 'loading'} />
+                  <RotationColumn title="Thu" blocks={rotSets.thu} onChange={(b) => setRotSets((p) => ({ ...p, thu: b }))} disabled={isDemo || rotStatus === 'saving' || rotStatus === 'loading'} />
+                  <RotationColumn title="Fri D1" blocks={rotSets.fri_day1} onChange={(b) => setRotSets((p) => ({ ...p, fri_day1: b }))} disabled={isDemo || rotStatus === 'saving' || rotStatus === 'loading'} />
+                  <RotationColumn title="Fri D2" blocks={rotSets.fri_day2} onChange={(b) => setRotSets((p) => ({ ...p, fri_day2: b }))} disabled={isDemo || rotStatus === 'saving' || rotStatus === 'loading'} />
+                </div>
               </div>
 
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
