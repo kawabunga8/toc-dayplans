@@ -65,5 +65,14 @@ export default async function TocPrintPage({ searchParams }: { searchParams: Pro
     if (!error && data) detail.push(data);
   }
 
-  return <TocPrintClient date={date} detail={detail as any} />;
+  // Load effective block times once for the day (used to override displayed times)
+  let blockTimes: any[] = [];
+  try {
+    const { data: bt, error: btErr } = await supabase.rpc('get_block_times_for_date', { plan_date: date });
+    if (!btErr && Array.isArray(bt)) blockTimes = bt as any[];
+  } catch {
+    blockTimes = [];
+  }
+
+  return <TocPrintClient date={date} detail={detail as any} rotationOrder={rotationOrder} blockTimes={blockTimes as any} />;
 }
