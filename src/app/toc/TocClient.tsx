@@ -8,7 +8,8 @@ type PublicPlanSummary = {
   plan_date: string; // YYYY-MM-DD
   slot: string;
   title: string;
-  notes: string | null;
+  // notes may be absent in older deployments / older RPC results; we hydrate on-demand.
+  notes?: string | null;
   share_expires_at: string | null;
 };
 
@@ -57,10 +58,20 @@ export default function TocClient({
   const [openPlan, setOpenPlan] = useState<PublicPlanDetail | null>(null);
   const [openPlanLoading, setOpenPlanLoading] = useState(false);
 
+  // Notes previews (hydrate from /api/public/plan as needed)
+  const [notesByPlanId, setNotesByPlanId] = useState<Record<string, string | null>>({});
+
+  // Share popover UI
+  const [shareOpenPlanId, setShareOpenPlanId] = useState<string | null>(null);
+  const [shareCopiedPlanId, setShareCopiedPlanId] = useState<string | null>(null);
+
   // Close drawer with ESC
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpenPlanId(null);
+      if (e.key === 'Escape') {
+        setOpenPlanId(null);
+        setShareOpenPlanId(null);
+      }
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
@@ -99,6 +110,40 @@ export default function TocClient({
     }
     return m;
   }, [plansByDate, selectedDate]);
+
+  async function ensureNotes(planId: string) {
+    if (!planId) return;
+    if (typeof notesByPlanId[planId] !== 'undefined') return;
+
+    try {
+      const res = await fetch(`/api/public/plan?id=${encodeURIComponent(planId)}`);
+      const j = await res.json();
+      if (!res.ok) throw new Error(j?.error ?? 'Failed');
+      const notes = (j?.plan?.notes ?? null) as string | null;
+      setNotesByPlanId((prev) => ({ ...prev, [planId]: notes }));
+    } catch {
+      setNotesByPlanId((prev) => ({ ...prev, [planId]: null }));
+    }
+  }
+
+  function planShareUrl(planId: string) {
+    if (typeof window === 'undefined') return `/p/${planId}`;
+    return `${window.location.origin}/p/${planId}`;
+  }
+
+  async function copyToClipboard(text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      try {
+        window.prompt('Copy this link:', text);
+      } catch {
+        // ignore
+      }
+      return false;
+    }
+  }
 
   const [rotationBlocks, setRotationBlocks] = useState<string[]>([]);
 
@@ -186,7 +231,13 @@ export default function TocClient({
         }
       />
 
-      <main style={styles.page}>
+      <main
+        style={styles.page}
+        onClick={() => {
+          // click-away closes share popover
+          if (shareOpenPlanId) setShareOpenPlanId(null);
+        }}
+      >
         <header style={styles.header}>
           <div>
             <div style={styles.headerKicker}>TOC</div>
@@ -338,48 +389,88 @@ export default function TocClient({
                       const isOpen = openPlanId === plan?.id;
                       const clickable = !!plan;
 
+                      const noteText = plan?.notes ?? (plan?.id ? notesByPlanId[plan.id] : null);
+
                       return (
                         <tr key={c.id} style={i % 2 === 0 ? styles.trEven : styles.trOdd}>
                           <td style={styles.tdLabel}>{slot || '—'}</td>
                           <td style={styles.td}>{c.name}</td>
-                          <td style={styles.td}>{c.room || '—'}</td>
-                          <td style={styles.td}>
-                            {plan?.notes?.trim() ? (
-                              <div style={{ whiteSpace: 'pre-wrap', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' as any }}>
-                                {plan.notes}
+                          <td style={{ ...styles.td, width: 90 }}>{c.room || '—'}</td>
+                          <td style={{ ...styles.td, minWidth: 260 }}>
+                            {noteText?.trim() ? (
+                              <div
+                                style={{
+                                  whiteSpace: 'pre-wrap',
+                                  overflow: 'hidden',
+                                  display: '-webkit-box',
+                                  WebkitLineClamp: 2,
+                                  WebkitBoxOrient: 'vertical' as any,
+                                }}
+                                title={noteText}
+                              >
+                                {noteText}
                               </div>
+                            ) : clickable ? (
+                              <button
+                                type="button"
+                                onClick={() => void ensureNotes(plan!.id)}
+                                style={{ ...styles.secondaryBtn, padding: '6px 8px' }}
+                              >
+                                Load notes
+                              </button>
                             ) : (
                               <span style={{ opacity: 0.6, fontWeight: 700 }}>—</span>
                             )}
                           </td>
-                          <td style={styles.tdRight}>
+                          <td style={{ ...styles.tdRight, width: 260 }}>
                             {clickable ? (
-                              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap', position: 'relative' }}>
                                 <button
                                   type="button"
-                                  onClick={() => setOpenPlanId(plan.id)}
+                                  onClick={() => {
+                                    setOpenPlanId(plan!.id);
+                                    void ensureNotes(plan!.id);
+                                  }}
                                   style={isOpen ? styles.primaryBtnActive : styles.primaryBtn}
                                 >
                                   View
                                 </button>
+
                                 <button
                                   type="button"
-                                  onClick={async () => {
-                                    const url = `${window.location.origin}/p/${plan.id}`;
-                                    try {
-                                      await navigator.clipboard.writeText(url);
-                                    } catch {
-                                      // fallback
-                                      window.prompt('Copy this link:', url);
-                                    }
+                                  onClick={() => {
+                                    setShareOpenPlanId((cur) => (cur === plan!.id ? null : plan!.id));
                                   }}
                                   style={styles.secondaryBtn}
                                 >
                                   Share
                                 </button>
+
+                                {shareOpenPlanId === plan!.id ? (
+                                  <div style={styles.sharePopover} onClick={(e) => e.stopPropagation()}>
+                                    <div style={styles.shareRow}>
+                                      <div style={styles.shareUrl}>{planShareUrl(plan!.id)}</div>
+                                      <button
+                                        type="button"
+                                        onClick={async () => {
+                                          const url = planShareUrl(plan!.id);
+                                          const ok = await copyToClipboard(url);
+                                          if (ok) {
+                                            setShareCopiedPlanId(plan!.id);
+                                            setTimeout(() => setShareCopiedPlanId((x) => (x === plan!.id ? null : x)), 1200);
+                                          }
+                                        }}
+                                        style={styles.copyBtn}
+                                      >
+                                        {shareCopiedPlanId === plan!.id ? 'Copied' : 'Copy'}
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : null}
+
                                 <button
                                   type="button"
-                                  onClick={() => window.open(`/p/${plan.id}?print=1`, '_blank', 'noopener,noreferrer')}
+                                  onClick={() => window.open(`/p/${plan!.id}?print=1`, '_blank', 'noopener,noreferrer')}
                                   style={styles.secondaryBtn}
                                 >
                                   Print
@@ -706,4 +797,30 @@ const styles: Record<string, React.CSSProperties> = {
   dayTop: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 },
   dot: { width: 10, height: 10, borderRadius: 999, background: RCS.gold },
   todayPill: { fontSize: 12, fontWeight: 900, padding: '2px 8px', borderRadius: 999, background: RCS.lightBlue, color: RCS.deepNavy },
+
+  sharePopover: {
+    position: 'absolute',
+    right: 0,
+    top: 'calc(100% + 6px)',
+    zIndex: 20,
+    background: RCS.white,
+    border: `1px solid ${RCS.deepNavy}`,
+    borderRadius: 10,
+    padding: 10,
+    minWidth: 320,
+    maxWidth: 440,
+    boxShadow: '0 14px 32px rgba(0,0,0,0.18)',
+  },
+  shareRow: { display: 'flex', gap: 10, alignItems: 'center' },
+  shareUrl: { fontSize: 12, opacity: 0.9, wordBreak: 'break-all', flex: 1 },
+  copyBtn: {
+    padding: '6px 8px',
+    borderRadius: 8,
+    border: `1px solid ${RCS.gold}`,
+    background: RCS.deepNavy,
+    color: RCS.white,
+    cursor: 'pointer',
+    fontWeight: 900,
+    whiteSpace: 'nowrap',
+  },
 };
