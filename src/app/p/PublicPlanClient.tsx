@@ -115,7 +115,22 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
   const printMode: 'blocks' | 'attendance' = printAttendanceForBlockId ? 'attendance' : 'blocks';
 
   return (
-    <main style={styles.page} data-print-mode={printMode}>
+    <div
+      className="no-print"
+      onClick={(e) => {
+        // Clicking outside the plan returns to /toc
+        if (e.target === e.currentTarget) window.location.href = '/toc';
+      }}
+      style={styles.backdrop}
+    >
+      <main
+        style={styles.page}
+        data-print-mode={printMode}
+        onClick={(e) => {
+          // prevent backdrop click
+          e.stopPropagation();
+        }}
+      >
       <header style={styles.header}>
         <div style={styles.headerTopRow}>
           <div>
@@ -250,6 +265,8 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
         @media print {
           body { background: white !important; }
           .no-print { display: none !important; }
+          /* ensure the plan prints without the backdrop */
+          main { border: none !important; }
 
           /* Default print mode: print selected block cards */
           main[data-print-mode="blocks"] [data-selected="false"] { display: none !important; }
@@ -263,6 +280,7 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
         }
       `}</style>
     </main>
+    </div>
   );
 }
 
@@ -291,6 +309,12 @@ const RCS = {
 } as const;
 
 const styles: Record<string, React.CSSProperties> = {
+  backdrop: {
+    minHeight: '100vh',
+    background: '#EEF2F7',
+    padding: 24,
+    boxSizing: 'border-box',
+  },
   page: {
     padding: 24,
     maxWidth: 980,
@@ -298,6 +322,8 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: 'system-ui',
     color: RCS.textDark,
     background: RCS.white,
+    border: `1px solid ${RCS.deepNavy}`,
+    borderRadius: 12,
   },
   header: {
     border: `1px solid ${RCS.deepNavy}`,
