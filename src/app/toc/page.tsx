@@ -32,10 +32,14 @@ export default async function TocPage({ searchParams }: { searchParams: Promise<
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  const { data, error } = await supabase.rpc('get_public_plans_for_week', { week_start: weekStart });
-  if (error) {
+  const [{ data: plansData, error: plansErr }, { data: classesData, error: classesErr }] = await Promise.all([
+    supabase.rpc('get_public_plans_for_week', { week_start: weekStart }),
+    supabase.rpc('get_public_classes'),
+  ]);
+
+  if (plansErr || classesErr) {
     notFound();
   }
 
-  return <TocClient weekStart={weekStart} plans={(data ?? []) as any} />;
+  return <TocClient weekStart={weekStart} plans={(plansData ?? []) as any} classes={(classesData ?? []) as any} />;
 }

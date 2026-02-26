@@ -645,6 +645,35 @@ $$;
 revoke all on function get_public_day_plan_by_id(uuid) from public;
 grant execute on function get_public_day_plan_by_id(uuid) to anon;
 
+-- Public classes (block labels + names) for TOC display.
+-- SECURITY DEFINER so anon callers can access without opening table RLS.
+create or replace function get_public_classes()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  out jsonb;
+begin
+  select coalesce(jsonb_agg(jsonb_build_object(
+      'id', c.id,
+      'block_label', c.block_label,
+      'name', c.name,
+      'room', c.room,
+      'sort_order', c.sort_order
+    ) order by c.sort_order asc nulls last, c.name asc), '[]'::jsonb)
+  into out
+  from classes c
+  where c.block_label is not null;
+
+  return out;
+end;
+$$;
+
+revoke all on function get_public_classes() from public;
+grant execute on function get_public_classes() to anon;
+
 -- Week calendar payload: published plans for Mon–Fri of the given week_start (Monday)
 create or replace function get_public_plans_for_week(week_start date)
 returns jsonb
