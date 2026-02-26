@@ -60,10 +60,10 @@ export async function POST(req: Request) {
   const base = adminDb.from('day_plans');
 
   // 1) Existing non-trashed
+  // NOTE: The DB unique constraint is (plan_date, slot). friday_type is metadata only.
+  // So we must NOT filter by friday_type here, or we can miss the existing row and then hit a duplicate insert.
   {
-    let q = base.select('id').eq('plan_date', date).eq('slot', slot).is('trashed_at', null);
-    // If friday_type is provided, match it; otherwise ignore.
-    if (fridayType) q = q.eq('friday_type', fridayType);
+    const q = base.select('id,friday_type').eq('plan_date', date).eq('slot', slot).is('trashed_at', null);
 
     const { data, error } = await q.limit(1);
     if (error)
@@ -79,13 +79,33 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     const row = (data?.[0] as any) ?? null;
-    if (row?.id) return NextResponse.json({ id: row.id, action: 'opened', usingServiceRole });
+    if (row?.id) {
+      if (fridayType && row.friday_type !== fridayType) {
+        const { error: updErr } = await adminDb
+          .from('day_plans')
+          .update({ friday_type: fridayType, updated_at: new Date().toISOString() })
+          .eq('id', row.id);
+        if (updErr)
+          return NextResponse.json(
+            {
+              step: 'update_friday_type_existing',
+              error: updErr.message,
+              code: (updErr as any)?.code,
+              details: (updErr as any)?.details,
+              hint: (updErr as any)?.hint,
+              usingServiceRole,
+            },
+            { status: 400 }
+          );
+      }
+
+      return NextResponse.json({ id: row.id, action: 'opened', usingServiceRole });
+    }
   }
 
   // 2) Existing trashed: restore
   {
-    let q = base.select('id').eq('plan_date', date).eq('slot', slot).not('trashed_at', 'is', null);
-    if (fridayType) q = q.eq('friday_type', fridayType);
+    const q = base.select('id,friday_type').eq('plan_date', date).eq('slot', slot).not('trashed_at', 'is', null);
 
     const { data, error } = await q.limit(1);
     if (error)
@@ -102,10 +122,10 @@ export async function POST(req: Request) {
       );
     const row = (data?.[0] as any) ?? null;
     if (row?.id) {
-      const { error: updErr } = await adminDb
-        .from('day_plans')
-        .update({ trashed_at: null, updated_at: new Date().toISOString() })
-        .eq('id', row.id);
+      const patch: any = { trashed_at: null, updated_at: new Date().toISOString() };
+      if (fridayType && row.friday_type !== fridayType) patch.friday_type = fridayType;
+
+      const { error: updErr } = await adminDb.from('day_plans').update(patch).eq('id', row.id);
       if (updErr)
         return NextResponse.json(
           {
