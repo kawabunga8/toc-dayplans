@@ -59,6 +59,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
 
   const [openingSteps, setOpeningSteps] = useState<OpeningStep[]>([]);
   const [phases, setPhases] = useState<Phase[]>([]);
+  const [dragPhaseIdx, setDragPhaseIdx] = useState<number | null>(null);
   const [activityOptions, setActivityOptions] = useState<ActivityOption[]>([]);
   const [whatIfItems, setWhatIfItems] = useState<WhatIf[]>([]);
 
@@ -562,7 +563,36 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
           <div style={styles.sectionHeader}>Lesson Flow</div>
           <div style={{ display: 'grid', gap: 8 }}>
             {phases.map((p, idx) => (
-              <div key={idx} style={styles.phaseRow}>
+              <div
+                key={idx}
+                style={{
+                  ...styles.phaseRow,
+                  opacity: dragPhaseIdx === idx ? 0.6 : 1,
+                  borderStyle: dragPhaseIdx !== null && dragPhaseIdx !== idx ? 'dashed' : (styles.phaseRow as any).borderStyle,
+                }}
+                draggable={!isDemo}
+                onDragStart={() => {
+                  if (isDemo) return;
+                  setDragPhaseIdx(idx);
+                }}
+                onDragEnd={() => setDragPhaseIdx(null)}
+                onDragOver={(e) => {
+                  if (isDemo) return;
+                  e.preventDefault();
+                }}
+                onDrop={() => {
+                  if (isDemo) return;
+                  if (dragPhaseIdx === null || dragPhaseIdx === idx) return;
+                  setPhases((prev) => {
+                    const copy = [...prev];
+                    const [moved] = copy.splice(dragPhaseIdx, 1);
+                    copy.splice(idx, 0, moved);
+                    return copy;
+                  });
+                  setDragPhaseIdx(null);
+                }}
+              >
+                <div style={styles.dragHandle} title="Drag to reorder">⋮⋮</div>
                 <input value={p.time_text} onChange={(e) => setPhases((prev) => prev.map((x, i) => (i === idx ? { ...x, time_text: e.target.value } : x)))} style={styles.input} disabled={isDemo} placeholder="Time" />
                 <input value={p.phase_text} onChange={(e) => setPhases((prev) => prev.map((x, i) => (i === idx ? { ...x, phase_text: e.target.value } : x)))} style={styles.input} disabled={isDemo} placeholder="Phase" />
                 <input value={p.activity_text} onChange={(e) => setPhases((prev) => prev.map((x, i) => (i === idx ? { ...x, activity_text: e.target.value } : x)))} style={styles.input} disabled={isDemo} placeholder="Activity" />
@@ -738,7 +768,8 @@ const styles: Record<string, React.CSSProperties> = {
   section: { marginTop: 14, border: `1px solid ${RCS.deepNavy}`, borderRadius: 12, padding: 12, background: RCS.lightBlue },
   sectionHeader: { fontWeight: 900, color: RCS.deepNavy, borderLeft: `6px solid ${RCS.gold}`, paddingLeft: 10, marginBottom: 10 },
   row3: { display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'center' },
-  phaseRow: { display: 'grid', gridTemplateColumns: '110px 1fr 1fr 1fr auto', gap: 10, alignItems: 'center' },
+  phaseRow: { display: 'grid', gridTemplateColumns: '28px 110px 1fr 1fr 1fr auto', gap: 10, alignItems: 'center', border: `1px solid rgba(31,78,121,0.35)`, borderRadius: 12, padding: 8, background: 'rgba(255,255,255,0.9)' },
+  dragHandle: { cursor: 'grab', userSelect: 'none', fontWeight: 900, opacity: 0.75, textAlign: 'center' },
   optionCard: { border: `1px solid ${RCS.deepNavy}`, borderRadius: 12, padding: 12, background: RCS.white },
   whatIfRow: { display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 10, alignItems: 'center' },
 };
