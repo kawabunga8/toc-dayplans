@@ -332,6 +332,59 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
     }
   }
 
+  async function recalcTimesFromDefaults() {
+    if (!plan) return;
+
+    const ok = window.confirm('Recalculate start/end times from Block Rotation + Block Times defaults? This will update the stored times for this plan (but will NOT change class/room/details).');
+    if (!ok) return;
+
+    setStatus('saving');
+    setError(null);
+
+    try {
+      const supabase = getSupabaseClient();
+
+      // Rotation order for this date
+      const { data: rot, error: rotErr } = await supabase.rpc('get_rotation_for_date', {
+        plan_date: plan.plan_date,
+        friday_type: plan.friday_type,
+      });
+      if (rotErr) throw rotErr;
+      const labels: string[] = Array.isArray(rot) ? rot.map((x: any) => String(x).trim()).filter(Boolean) : [];
+      if (labels.length === 0) throw new Error('No rotation defaults found for this date.');
+
+      const idx = labels.findIndex((b) => String(b).trim().toUpperCase() === String(plan.slot ?? '').trim().toUpperCase());
+      if (idx < 0) throw new Error(`This plan slot (${plan.slot}) was not found in the rotation for ${plan.plan_date}.`);
+
+      const templateKey: 'mon_thu' | 'fri' = isFridayLocal(plan.plan_date) ? 'fri' : 'mon_thu';
+      if (templateKey === 'fri' && !plan.friday_type) throw new Error('Friday Type is required.');
+
+      const slots = templateKey === 'fri' ? ['P1', 'P2', 'Chapel', 'Lunch', 'P5', 'P6'] : ['P1', 'P2', 'Flex', 'Lunch', 'P5', 'P6'];
+      const slotName = slots[idx];
+      if (!slotName) throw new Error('Could not map rotation position to a time slot.');
+
+      const times = await loadTimeDefaults(supabase, templateKey, plan.plan_date);
+      const t = times.find((x) => String(x.slot) === String(slotName));
+      if (!t) throw new Error(`No block time defaults found for slot ${slotName} on ${plan.plan_date}.`);
+
+      const start = String(t.start_time).slice(0, 5);
+      const end = String(t.end_time).slice(0, 5);
+
+      // Update stored times for all blocks in this plan (time-only)
+      const { error: updErr } = await supabase
+        .from('day_plan_blocks')
+        .update({ start_time: start, end_time: end })
+        .eq('day_plan_id', plan.id);
+      if (updErr) throw updErr;
+
+      await load();
+      setStatus('idle');
+    } catch (e: any) {
+      setStatus('error');
+      setError(e?.message ?? 'Failed to recalculate times');
+    }
+  }
+
   async function revoke() {
     setStatus('revoking');
     setError(null);
@@ -528,6 +581,9 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                   <button onClick={saveBlocks} disabled={status !== 'idle'} style={styles.primaryBtn}>
                     {status === 'saving' ? 'Saving…' : 'Save blocks'}
+                  </button>
+                  <button onClick={recalcTimesFromDefaults} disabled={status !== 'idle'} style={styles.secondaryBtn}>
+                    Fix times from defaults
                   </button>
                 </div>
               </div>
