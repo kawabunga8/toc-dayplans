@@ -196,7 +196,12 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
       }
 
       const times = await loadTimeDefaults(supabase, templateKey, plan.plan_date);
-      const mapping = scheduleMapping(plan.plan_date, plan.friday_type);
+      const mappingAll = scheduleMapping(plan.plan_date, plan.friday_type);
+      const wantedLabel = String(plan.slot ?? '').trim().toUpperCase();
+      const mapping = mappingAll.filter((m) => String(m.block_label ?? '').toUpperCase() === wantedLabel);
+      if (mapping.length === 0) {
+        throw new Error(`No schedule mapping found for block “${plan.slot}” on ${plan.plan_date}.`);
+      }
 
       // classes lookup by block_label
       const classByLabel = new Map<string, ClassRow>();
@@ -213,11 +218,13 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
         const isLunch = label === 'LUNCH';
         const isChapel = label === 'CHAPEL';
         const isFlex = label === 'FLEX';
+        const isCle = label === 'CLE';
 
-        const c = label && !isLunch && !isChapel && !isFlex ? classByLabel.get(label) : undefined;
+        const c = label && !isLunch && !isChapel && !isFlex && !isCle ? classByLabel.get(label) : undefined;
 
-        const room = c?.room ?? (isLunch ? '—' : isChapel ? '—' : '—');
-        const className = c?.name ?? (isLunch ? 'Lunch' : isChapel ? 'Chapel' : isFlex ? 'Flex' : label);
+        const room = c?.room ?? '—';
+        const className =
+          c?.name ?? (isLunch ? 'Lunch' : isChapel ? 'Chapel' : isFlex ? 'Flex' : isCle ? 'CLE' : label);
 
         const details = m.details ?? null;
 
