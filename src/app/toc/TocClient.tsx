@@ -80,14 +80,69 @@ export default function TocClient({
   const isSelectedFriday = useMemo(() => isFridayLocal(selectedDate), [selectedDate]);
 
   useEffect(() => {
-    // Require explicit choice on Fridays.
+    // Friday behavior:
+    // - If published plans exist for only Day 1 or only Day 2, default to that.
+    // - If both have published plans, prompt the user to choose.
+    // - If neither has published plans, fall back to Day 1 (so rotation can still render).
     if (!isSelectedFriday) {
       setSelectedFridayType('');
       return;
     }
-    if (!selectedFridayType) setSelectedFridayType('day1');
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(`/api/public/friday-types?date=${encodeURIComponent(selectedDate)}`);
+        const j = await res.json();
+        if (!res.ok) throw new Error(j?.error ?? 'Failed');
+
+        const hasDay1 = !!j?.hasDay1;
+        const hasDay2 = !!j?.hasDay2;
+
+        if (cancelled) return;
+
+        // If the current selection points to a day with no published plans, prefer the other.
+        if (selectedFridayType === 'day1' && !hasDay1 && hasDay2) {
+          setSelectedFridayType('day2');
+          return;
+        }
+        if (selectedFridayType === 'day2' && !hasDay2 && hasDay1) {
+          setSelectedFridayType('day1');
+          return;
+        }
+
+        // If not selected yet, pick an appropriate default.
+        if (!selectedFridayType) {
+          if (hasDay1 && !hasDay2) {
+            setSelectedFridayType('day1');
+            return;
+          }
+          if (hasDay2 && !hasDay1) {
+            setSelectedFridayType('day2');
+            return;
+          }
+          if (hasDay1 && hasDay2) {
+            const ok = window.confirm(
+              'Published plans exist for both Friday Day 1 and Day 2.\n\nPress OK for Day 1, or Cancel for Day 2.'
+            );
+            setSelectedFridayType(ok ? 'day1' : 'day2');
+            return;
+          }
+
+          // Neither day has published plans — still choose one so rotation/times load.
+          setSelectedFridayType('day1');
+        }
+      } catch {
+        // If the helper endpoint fails, preserve previous behavior.
+        if (!cancelled && !selectedFridayType) setSelectedFridayType('day1');
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSelectedFriday]);
+  }, [isSelectedFriday, selectedDate]);
 
   const plansByDate = useMemo(() => {
     const m = new Map<string, PublicPlanSummary[]>();
