@@ -147,12 +147,16 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
                 'Students are self-sufficient and generally know what they are doing — your main job is to keep the room on task.',
                 'If a student is stuck, ask them to check the course instructions first, then ask their partner.',
                 'Partners are already chosen (students know who they are with).',
+                'Food policy: water is allowed. Food is not allowed unless students ask.',
+                'Audio devices: allowed when a student asks.',
                 'Mr. Kawamura is reachable on Microsoft Teams if anything urgent comes up.',
               ].join('\n')
             : isMusic
               ? [
                   'Students know the warm-up routine. Keep the rehearsal moving and keep students on task.',
                   'Take attendance during the warm-up window.',
+                  'Food policy: water is allowed. Food is not allowed unless students ask.',
+                  'Audio devices: allowed when a student asks.',
                   'If you need support, follow the TA/student leaders when present.',
                   'Mr. Kawamura is reachable on Microsoft Teams if anything urgent comes up.',
                 ].join('\n')
@@ -160,17 +164,23 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
                 ? [
                     'This class is student-led. Your main job is attendance and supervision.',
                     'Encourage respectful participation and keep students on task.',
+                    'Food policy: water is allowed. Food is not allowed unless students ask.',
+                    'Audio devices: allowed when a student asks.',
                     'If something urgent comes up, contact Mr. Kawamura on Microsoft Teams.',
                   ].join('\n')
                 : isCle
                   ? [
                       'This is self-directed work time. Students should know what they are working on.',
                       'Take attendance, circulate, and keep students on task.',
+                      'Food policy: water is allowed. Food is not allowed unless students ask.',
+                      'Audio devices: allowed when a student asks.',
                       'If something urgent comes up, contact Mr. Kawamura on Microsoft Teams.',
                     ].join('\n')
                   : [
                       'Take attendance and keep students on task.',
                       'Follow the plan below. If a TA is present, follow their lead.',
+                      'Food policy: water is allowed. Food is not allowed unless students ask.',
+                      'Audio devices: allowed when a student asks.',
                       'Mr. Kawamura is reachable on Microsoft Teams if anything urgent comes up.',
                     ].join('\n');
 
