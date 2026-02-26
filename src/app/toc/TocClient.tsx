@@ -126,6 +126,28 @@ export default function TocClient({
     }
   }
 
+  // Auto-hydrate notes for all published plans on the selected date (so Notes column is useful at a glance).
+  useEffect(() => {
+    const ids = (plansByDate.get(selectedDate) ?? []).map((p) => p.id).filter(Boolean);
+    const missing = ids.filter((id) => typeof notesByPlanId[id] === 'undefined');
+    if (missing.length === 0) return;
+
+    let cancelled = false;
+    void (async () => {
+      await Promise.all(
+        missing.map(async (id) => {
+          if (cancelled) return;
+          await ensureNotes(id);
+        })
+      );
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDate, plansByDate]);
+
   function planShareUrl(planId: string) {
     if (typeof window === 'undefined') return `/p/${planId}`;
     return `${window.location.origin}/p/${planId}`;
@@ -410,14 +432,6 @@ export default function TocClient({
                               >
                                 {noteText}
                               </div>
-                            ) : clickable ? (
-                              <button
-                                type="button"
-                                onClick={() => void ensureNotes(plan!.id)}
-                                style={{ ...styles.secondaryBtn, padding: '6px 8px' }}
-                              >
-                                Load notes
-                              </button>
                             ) : (
                               <span style={{ opacity: 0.6, fontWeight: 700 }}>—</span>
                             )}
