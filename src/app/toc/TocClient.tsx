@@ -683,16 +683,20 @@ const styles: Record<string, React.CSSProperties> = {
   navBtns: { display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' },
 
   secondaryLink: {
-    padding: '8px 10px',
+    padding: '6px 10px',
     borderRadius: 10,
     border: `1px solid ${RCS.gold}`,
     background: RCS.white,
     color: RCS.deepNavy,
     textDecoration: 'none',
     fontWeight: 900,
+    display: 'inline-flex',
+    alignItems: 'center',
+    lineHeight: 1,
+    whiteSpace: 'nowrap',
   },
   secondaryBtn: {
-    padding: '8px 10px',
+    padding: '6px 10px',
     borderRadius: 10,
     border: `1px solid ${RCS.gold}`,
     background: 'transparent',
@@ -700,6 +704,10 @@ const styles: Record<string, React.CSSProperties> = {
     textDecoration: 'none',
     fontWeight: 900,
     cursor: 'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    lineHeight: 1,
+    whiteSpace: 'nowrap',
   },
   dateInput: {
     padding: '8px 10px',
@@ -730,13 +738,17 @@ const styles: Record<string, React.CSSProperties> = {
   tdLabel: { padding: 10, borderBottom: `1px solid ${RCS.deepNavy}`, color: RCS.midBlue, fontWeight: 800, width: 70 },
 
   primaryBtn: {
-    padding: '8px 10px',
+    padding: '6px 10px',
     borderRadius: 10,
     border: `1px solid ${RCS.gold}`,
     background: RCS.deepNavy,
     color: RCS.white,
     cursor: 'pointer',
     fontWeight: 900,
+    display: 'inline-flex',
+    alignItems: 'center',
+    lineHeight: 1,
+    whiteSpace: 'nowrap',
   },
   primaryBtnActive: {
     padding: '8px 10px',

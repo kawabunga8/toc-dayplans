@@ -196,12 +196,36 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
       }
 
       const times = await loadTimeDefaults(supabase, templateKey, plan.plan_date);
-      const mappingAll = scheduleMapping(plan.plan_date, plan.friday_type);
-      const wantedLabel = String(plan.slot ?? '').trim().toUpperCase();
-      const mapping = mappingAll.filter((m) => String(m.block_label ?? '').toUpperCase() === wantedLabel);
-      if (mapping.length === 0) {
-        throw new Error(`No schedule mapping found for block “${plan.slot}” on ${plan.plan_date}.`);
+
+      // Use DB-driven rotation order for this date (so schedule follows Admin → Block Rotation).
+      // Falls back to legacy hardcoded mapping if rotation is missing.
+      let rotationLabels: string[] = [];
+      try {
+        const { data: rot, error: rotErr } = await supabase.rpc('get_rotation_for_date', {
+          plan_date: plan.plan_date,
+          friday_type: plan.friday_type,
+        });
+        if (!rotErr && Array.isArray(rot)) {
+          rotationLabels = rot.map((x: any) => String(x).trim()).filter(Boolean);
+        }
+      } catch {
+        rotationLabels = [];
       }
+
+      const slots = templateKey === 'fri' ? ['P1', 'P2', 'Chapel', 'Lunch', 'P5', 'P6'] : ['P1', 'P2', 'Flex', 'Lunch', 'P5', 'P6'];
+      const mappingAll = rotationLabels.length === slots.length
+        ? slots.map((slot, idx) => ({
+            slot,
+            block_label: String(rotationLabels[idx] ?? '').trim(),
+            fallbackStart: '',
+            fallbackEnd: '',
+          }))
+        : scheduleMapping(plan.plan_date, plan.friday_type);
+
+      const wantedLabel = String(plan.slot ?? '').trim().toUpperCase();
+      const mapping = mappingAll.filter((m: any) => String(m.block_label ?? '').trim().toUpperCase() === wantedLabel);
+      if (mapping.length === 0) throw new Error(`No schedule mapping found for block “${plan.slot}” on ${plan.plan_date}.`);
+
 
       // classes lookup by block_label
       const classByLabel = new Map<string, ClassRow>();
@@ -226,7 +250,7 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
         const className =
           c?.name ?? (isLunch ? 'Lunch' : isChapel ? 'Chapel' : isFlex ? 'Flex' : isCle ? 'CLE' : label);
 
-        const details = m.details ?? null;
+        const details = (m as any).details ?? null;
 
         return {
           day_plan_id: plan.id,
