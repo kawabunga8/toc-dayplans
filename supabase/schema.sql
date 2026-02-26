@@ -39,6 +39,11 @@ alter table day_plans add column if not exists trashed_at timestamptz;
 
 -- Allow multiple plans per day; prevent duplicates per (date, slot, friday_type)
 -- Use COALESCE so non-Friday (null friday_type) still participates in uniqueness.
+-- Back-compat: older schemas may have an incorrect uniqueness constraint on plan_date alone.
+-- Drop it if present.
+alter table day_plans drop constraint if exists day_plans_plan_date_uq;
+drop index if exists day_plans_plan_date_uq;
+
 create unique index if not exists day_plans_date_slot_friday_uq
   on day_plans(plan_date, slot, ((coalesce(friday_type, ''))));
 
