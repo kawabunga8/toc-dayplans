@@ -49,6 +49,19 @@ export default function BlockTimesClient() {
     fri_day2: ['E', 'F', 'Chapel', 'Lunch', 'G', 'H'],
   });
 
+  useEffect(() => {
+    // enforce 6 rows for each set
+    setRotSets((prev) => ({
+      mon: normalize6(prev.mon),
+      tue: normalize6(prev.tue),
+      wed: normalize6(prev.wed),
+      thu: normalize6(prev.thu),
+      fri_day1: normalize6(prev.fri_day1),
+      fri_day2: normalize6(prev.fri_day2),
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // (moved) block time draft rows are now split into monThuRows + friRows
 
   const title = useMemo(() => {
@@ -232,10 +245,17 @@ export default function BlockTimesClient() {
         if (closeErr) throw closeErr;
       }
 
+      // validate
+      for (const c of configs) {
+        const b6 = normalize6(c.blocks ?? []).map((b) => String(b).trim());
+        if (b6.some((b) => !b)) {
+          throw new Error('Rotation must have 6 non-empty rows for every day.');
+        }
+      }
+
       const payload = configs.flatMap((c) =>
-        (c.blocks ?? [])
+        normalize6(c.blocks ?? [])
           .map((b) => String(b).trim())
-          .filter(Boolean)
           .map((block, idx) => ({
             day_of_week: c.day,
             friday_type: c.ft,
@@ -357,12 +377,14 @@ export default function BlockTimesClient() {
                 ))}
               </datalist>
 
-              <RotationEditor title="Monday" blocks={rotSets.mon} onChange={(b) => setRotSets((p) => ({ ...p, mon: b }))} disabled={isDemo || rotStatus === 'saving' || rotStatus === 'loading'} />
-              <RotationEditor title="Tuesday" blocks={rotSets.tue} onChange={(b) => setRotSets((p) => ({ ...p, tue: b }))} disabled={isDemo || rotStatus === 'saving' || rotStatus === 'loading'} />
-              <RotationEditor title="Wednesday" blocks={rotSets.wed} onChange={(b) => setRotSets((p) => ({ ...p, wed: b }))} disabled={isDemo || rotStatus === 'saving' || rotStatus === 'loading'} />
-              <RotationEditor title="Thursday" blocks={rotSets.thu} onChange={(b) => setRotSets((p) => ({ ...p, thu: b }))} disabled={isDemo || rotStatus === 'saving' || rotStatus === 'loading'} />
-              <RotationEditor title="Friday (Day 1)" blocks={rotSets.fri_day1} onChange={(b) => setRotSets((p) => ({ ...p, fri_day1: b }))} disabled={isDemo || rotStatus === 'saving' || rotStatus === 'loading'} />
-              <RotationEditor title="Friday (Day 2)" blocks={rotSets.fri_day2} onChange={(b) => setRotSets((p) => ({ ...p, fri_day2: b }))} disabled={isDemo || rotStatus === 'saving' || rotStatus === 'loading'} />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(220px, 1fr))', gap: 12, alignItems: 'start' }}>
+                <RotationColumn title="Mon" blocks={rotSets.mon} onChange={(b) => setRotSets((p) => ({ ...p, mon: b }))} disabled={isDemo || rotStatus === 'saving' || rotStatus === 'loading'} />
+                <RotationColumn title="Tue" blocks={rotSets.tue} onChange={(b) => setRotSets((p) => ({ ...p, tue: b }))} disabled={isDemo || rotStatus === 'saving' || rotStatus === 'loading'} />
+                <RotationColumn title="Wed" blocks={rotSets.wed} onChange={(b) => setRotSets((p) => ({ ...p, wed: b }))} disabled={isDemo || rotStatus === 'saving' || rotStatus === 'loading'} />
+                <RotationColumn title="Thu" blocks={rotSets.thu} onChange={(b) => setRotSets((p) => ({ ...p, thu: b }))} disabled={isDemo || rotStatus === 'saving' || rotStatus === 'loading'} />
+                <RotationColumn title="Fri D1" blocks={rotSets.fri_day1} onChange={(b) => setRotSets((p) => ({ ...p, fri_day1: b }))} disabled={isDemo || rotStatus === 'saving' || rotStatus === 'loading'} />
+                <RotationColumn title="Fri D2" blocks={rotSets.fri_day2} onChange={(b) => setRotSets((p) => ({ ...p, fri_day2: b }))} disabled={isDemo || rotStatus === 'saving' || rotStatus === 'loading'} />
+              </div>
 
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                 <button
@@ -517,7 +539,13 @@ function defaultTimes(template: TemplateKey, slot: string): { start: string; end
   }
 }
 
-function RotationEditor({
+function normalize6(arr: string[]): string[] {
+  const out = arr.slice(0, 6);
+  while (out.length < 6) out.push('');
+  return out;
+}
+
+function RotationColumn({
   title,
   blocks,
   onChange,
@@ -528,39 +556,27 @@ function RotationEditor({
   onChange: (next: string[]) => void;
   disabled: boolean;
 }) {
+  const b6 = normalize6(blocks);
+
   return (
     <div style={{ border: '1px solid #1F4E79', borderRadius: 12, padding: 12, background: '#FFFFFF' }}>
       <div style={{ fontWeight: 900, color: '#1F4E79', marginBottom: 10 }}>{title}</div>
       <div style={{ display: 'grid', gap: 8 }}>
-        {blocks.map((b, i) => (
-          <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <div style={{ width: 28, fontWeight: 900, color: '#2E75B6' }}>{i + 1}.</div>
+        {b6.map((b, i) => (
+          <div key={i} style={{ display: 'grid', gap: 6 }}>
+            <div style={{ fontSize: 12, fontWeight: 900, color: '#2E75B6' }}>Row {i + 1}</div>
             <input
               value={b}
               list="rotation-labels"
-              onChange={(e) => onChange(blocks.map((x, idx) => (idx === i ? e.target.value : x)))}
-              style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #1F4E79', background: '#FFFFFF', color: '#1A1A1A', flex: 1 }}
+              onChange={(e) => {
+                const next = b6.map((x, idx) => (idx === i ? e.target.value : x));
+                onChange(next);
+              }}
+              style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #1F4E79', background: '#FFFFFF', color: '#1A1A1A' }}
               disabled={disabled}
             />
-            <button
-              type="button"
-              onClick={() => onChange(blocks.filter((_, idx) => idx !== i))}
-              style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #C9A84C', background: 'transparent', color: '#1F4E79', cursor: 'pointer', fontWeight: 900 }}
-              disabled={disabled}
-            >
-              Remove
-            </button>
           </div>
         ))}
-
-        <button
-          type="button"
-          onClick={() => onChange([...blocks, ''])}
-          style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #C9A84C', background: 'transparent', color: '#1F4E79', cursor: 'pointer', fontWeight: 900, width: 'fit-content' }}
-          disabled={disabled}
-        >
-          + Add block
-        </button>
       </div>
     </div>
   );
