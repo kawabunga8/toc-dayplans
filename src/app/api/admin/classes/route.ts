@@ -34,7 +34,9 @@ export async function GET() {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const db = service ? createClient(url, service, { auth: { persistSession: false } }) : supabase;
+  const usingServiceRole = !!service;
+  const db = usingServiceRole ? createClient(url, service, { auth: { persistSession: false } }) : supabase;
+  console.log('[api/admin/classes] usingServiceRole=', usingServiceRole);
 
   const { data, error } = await db
     .from('classes')
@@ -43,6 +45,9 @@ export async function GET() {
     .order('sort_order', { ascending: true, nullsFirst: false })
     .order('name', { ascending: true });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-  return NextResponse.json({ rows: data ?? [] });
+  if (error) {
+    console.log('[api/admin/classes] query error', { message: error.message, details: (error as any)?.details, hint: (error as any)?.hint, code: (error as any)?.code });
+    return NextResponse.json({ error: error.message, usingServiceRole }, { status: 400 });
+  }
+  return NextResponse.json({ rows: data ?? [], usingServiceRole });
 }

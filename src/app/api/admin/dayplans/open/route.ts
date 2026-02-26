@@ -53,7 +53,9 @@ export async function POST(req: Request) {
 
   // Use service role for the actual open/create/restore operation when available.
   // This avoids RLS edge cases (e.g., restore/update blocked) that cause silent no-op in the UI.
-  const adminDb = service ? createClient(url, service, { auth: { persistSession: false } }) : supabase;
+  const usingServiceRole = !!service;
+  const adminDb = usingServiceRole ? createClient(url, service, { auth: { persistSession: false } }) : supabase;
+  console.log('[api/admin/dayplans/open] usingServiceRole=', usingServiceRole);
 
   const base = adminDb.from('day_plans');
 
@@ -64,9 +66,9 @@ export async function POST(req: Request) {
     if (fridayType) q = q.eq('friday_type', fridayType);
 
     const { data, error } = await q.limit(1);
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) return NextResponse.json({ error: error.message, usingServiceRole }, { status: 400 });
     const row = (data?.[0] as any) ?? null;
-    if (row?.id) return NextResponse.json({ id: row.id, action: 'opened' });
+    if (row?.id) return NextResponse.json({ id: row.id, action: 'opened', usingServiceRole });
   }
 
   // 2) Existing trashed: restore
@@ -75,15 +77,15 @@ export async function POST(req: Request) {
     if (fridayType) q = q.eq('friday_type', fridayType);
 
     const { data, error } = await q.limit(1);
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) return NextResponse.json({ error: error.message, usingServiceRole }, { status: 400 });
     const row = (data?.[0] as any) ?? null;
     if (row?.id) {
       const { error: updErr } = await adminDb
         .from('day_plans')
         .update({ trashed_at: null, updated_at: new Date().toISOString() })
         .eq('id', row.id);
-      if (updErr) return NextResponse.json({ error: updErr.message }, { status: 400 });
-      return NextResponse.json({ id: row.id, action: 'restored' });
+      if (updErr) return NextResponse.json({ error: updErr.message, usingServiceRole }, { status: 400 });
+      return NextResponse.json({ id: row.id, action: 'restored', usingServiceRole });
     }
   }
 
@@ -97,7 +99,7 @@ export async function POST(req: Request) {
   };
 
   const { data: created, error: insErr } = await adminDb.from('day_plans').insert(payload).select('id').single();
-  if (insErr) return NextResponse.json({ error: insErr.message }, { status: 400 });
+  if (insErr) return NextResponse.json({ error: insErr.message, usingServiceRole }, { status: 400 });
 
-  return NextResponse.json({ id: (created as any).id, action: 'created' });
+  return NextResponse.json({ id: (created as any).id, action: 'created', usingServiceRole });
 }
