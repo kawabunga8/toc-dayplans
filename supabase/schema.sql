@@ -30,17 +30,24 @@ create table if not exists day_plans (
   constraint friday_type_check check (friday_type in ('day1','day2') or friday_type is null)
 );
 
+-- Migrations/back-compat: older DBs may be missing columns
+alter table day_plans add column if not exists slot text not null default 'General';
+alter table day_plans add column if not exists visibility text not null default 'private';
+alter table day_plans add column if not exists share_token_hash text;
+alter table day_plans add column if not exists share_expires_at timestamptz;
+alter table day_plans add column if not exists trashed_at timestamptz;
+
 -- Allow multiple plans per day; prevent duplicates per (date, slot, friday_type)
 -- Use COALESCE so non-Friday (null friday_type) still participates in uniqueness.
+-- Back-compat: older schemas may have an incorrect uniqueness constraint on plan_date alone.
+-- Drop it if present.
+alter table day_plans drop constraint if exists day_plans_plan_date_uq;
+drop index if exists day_plans_plan_date_uq;
+
 create unique index if not exists day_plans_date_slot_friday_uq
   on day_plans(plan_date, slot, ((coalesce(friday_type, ''))));
 
 create index if not exists day_plans_trashed_at_idx on day_plans(trashed_at);
-
--- Add missing columns to existing day_plans table (for migrations)
-alter table day_plans add column if not exists trashed_at timestamptz;
-alter table day_plans add column if not exists visibility text default 'private';
-alter table day_plans add column if not exists slot text default 'General';
 
 -- BLOCKS (schedule entries for the day)
 create table if not exists day_plan_blocks (
@@ -72,6 +79,19 @@ create table if not exists classes (
   block_label text,
   created_at timestamptz not null default now()
 );
+
+-- Seed special "non-course" blocks so they can have TOC templates and be referenced by schedule/rotation.
+-- (Safe to run multiple times; only inserts if missing.)
+insert into classes (name, room, sort_order, block_label)
+select v.name, null, v.sort_order, v.block_label
+from (
+  values
+    ('Flex', 900, 'Flex'),
+    ('Career Life Education', 901, 'CLE'),
+    ('Lunch', 902, 'Lunch'),
+    ('Chapel', 903, 'Chapel')
+) as v(name, sort_order, block_label)
+where not exists (select 1 from classes c where upper(c.block_label) = upper(v.block_label));
 
 create table if not exists enrollments (
   class_id uuid not null references classes(id) on delete cascade,
@@ -115,75 +135,203 @@ as $$
   );
 $$;
 
+-- Helper: staff_role
+create or replace function staff_role()
+returns text
+language sql
+stable
+as $$
+  select sp.role
+  from staff_profiles sp
+  where sp.user_id = auth.uid()
+  limit 1;
+$$;
+
+-- Helper: can_write (demo accounts are read-only)
+create or replace function can_write()
+returns boolean
+language sql
+stable
+as $$
+  select is_staff() and coalesce(staff_role(), '') <> 'demo';
+$$;
+
 -- Staff profiles: allow users to read their own row
 -- (Do NOT depend on is_staff() here, or you can create a circular dependency.)
-drop policy if exists "staff_profiles_self_read" on staff_profiles;
 create policy "staff_profiles_self_read" on staff_profiles
 for select
 using (auth.uid() = user_id);
 
 -- day_plans: staff CRUD
-drop policy if exists "day_plans_staff_select" on day_plans;
 create policy "day_plans_staff_select" on day_plans
 for select
 using (is_staff());
 
-drop policy if exists "day_plans_staff_insert" on day_plans;
 create policy "day_plans_staff_insert" on day_plans
 for insert
-with check (is_staff());
+with check (can_write());
 
-drop policy if exists "day_plans_staff_update" on day_plans;
 create policy "day_plans_staff_update" on day_plans
 for update
-using (is_staff())
-with check (is_staff());
+using (can_write())
+with check (can_write());
 
-drop policy if exists "day_plans_staff_delete" on day_plans;
 create policy "day_plans_staff_delete" on day_plans
 for delete
-using (is_staff());
+using (can_write());
 
 -- day_plan_blocks: staff CRUD
-drop policy if exists "blocks_staff_select" on day_plan_blocks;
 create policy "blocks_staff_select" on day_plan_blocks
 for select
 using (is_staff());
 
-drop policy if exists "blocks_staff_insert" on day_plan_blocks;
 create policy "blocks_staff_insert" on day_plan_blocks
 for insert
-with check (is_staff());
+with check (can_write());
 
-drop policy if exists "blocks_staff_update" on day_plan_blocks;
 create policy "blocks_staff_update" on day_plan_blocks
 for update
-using (is_staff())
-with check (is_staff());
+using (can_write())
+with check (can_write());
 
-drop policy if exists "blocks_staff_delete" on day_plan_blocks;
 create policy "blocks_staff_delete" on day_plan_blocks
 for delete
-using (is_staff());
+using (can_write());
 
--- classes/students/enrollments: staff CRUD (tighten later if needed)
+-- classes/students/enrollments: staff read + write (demo users are read-only)
+
+-- students
 drop policy if exists "students_staff_all" on students;
-create policy "students_staff_all" on students
-for all
-using (is_staff())
-with check (is_staff());
+create policy "students_staff_select" on students
+for select
+using (is_staff());
+create policy "students_staff_insert" on students
+for insert
+with check (can_write());
+create policy "students_staff_update" on students
+for update
+using (can_write())
+with check (can_write());
+create policy "students_staff_delete" on students
+for delete
+using (can_write());
 
+-- classes
 drop policy if exists "classes_staff_all" on classes;
-create policy "classes_staff_all" on classes
-for all
-using (is_staff())
-with check (is_staff());
+create policy "classes_staff_select" on classes
+for select
+using (is_staff());
+create policy "classes_staff_insert" on classes
+for insert
+with check (can_write());
+create policy "classes_staff_update" on classes
+for update
+using (can_write())
+with check (can_write());
+create policy "classes_staff_delete" on classes
+for delete
+using (can_write());
 
+-- enrollments
 drop policy if exists "enrollments_staff_all" on enrollments;
-create policy "enrollments_staff_all" on enrollments
-for all
-using (is_staff())
-with check (is_staff());
+create policy "enrollments_staff_select" on enrollments
+for select
+using (is_staff());
+create policy "enrollments_staff_insert" on enrollments
+for insert
+with check (can_write());
+create policy "enrollments_staff_delete" on enrollments
+for delete
+using (can_write());
+
+-- ----------------------
+-- BLOCK ROTATION DEFAULTS (effective-dated)
+-- ----------------------
+create table if not exists rotation_defaults (
+  id uuid primary key default gen_random_uuid(),
+  day_of_week int not null,
+  friday_type text,
+  slot_order int not null,
+  block_label text not null,
+  effective_from date not null,
+  effective_to date,
+  created_at timestamptz not null default now(),
+  constraint rotation_dow_check check (day_of_week between 1 and 5),
+  constraint rotation_friday_type_check check (friday_type in ('day1','day2') or friday_type is null),
+  constraint rotation_friday_type_required check (
+    (day_of_week = 5 and friday_type is not null) or (day_of_week <> 5 and friday_type is null)
+  ),
+  constraint rotation_effective_check check (effective_to is null or effective_to > effective_from)
+);
+
+create index if not exists rotation_defaults_lookup_idx
+  on rotation_defaults(day_of_week, friday_type, effective_from, effective_to);
+
+create unique index if not exists rotation_defaults_unique_row_idx
+  on rotation_defaults(day_of_week, friday_type, effective_from, slot_order);
+
+alter table rotation_defaults enable row level security;
+
+drop policy if exists "rotation_defaults_staff_all" on rotation_defaults;
+create policy "rotation_defaults_staff_select" on rotation_defaults
+for select using (is_staff());
+create policy "rotation_defaults_staff_insert" on rotation_defaults
+for insert with check (can_write());
+create policy "rotation_defaults_staff_update" on rotation_defaults
+for update using (can_write()) with check (can_write());
+create policy "rotation_defaults_staff_delete" on rotation_defaults
+for delete using (can_write());
+
+-- Public schedule rotation for a given date.
+-- SECURITY DEFINER so anon callers can access without opening table RLS.
+create or replace function get_rotation_for_date(plan_date date, friday_type text default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  dow int;
+  ft text;
+  out jsonb;
+begin
+  if plan_date is null then
+    return '[]'::jsonb;
+  end if;
+
+  -- ISO day of week: Monday=1 ... Sunday=7
+  dow := extract(isodow from plan_date);
+
+  if dow < 1 or dow > 5 then
+    return '[]'::jsonb;
+  end if;
+
+  if dow = 5 then
+    if friday_type is null then
+      return '[]'::jsonb;
+    end if;
+    ft := friday_type;
+  else
+    ft := null;
+  end if;
+
+  select coalesce(jsonb_agg(r.block_label order by r.slot_order asc), '[]'::jsonb)
+  into out
+  from rotation_defaults r
+  where r.day_of_week = dow
+    and ((ft is null and r.friday_type is null) or (ft is not null and r.friday_type = ft))
+    and r.effective_from <= plan_date
+    and (r.effective_to is null or r.effective_to > plan_date)
+  group by r.effective_from
+  order by r.effective_from desc
+  limit 1;
+
+  return coalesce(out, '[]'::jsonb);
+end;
+$$;
+
+revoke all on function get_rotation_for_date(date, text) from public;
+grant execute on function get_rotation_for_date(date, text) to anon;
 
 -- ----------------------
 -- BLOCK TIME DEFAULTS (effective-dated)
@@ -204,10 +352,19 @@ create table if not exists block_time_defaults (
 alter table block_time_defaults enable row level security;
 
 drop policy if exists "block_time_defaults_staff_all" on block_time_defaults;
-create policy "block_time_defaults_staff_all" on block_time_defaults
-for all
-using (is_staff())
-with check (is_staff());
+create policy "block_time_defaults_staff_select" on block_time_defaults
+for select
+using (is_staff());
+create policy "block_time_defaults_staff_insert" on block_time_defaults
+for insert
+with check (can_write());
+create policy "block_time_defaults_staff_update" on block_time_defaults
+for update
+using (can_write())
+with check (can_write());
+create policy "block_time_defaults_staff_delete" on block_time_defaults
+for delete
+using (can_write());
 
 create unique index if not exists block_time_defaults_uq
   on block_time_defaults(template_key, effective_from, slot);
@@ -215,15 +372,6 @@ create unique index if not exists block_time_defaults_uq
 -- =====================================================================
 -- TOC BLOCK PLAN CONTENT (standing templates + per-block instances)
 -- Added 2026-02-24
--- =====================================================================
--- DESIGN NOTES:
--- - class_toc_templates: reusable lesson/activity patterns per class.
---   Multiple is_active=true rows per class allowed; app picks most recent (updated_at desc).
--- - toc_block_plans: instance per day_plan_blocks row.
---   Copy-on-open (app logic): populate from template when editor first opens.
---   Instance edits never mutate template defaults.
---   source_template_*_id tracks provenance; NULL = custom/manual content.
---   class_id is nullable to support non-class blocks (Assembly, Lunch, Chapel).
 -- =====================================================================
 
 -- Standing (reusable) class content
@@ -243,21 +391,6 @@ create table if not exists class_toc_templates (
 );
 
 create index if not exists class_toc_templates_class_id_idx on class_toc_templates(class_id);
-
--- Helper: get the most recently updated active template for a class
--- (allows multiple actives; app/queries pick the latest by updated_at desc)
-create or replace function get_active_template_for_class(p_class_id uuid)
-returns uuid
-language sql
-stable
-as $$
-  select id
-  from class_toc_templates
-  where class_id = p_class_id
-    and is_active = true
-  order by updated_at desc
-  limit 1;
-$$;
 
 create table if not exists class_opening_routine_steps (
   id uuid primary key default gen_random_uuid(),
@@ -311,18 +444,13 @@ create table if not exists class_what_to_do_if_items (
 
 create index if not exists class_what_to_do_if_items_template_id_idx on class_what_to_do_if_items(template_id);
 
--- Per scheduled block (plan instance).
--- Copy-on-open (app logic in TOC editor): when first opened, populate from template if not yet copied.
--- NOTE: class_id is nullable to allow TOC content for non-class blocks (Assembly, Lunch, Chapel).
--- When class_id IS NULL, content is custom; no student roster attached.
+-- Per scheduled block (plan instance). Copy-on-create from template is recommended.
 create table if not exists toc_block_plans (
   id uuid primary key default gen_random_uuid(),
   day_plan_block_id uuid not null references day_plan_blocks(id) on delete cascade,
-  class_id uuid references classes(id) on delete set null,
+  class_id uuid not null references classes(id) on delete restrict,
   template_id uuid references class_toc_templates(id) on delete set null,
   plan_mode text not null,
-  -- Override fields: NULL = inherit from template (if template_id set)
-  -- Non-NULL = use override value instead of template
   override_teacher_name text,
   override_ta_name text,
   override_ta_role text,
@@ -332,6 +460,9 @@ create table if not exists toc_block_plans (
   updated_at timestamptz not null default now(),
   constraint toc_block_plans_plan_mode_check check (plan_mode in ('lesson_flow','activity_options'))
 );
+
+-- NOTE: toc_block_plans.class_id should match day_plan_blocks.class_id.
+create unique index if not exists toc_block_plans_day_plan_block_id_uq on toc_block_plans(day_plan_block_id);
 create index if not exists toc_block_plans_class_id_idx on toc_block_plans(class_id);
 create index if not exists toc_block_plans_template_id_idx on toc_block_plans(template_id);
 
@@ -412,77 +543,139 @@ alter table toc_activity_options enable row level security;
 alter table toc_activity_option_steps enable row level security;
 alter table toc_what_to_do_if_items enable row level security;
 
-drop policy if exists "class_toc_templates_staff_all" on class_toc_templates;
-create policy "class_toc_templates_staff_all" on class_toc_templates
-for all
-using (is_staff())
-with check (is_staff());
+-- Template + instance content: staff can read; demo cannot write.
 
-drop policy if exists "class_opening_routine_steps_staff_all" on class_opening_routine_steps;
-create policy "class_opening_routine_steps_staff_all" on class_opening_routine_steps
-for all
-using (is_staff())
-with check (is_staff());
+-- class_toc_templates
+ drop policy if exists "class_toc_templates_staff_all" on class_toc_templates;
+ create policy "class_toc_templates_staff_select" on class_toc_templates
+ for select using (is_staff());
+ create policy "class_toc_templates_staff_insert" on class_toc_templates
+ for insert with check (can_write());
+ create policy "class_toc_templates_staff_update" on class_toc_templates
+ for update using (can_write()) with check (can_write());
+ create policy "class_toc_templates_staff_delete" on class_toc_templates
+ for delete using (can_write());
 
-drop policy if exists "class_lesson_flow_phases_staff_all" on class_lesson_flow_phases;
-create policy "class_lesson_flow_phases_staff_all" on class_lesson_flow_phases
-for all
-using (is_staff())
-with check (is_staff());
+-- class_opening_routine_steps
+ drop policy if exists "class_opening_routine_steps_staff_all" on class_opening_routine_steps;
+ create policy "class_opening_routine_steps_staff_select" on class_opening_routine_steps
+ for select using (is_staff());
+ create policy "class_opening_routine_steps_staff_insert" on class_opening_routine_steps
+ for insert with check (can_write());
+ create policy "class_opening_routine_steps_staff_update" on class_opening_routine_steps
+ for update using (can_write()) with check (can_write());
+ create policy "class_opening_routine_steps_staff_delete" on class_opening_routine_steps
+ for delete using (can_write());
 
-drop policy if exists "class_activity_options_staff_all" on class_activity_options;
-create policy "class_activity_options_staff_all" on class_activity_options
-for all
-using (is_staff())
-with check (is_staff());
+-- class_lesson_flow_phases
+ drop policy if exists "class_lesson_flow_phases_staff_all" on class_lesson_flow_phases;
+ create policy "class_lesson_flow_phases_staff_select" on class_lesson_flow_phases
+ for select using (is_staff());
+ create policy "class_lesson_flow_phases_staff_insert" on class_lesson_flow_phases
+ for insert with check (can_write());
+ create policy "class_lesson_flow_phases_staff_update" on class_lesson_flow_phases
+ for update using (can_write()) with check (can_write());
+ create policy "class_lesson_flow_phases_staff_delete" on class_lesson_flow_phases
+ for delete using (can_write());
 
-drop policy if exists "class_activity_option_steps_staff_all" on class_activity_option_steps;
-create policy "class_activity_option_steps_staff_all" on class_activity_option_steps
-for all
-using (is_staff())
-with check (is_staff());
+-- class_activity_options
+ drop policy if exists "class_activity_options_staff_all" on class_activity_options;
+ create policy "class_activity_options_staff_select" on class_activity_options
+ for select using (is_staff());
+ create policy "class_activity_options_staff_insert" on class_activity_options
+ for insert with check (can_write());
+ create policy "class_activity_options_staff_update" on class_activity_options
+ for update using (can_write()) with check (can_write());
+ create policy "class_activity_options_staff_delete" on class_activity_options
+ for delete using (can_write());
 
-drop policy if exists "class_what_to_do_if_items_staff_all" on class_what_to_do_if_items;
-create policy "class_what_to_do_if_items_staff_all" on class_what_to_do_if_items
-for all
-using (is_staff())
-with check (is_staff());
+-- class_activity_option_steps
+ drop policy if exists "class_activity_option_steps_staff_all" on class_activity_option_steps;
+ create policy "class_activity_option_steps_staff_select" on class_activity_option_steps
+ for select using (is_staff());
+ create policy "class_activity_option_steps_staff_insert" on class_activity_option_steps
+ for insert with check (can_write());
+ create policy "class_activity_option_steps_staff_update" on class_activity_option_steps
+ for update using (can_write()) with check (can_write());
+ create policy "class_activity_option_steps_staff_delete" on class_activity_option_steps
+ for delete using (can_write());
 
-drop policy if exists "toc_block_plans_staff_all" on toc_block_plans;
-create policy "toc_block_plans_staff_all" on toc_block_plans
-for all
-using (is_staff())
-with check (is_staff());
+-- class_what_to_do_if_items
+ drop policy if exists "class_what_to_do_if_items_staff_all" on class_what_to_do_if_items;
+ create policy "class_what_to_do_if_items_staff_select" on class_what_to_do_if_items
+ for select using (is_staff());
+ create policy "class_what_to_do_if_items_staff_insert" on class_what_to_do_if_items
+ for insert with check (can_write());
+ create policy "class_what_to_do_if_items_staff_update" on class_what_to_do_if_items
+ for update using (can_write()) with check (can_write());
+ create policy "class_what_to_do_if_items_staff_delete" on class_what_to_do_if_items
+ for delete using (can_write());
 
-drop policy if exists "toc_opening_routine_steps_staff_all" on toc_opening_routine_steps;
-create policy "toc_opening_routine_steps_staff_all" on toc_opening_routine_steps
-for all
-using (is_staff())
-with check (is_staff());
+-- toc_block_plans
+ drop policy if exists "toc_block_plans_staff_all" on toc_block_plans;
+ create policy "toc_block_plans_staff_select" on toc_block_plans
+ for select using (is_staff());
+ create policy "toc_block_plans_staff_insert" on toc_block_plans
+ for insert with check (can_write());
+ create policy "toc_block_plans_staff_update" on toc_block_plans
+ for update using (can_write()) with check (can_write());
+ create policy "toc_block_plans_staff_delete" on toc_block_plans
+ for delete using (can_write());
 
-drop policy if exists "toc_lesson_flow_phases_staff_all" on toc_lesson_flow_phases;
-create policy "toc_lesson_flow_phases_staff_all" on toc_lesson_flow_phases
-for all
-using (is_staff())
-with check (is_staff());
+-- toc_opening_routine_steps
+ drop policy if exists "toc_opening_routine_steps_staff_all" on toc_opening_routine_steps;
+ create policy "toc_opening_routine_steps_staff_select" on toc_opening_routine_steps
+ for select using (is_staff());
+ create policy "toc_opening_routine_steps_staff_insert" on toc_opening_routine_steps
+ for insert with check (can_write());
+ create policy "toc_opening_routine_steps_staff_update" on toc_opening_routine_steps
+ for update using (can_write()) with check (can_write());
+ create policy "toc_opening_routine_steps_staff_delete" on toc_opening_routine_steps
+ for delete using (can_write());
 
-drop policy if exists "toc_activity_options_staff_all" on toc_activity_options;
-create policy "toc_activity_options_staff_all" on toc_activity_options
-for all
-using (is_staff())
-with check (is_staff());
+-- toc_lesson_flow_phases
+ drop policy if exists "toc_lesson_flow_phases_staff_all" on toc_lesson_flow_phases;
+ create policy "toc_lesson_flow_phases_staff_select" on toc_lesson_flow_phases
+ for select using (is_staff());
+ create policy "toc_lesson_flow_phases_staff_insert" on toc_lesson_flow_phases
+ for insert with check (can_write());
+ create policy "toc_lesson_flow_phases_staff_update" on toc_lesson_flow_phases
+ for update using (can_write()) with check (can_write());
+ create policy "toc_lesson_flow_phases_staff_delete" on toc_lesson_flow_phases
+ for delete using (can_write());
 
-drop policy if exists "toc_activity_option_steps_staff_all" on toc_activity_option_steps;
-create policy "toc_activity_option_steps_staff_all" on toc_activity_option_steps
-for all
-using (is_staff())
-with check (is_staff());
+-- toc_activity_options
+ drop policy if exists "toc_activity_options_staff_all" on toc_activity_options;
+ create policy "toc_activity_options_staff_select" on toc_activity_options
+ for select using (is_staff());
+ create policy "toc_activity_options_staff_insert" on toc_activity_options
+ for insert with check (can_write());
+ create policy "toc_activity_options_staff_update" on toc_activity_options
+ for update using (can_write()) with check (can_write());
+ create policy "toc_activity_options_staff_delete" on toc_activity_options
+ for delete using (can_write());
 
-drop policy if exists "toc_what_to_do_if_items_staff_all" on toc_what_to_do_if_items;
-create policy "toc_what_to_do_if_items_staff_all" on toc_what_to_do_if_items
-for all
-using (is_staff())
-with check (is_staff());
+-- toc_activity_option_steps
+ drop policy if exists "toc_activity_option_steps_staff_all" on toc_activity_option_steps;
+ create policy "toc_activity_option_steps_staff_select" on toc_activity_option_steps
+ for select using (is_staff());
+ create policy "toc_activity_option_steps_staff_insert" on toc_activity_option_steps
+ for insert with check (can_write());
+ create policy "toc_activity_option_steps_staff_update" on toc_activity_option_steps
+ for update using (can_write()) with check (can_write());
+ create policy "toc_activity_option_steps_staff_delete" on toc_activity_option_steps
+ for delete using (can_write());
+
+-- toc_what_to_do_if_items
+ drop policy if exists "toc_what_to_do_if_items_staff_all" on toc_what_to_do_if_items;
+ create policy "toc_what_to_do_if_items_staff_select" on toc_what_to_do_if_items
+ for select using (is_staff());
+ create policy "toc_what_to_do_if_items_staff_insert" on toc_what_to_do_if_items
+ for insert with check (can_write());
+ create policy "toc_what_to_do_if_items_staff_update" on toc_what_to_do_if_items
+ for update using (can_write()) with check (can_write());
+ create policy "toc_what_to_do_if_items_staff_delete" on toc_what_to_do_if_items
+ for delete using (can_write());
 
 -- ----------------------
 -- PUBLIC DAYPLAN SHARE (TOC-facing)
@@ -517,27 +710,42 @@ begin
     return null;
   end if;
 
-  select coalesce(jsonb_agg(jsonb_build_object(
-      'id', b.id,
-      'start_time', b.start_time,
-      'end_time', b.end_time,
-      'room', b.room,
-      'class_name', b.class_name,
-      'details', b.details,
-      'class_id', b.class_id,
-      'students', (
-        select coalesce(jsonb_agg(
-          jsonb_build_object('id', s.id, 'first_name', s.first_name, 'last_name', s.last_name)
-          order by s.last_name, s.first_name
-        ), '[]'::jsonb)
-        from enrollments e
-        join students s on s.id = e.student_id
-        where e.class_id = b.class_id
+  -- Only return the block that matches this plan's slot (e.g. Block F), not the entire day schedule.
+  -- We match via classes.block_label (joined by class_id).
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'id', b.id,
+        'start_time', b.start_time,
+        'end_time', b.end_time,
+        'room', b.room,
+        'class_name', b.class_name,
+        'details', b.details,
+        'class_id', b.class_id,
+        'block_label', c.block_label,
+        'students', (
+          select coalesce(
+            jsonb_agg(
+              jsonb_build_object('id', s.id, 'first_name', s.first_name, 'last_name', s.last_name)
+              order by s.last_name, s.first_name
+            ),
+            '[]'::jsonb
+          )
+          from enrollments e
+          join students s on s.id = e.student_id
+          where e.class_id = b.class_id
+        )
       )
-    ) order by b.start_time asc), '[]'::jsonb)
+      order by b.start_time asc
+    ),
+    '[]'::jsonb
+  )
   into blocks
   from day_plan_blocks b
-  where b.day_plan_id = p.id;
+  left join classes c on c.id = b.class_id
+  where b.day_plan_id = p.id
+    and c.block_label is not null
+    and upper(c.block_label) = upper(p.slot);
 
   return jsonb_build_object(
     'id', p.id,
@@ -554,9 +762,34 @@ $$;
 revoke all on function get_public_day_plan_by_id(uuid) from public;
 grant execute on function get_public_day_plan_by_id(uuid) to anon;
 
--- Helper for staff queries to get current active template
-revoke all on function get_active_template_for_class(uuid) from public;
-grant execute on function get_active_template_for_class(uuid) to authenticated;
+-- Public classes (block labels + names) for TOC display.
+-- SECURITY DEFINER so anon callers can access without opening table RLS.
+create or replace function get_public_classes()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  out jsonb;
+begin
+  select coalesce(jsonb_agg(jsonb_build_object(
+      'id', c.id,
+      'block_label', c.block_label,
+      'name', c.name,
+      'room', c.room,
+      'sort_order', c.sort_order
+    ) order by c.sort_order asc nulls last, c.name asc), '[]'::jsonb)
+  into out
+  from classes c
+  where c.block_label is not null;
+
+  return out;
+end;
+$$;
+
+revoke all on function get_public_classes() from public;
+grant execute on function get_public_classes() to anon;
 
 -- Week calendar payload: published plans for Mon–Fri of the given week_start (Monday)
 create or replace function get_public_plans_for_week(week_start date)
