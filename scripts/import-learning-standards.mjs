@@ -75,6 +75,12 @@ function isHeading(line) {
 }
 
 function parseRubricText(text) {
+  // Bible rubrics have a different layout (columns get interleaved in pdftotext output).
+  // Use a dedicated heuristic parser.
+  if (String(subject).toLowerCase() === 'bible') {
+    return parseBibleRubricText(text);
+  }
+
   const rawLines = text.split(/\r?\n/);
 
   // Segment by "Learning Standard:" headings.
@@ -154,6 +160,83 @@ function parseRubricText(text) {
           developing: joinLines(lv.developing),
           proficient: joinLines(lv.proficient),
           extending: joinLines(lv.extending),
+        },
+      });
+    }
+  }
+
+  return out;
+}
+
+function parseBibleRubricText(text) {
+  const rawLines = text.split(/\r?\n/);
+
+  // Segment by "BIBLE Learning Standard:" headings.
+  const sections = [];
+  let current = null;
+
+  for (const line0 of rawLines) {
+    const line = line0.trim();
+    if (/^BIBLE\s+Learning Standard:/i.test(line)) {
+      if (current) sections.push(current);
+      const title = line.replace(/^BIBLE\s+Learning Standard:\s*/i, '').trim();
+      current = { title, lines: [] };
+      continue;
+    }
+    if (current) current.lines.push(line0);
+  }
+  if (current) sections.push(current);
+
+  const out = [];
+
+  for (const sec of sections) {
+    const lines = cleanLines(sec.lines);
+
+    // Heuristic bucketing based on common rubric verbs.
+    // Bible rubrics often use: Begin / Partially / (plain verb) / Fully
+    const buckets = initLevels();
+
+    /** @type {null|'emerging'|'developing'|'proficient'|'extending'} */
+    let level = null;
+
+    for (const l of lines) {
+      // Skip grade markers and level header labels (they don't survive column layout cleanly)
+      if (/^(9|10|11|12)$/.test(l)) continue;
+      if (/^Emerging\//i.test(l)) continue;
+      if (/^Developing\//i.test(l)) continue;
+      if (/^Proficient\//i.test(l)) continue;
+      if (/^Extending\//i.test(l)) continue;
+
+      if (/^Fully\b/i.test(l)) level = 'extending';
+      else if (/^Partially\b/i.test(l)) level = 'developing';
+      else if (/^Begin(s)?\b/i.test(l)) level = 'emerging';
+      else {
+        // If it starts with a strong verb and not Begin/Partially/Fully, treat as proficient.
+        if (/^(Show|Apply|Demonstrate|Exemplify|Explore|Describe|Explain|Justify|Synthesize|Outline|Identify)\b/i.test(l)) {
+          level = 'proficient';
+        }
+      }
+
+      // If we still don't know, keep previous; if none, default to proficient.
+      const effective = level ?? 'proficient';
+      buckets[effective].push(l);
+    }
+
+    // Apply same rubric text to all grades 9–12 (teacher can edit per grade later).
+    for (const g of [9, 10, 11, 12]) {
+      const any = Object.values(buckets).some((arr) => arr.length > 0);
+      if (!any) continue;
+
+      out.push({
+        subject,
+        grade: g,
+        title: sec.title,
+        key: slugify(sec.title),
+        levels: {
+          emerging: joinLines(buckets.emerging),
+          developing: joinLines(buckets.developing),
+          proficient: joinLines(buckets.proficient),
+          extending: joinLines(buckets.extending),
         },
       });
     }
