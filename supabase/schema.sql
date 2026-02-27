@@ -39,6 +39,7 @@ alter table day_plans add column if not exists trashed_at timestamptz;
 alter table day_plans add column if not exists learning_standard_focus text;
 alter table day_plans add column if not exists core_competency_focus text;
 alter table day_plans add column if not exists tags text[];
+alter table day_plans add column if not exists learning_standard_id uuid;
 
 -- Allow multiple plans per day; prevent duplicates per (date, slot, friday_type)
 -- Use COALESCE so non-Friday (null friday_type) still participates in uniqueness.
@@ -119,32 +120,22 @@ create index if not exists classes_block_label_idx on classes(block_label);
 -- ----------------------
 -- POLICIES: LEARNING STANDARDS (structured)
 -- ----------------------
+-- Learning standards catalog (no grade-specific titles; titles are shared across grades within a subject)
 create table if not exists learning_standards (
   id uuid primary key default gen_random_uuid(),
   subject text not null,
-  grade int not null,
   standard_key text not null,
   standard_title text not null,
+  sort_order int,
+  summary_text text,
+  source_pdf_path text,
+  page_ref text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  constraint learning_standards_grade_check check (grade in (9,10,11,12)),
-  constraint learning_standards_unique unique(subject, grade, standard_key)
+  constraint learning_standards_unique unique(subject, standard_key)
 );
 
-create table if not exists learning_standard_levels (
-  id uuid primary key default gen_random_uuid(),
-  learning_standard_id uuid not null references learning_standards(id) on delete cascade,
-  level text not null,
-  original_text text not null default '',
-  edited_text text,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  constraint learning_standard_levels_level_check check (level in ('emerging','developing','proficient','extending')),
-  constraint learning_standard_levels_unique unique(learning_standard_id, level)
-);
-
-create index if not exists learning_standards_subject_grade_idx on learning_standards(subject, grade);
-create index if not exists learning_standard_levels_std_idx on learning_standard_levels(learning_standard_id);
+create index if not exists learning_standards_subject_idx on learning_standards(subject);
 
 -- ----------------------
 -- ROW LEVEL SECURITY
@@ -622,7 +613,6 @@ alter table toc_activity_options enable row level security;
 alter table toc_activity_option_steps enable row level security;
 alter table toc_what_to_do_if_items enable row level security;
 alter table learning_standards enable row level security;
-alter table learning_standard_levels enable row level security;
 
 -- Template + instance content: staff can read; demo cannot write.
 
@@ -923,16 +913,7 @@ for update using (can_write()) with check (can_write());
 create policy "learning_standards_staff_delete" on learning_standards
 for delete using (can_write());
 
--- learning_standard_levels
-drop policy if exists "learning_standard_levels_staff_all" on learning_standard_levels;
-create policy "learning_standard_levels_staff_select" on learning_standard_levels
-for select using (is_staff());
-create policy "learning_standard_levels_staff_insert" on learning_standard_levels
-for insert with check (can_write());
-create policy "learning_standard_levels_staff_update" on learning_standard_levels
-for update using (can_write()) with check (can_write());
-create policy "learning_standard_levels_staff_delete" on learning_standard_levels
-for delete using (can_write());
+-- (learning_standard_levels policies removed; catalog-only learning_standards)
 
 -- PUBLIC ACCESS NOTE:
 -- Public TOC links should be served through a *server-side* route or edge function

@@ -10,17 +10,10 @@ type Level = 'emerging' | 'developing' | 'proficient' | 'extending';
 type StandardRow = {
   id: string;
   subject: string;
-  grade: number;
   standard_key: string;
   standard_title: string;
-};
-
-type LevelRow = {
-  id: string;
-  learning_standard_id: string;
-  level: Level;
-  original_text: string;
-  edited_text: string | null;
+  sort_order: number | null;
+  summary_text: string | null;
 };
 
 type Status = 'loading' | 'idle' | 'saving' | 'error';
@@ -57,18 +50,10 @@ export default function PoliciesClient() {
   const [subjects, setSubjects] = useState<string[]>([]);
   const [selectedSubject, setSelectedSubject] = useState<string>('');
 
-  const [grades, setGrades] = useState<number[]>([]);
-  const [selectedGrade, setSelectedGrade] = useState<number | null>(null);
-
   const [standards, setStandards] = useState<StandardRow[]>([]);
   const [selectedStandardId, setSelectedStandardId] = useState<string>('');
 
-  const [levels, setLevels] = useState<Record<Level, LevelRow | null>>({
-    emerging: null,
-    developing: null,
-    proficient: null,
-    extending: null,
-  });
+  const [draftSummary, setDraftSummary] = useState<string>('');
 
   const selectedStandard = useMemo(
     () => standards.find((s) => s.id === selectedStandardId) ?? null,
@@ -82,24 +67,14 @@ export default function PoliciesClient() {
 
   useEffect(() => {
     if (!selectedSubject) return;
-    void loadGrades(selectedSubject);
+    void loadStandards(selectedSubject);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSubject]);
 
   useEffect(() => {
-    if (!selectedSubject || !selectedGrade) return;
-    void loadStandards(selectedSubject, selectedGrade);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedSubject, selectedGrade]);
-
-  useEffect(() => {
-    if (!selectedStandardId) {
-      setLevels({ emerging: null, developing: null, proficient: null, extending: null });
-      return;
-    }
-    void loadLevels(selectedStandardId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedStandardId]);
+    const s = standards.find((x) => x.id === selectedStandardId);
+    setDraftSummary(s?.summary_text ?? '');
+  }, [selectedStandardId, standards]);
 
   async function loadSubjects() {
     setStatus('loading');
@@ -131,7 +106,7 @@ export default function PoliciesClient() {
     }
   }
 
-  async function loadGrades(subject: string) {
+  async function loadStandards(subject: string) {
     setStatus('loading');
     setError(null);
 
@@ -139,43 +114,9 @@ export default function PoliciesClient() {
       const supabase = getSupabaseClient();
       const { data, error } = await supabase
         .from('learning_standards')
-        .select('grade')
+        .select('id,subject,standard_key,standard_title,sort_order,summary_text')
         .eq('subject', subject)
-        .order('grade', { ascending: true });
-      if (error) throw error;
-
-      const distinct = Array.from(new Set((data ?? []).map((r: any) => Number(r.grade)).filter((n) => Number.isFinite(n))));
-      setGrades(distinct);
-
-      if (distinct.length > 0) {
-        const wanted = initialGrade && distinct.includes(initialGrade) ? initialGrade : distinct[0];
-        setSelectedGrade((prev) => (prev && distinct.includes(prev) ? prev : wanted));
-      } else {
-        setSelectedGrade(null);
-      }
-
-      setSelectedStandardId('');
-      setStandards([]);
-      setLevels({ emerging: null, developing: null, proficient: null, extending: null });
-
-      setStatus('idle');
-    } catch (e: any) {
-      setStatus('error');
-      setError(e?.message ?? 'Failed to load grades');
-    }
-  }
-
-  async function loadStandards(subject: string, grade: number) {
-    setStatus('loading');
-    setError(null);
-
-    try {
-      const supabase = getSupabaseClient();
-      const { data, error } = await supabase
-        .from('learning_standards')
-        .select('id,subject,grade,standard_key,standard_title')
-        .eq('subject', subject)
-        .eq('grade', grade)
+        .order('sort_order', { ascending: true, nullsFirst: false })
         .order('standard_title', { ascending: true });
       if (error) throw error;
 
@@ -191,44 +132,6 @@ export default function PoliciesClient() {
     }
   }
 
-  async function loadLevels(learningStandardId: string) {
-    setStatus('loading');
-    setError(null);
-
-    try {
-      const supabase = getSupabaseClient();
-      const { data, error } = await supabase
-        .from('learning_standard_levels')
-        .select('id,learning_standard_id,level,original_text,edited_text')
-        .eq('learning_standard_id', learningStandardId);
-      if (error) throw error;
-
-      const map: Record<Level, LevelRow | null> = { emerging: null, developing: null, proficient: null, extending: null };
-      for (const r of data ?? []) {
-        const lvl = String((r as any).level) as Level;
-        if (lvl in map) map[lvl] = r as any;
-      }
-      setLevels(map);
-      setStatus('idle');
-    } catch (e: any) {
-      setStatus('error');
-      setError(e?.message ?? 'Failed to load level text');
-    }
-  }
-
-  function displayedText(lvl: Level): string {
-    const r = levels[lvl];
-    return (r?.edited_text ?? r?.original_text ?? '').toString();
-  }
-
-  function setDisplayedText(lvl: Level, next: string) {
-    setLevels((prev) => {
-      const cur = prev[lvl];
-      if (!cur) return prev;
-      return { ...prev, [lvl]: { ...cur, edited_text: next } };
-    });
-  }
-
   async function saveEdits() {
     if (!selectedStandardId) return;
 
@@ -237,19 +140,13 @@ export default function PoliciesClient() {
 
     try {
       const supabase = getSupabaseClient();
-      for (const { level } of LEVELS) {
-        const row = levels[level];
-        if (!row) continue;
-        const edited = (row.edited_text ?? '').toString();
-        // If edited matches original, store null to keep the DB clean
-        const patch = {
-          edited_text: edited.trim() && edited !== row.original_text ? edited : null,
-          updated_at: new Date().toISOString(),
-        };
-        const { error } = await supabase.from('learning_standard_levels').update(patch).eq('id', row.id);
-        if (error) throw error;
-      }
-      await loadLevels(selectedStandardId);
+      const { error } = await supabase
+        .from('learning_standards')
+        .update({ summary_text: draftSummary.trim() ? draftSummary : null, updated_at: new Date().toISOString() })
+        .eq('id', selectedStandardId);
+      if (error) throw error;
+
+      await loadStandards(selectedSubject);
       setStatus('idle');
     } catch (e: any) {
       setStatus('error');
@@ -259,23 +156,22 @@ export default function PoliciesClient() {
 
   async function resetToOriginal() {
     if (!selectedStandardId) return;
-    const ok = window.confirm('Reset all levels (Emerging/Developing/Proficient/Extending) to the original text?');
+    const ok = window.confirm('Clear the summary text for this learning standard?');
     if (!ok) return;
 
+    setDraftSummary('');
     setStatus('saving');
     setError(null);
 
     try {
       const supabase = getSupabaseClient();
-      const ids = LEVELS.map(({ level }) => levels[level]?.id).filter(Boolean) as string[];
-      if (ids.length > 0) {
-        const { error } = await supabase
-          .from('learning_standard_levels')
-          .update({ edited_text: null, updated_at: new Date().toISOString() })
-          .in('id', ids);
-        if (error) throw error;
-      }
-      await loadLevels(selectedStandardId);
+      const { error } = await supabase
+        .from('learning_standards')
+        .update({ summary_text: null, updated_at: new Date().toISOString() })
+        .eq('id', selectedStandardId);
+      if (error) throw error;
+
+      await loadStandards(selectedSubject);
       setStatus('idle');
     } catch (e: any) {
       setStatus('error');
@@ -319,21 +215,6 @@ export default function PoliciesClient() {
                 </select>
               </label>
 
-              <label style={styles.fieldInline}>
-                <div style={styles.label}>Grade</div>
-                <select
-                  value={selectedGrade ?? ''}
-                  onChange={(e) => setSelectedGrade(e.target.value ? Number(e.target.value) : null)}
-                  style={styles.input}
-                >
-                  {grades.map((g) => (
-                    <option key={g} value={g}>
-                      {g}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
               <label style={{ ...styles.fieldInline, minWidth: 320, flex: 1 }}>
                 <div style={styles.label}>Learning Standard</div>
                 <select value={selectedStandardId} onChange={(e) => setSelectedStandardId(e.target.value)} style={styles.input}>
@@ -358,29 +239,24 @@ export default function PoliciesClient() {
             {selectedStandard ? (
               <div style={styles.callout}>
                 <div style={{ fontWeight: 900, color: RCS.deepNavy }}>
-                  {selectedStandard.subject} Grade {selectedStandard.grade} — {selectedStandard.standard_title}
+                  {selectedStandard.subject} — {selectedStandard.standard_title}
                 </div>
                 <div style={{ fontSize: 12, opacity: 0.85 }}>Key: {selectedStandard.standard_key}</div>
               </div>
             ) : null}
 
             <div style={{ display: 'grid', gap: 12 }}>
-              {LEVELS.map(({ level, label }) => (
-                <div key={level} style={styles.levelCard}>
-                  <div style={styles.levelHeader}>{label}</div>
-                  {levels[level] ? (
-                    <textarea
-                      value={displayedText(level)}
-                      onChange={(e) => setDisplayedText(level, e.target.value)}
-                      rows={6}
-                      style={styles.textarea}
-                      disabled={isDemo || status !== 'idle'}
-                    />
-                  ) : (
-                    <div style={{ opacity: 0.75 }}>—</div>
-                  )}
-                </div>
-              ))}
+              <div style={styles.levelCard}>
+                <div style={styles.levelHeader}>Summary (optional)</div>
+                <textarea
+                  value={draftSummary}
+                  onChange={(e) => setDraftSummary(e.target.value)}
+                  rows={8}
+                  style={styles.textarea}
+                  disabled={isDemo || status !== 'idle'}
+                  placeholder="Add a short, TOC-friendly summary or focus statement…"
+                />
+              </div>
             </div>
           </div>
         )}
