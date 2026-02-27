@@ -79,13 +79,33 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
     try {
       const supabase = getSupabaseClient();
 
+      // Back-compat: older DBs may not have newly added columns yet.
+      // Try selecting the full set; if it fails due to missing columns, retry with legacy select.
+      const planPromise = (async () => {
+        const full = await supabase
+          .from('day_plans')
+          .select(
+            'id,plan_date,slot,friday_type,title,notes,learning_standard_focus,core_competency_focus,learning_standard_id,tags,visibility,share_expires_at,trashed_at'
+          )
+          .eq('id', id)
+          .single();
+        if (!full.error) return full;
+
+        const msg = String((full.error as any)?.message ?? '');
+        const code = String((full.error as any)?.code ?? '');
+        const isMissingCol = code === '42703' || /column .* does not exist/i.test(msg);
+        if (!isMissingCol) return full;
+
+        return supabase
+          .from('day_plans')
+          .select('id,plan_date,slot,friday_type,title,notes,visibility,share_expires_at,trashed_at')
+          .eq('id', id)
+          .single();
+      })();
+
       const [{ data: planData, error: planErr }, { data: blockData, error: blockErr }, { data: classData, error: classErr }] =
         await Promise.all([
-          supabase
-            .from('day_plans')
-            .select('id,plan_date,slot,friday_type,title,notes,learning_standard_focus,core_competency_focus,visibility,share_expires_at,trashed_at')
-            .eq('id', id)
-            .single(),
+          planPromise,
           supabase
             .from('day_plan_blocks')
             .select('id,day_plan_id,start_time,end_time,room,class_name,details,class_id')
@@ -105,8 +125,8 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
       setPlan(p);
       setDraftTitle(p.title ?? '');
       setDraftNotes(p.notes ?? '');
-      setDraftLearningStandardFocus(p.learning_standard_focus ?? '');
-      setDraftCoreCompetencyFocus(p.core_competency_focus ?? '');
+      setDraftLearningStandardFocus((p as any).learning_standard_focus ?? '');
+      setDraftCoreCompetencyFocus((p as any).core_competency_focus ?? '');
 
       setBlocks((blockData ?? []).map((b: any) => ({
         id: b.id,
@@ -506,6 +526,7 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
       </div>
 
       {!plan && status === 'loading' && <div>Loading…</div>}
+      {!plan && status === 'error' && error && <div style={styles.errorBox}>{error}</div>}
 
       {plan && (
         <>
