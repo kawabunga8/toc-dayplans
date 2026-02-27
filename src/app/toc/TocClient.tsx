@@ -43,14 +43,16 @@ export default function TocClient({
   weekStart,
   plans,
   classes,
+  initialView,
 }: {
   weekStart: string;
   plans: PublicPlanSummary[];
   classes: PublicClass[];
+  initialView?: 'today' | 'calendar';
 }) {
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
-  const [view, setView] = useState<'today' | 'calendar'>('today');
+  const [view, setView] = useState<'today' | 'calendar'>(initialView ?? 'today');
   const [selectedDate, setSelectedDate] = useState<string>(today);
   const [selectedFridayType, setSelectedFridayType] = useState<'' | 'day1' | 'day2'>('');
 
@@ -364,10 +366,10 @@ export default function TocClient({
         {view === 'calendar' ? (
           <>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 12 }}>
-              <a href={`/toc?week=${shiftWeek(weekStart, -7)}`} style={styles.secondaryLink}>
+              <a href={`/toc?view=calendar&week=${shiftWeek(weekStart, -7)}`} style={styles.secondaryLink}>
                 ← Prev
               </a>
-              <a href={`/toc?week=${shiftWeek(weekStart, 7)}`} style={styles.secondaryLink}>
+              <a href={`/toc?view=calendar&week=${shiftWeek(weekStart, 7)}`} style={styles.secondaryLink}>
                 Next →
               </a>
 
@@ -380,7 +382,7 @@ export default function TocClient({
                     const v = e.target.value;
                     if (!v) return;
                     const monday = mondayOf(v);
-                    window.location.href = `/toc?week=${monday}`;
+                    window.location.href = `/toc?view=calendar&week=${monday}`;
                   }}
                   style={styles.dateInput}
                 />

@@ -13,9 +13,14 @@ function mondayOfWeek(d: Date) {
   return m;
 }
 
-export default async function TocPage({ searchParams }: { searchParams: Promise<{ week?: string }> }) {
+export default async function TocPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ week?: string; view?: string }>;
+}) {
   const sp = await searchParams;
   const week = sp.week;
+  const viewParam = (sp.view ?? '').toString();
 
   let weekStart: string;
   if (week && /^\d{4}-\d{2}-\d{2}$/.test(week)) {
@@ -41,5 +46,15 @@ export default async function TocPage({ searchParams }: { searchParams: Promise<
     notFound();
   }
 
-  return <TocClient weekStart={weekStart} plans={(plansData ?? []) as any} classes={(classesData ?? []) as any} />;
+  const initialView = viewParam === 'calendar' ? 'calendar' : 'today';
+
+  return (
+    <TocClient
+      weekStart={weekStart}
+      plans={(plansData ?? []) as any}
+      classes={(classesData ?? []) as any}
+      initialView={initialView}
+    />
+  );
 }
+
