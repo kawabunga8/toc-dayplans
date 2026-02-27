@@ -479,14 +479,24 @@ export default function TocBlockPlanInlineEditor({ dayPlanBlockId, classId }: { 
         setPlan(data.plan);
         setTpl(data.template);
 
-        setOverrideTeacherName(data.plan.override_teacher_name ?? '');
-        setOverridePhonePolicy(data.plan.override_phone_policy ?? '');
-        setOverrideTaName(data.plan.override_ta_name ?? '');
-        setOverrideTaRole(data.plan.override_ta_role ?? '');
-        // Populate Note to TOC from template by default (but we still treat it as an override only if changed).
+        // Populate fields from template by default (but we only store an override if changed).
+        const tplTeacher = (data.template?.teacher_name ?? '').toString();
+        const tplPhone = (data.template?.phone_policy ?? 'Not permitted').toString();
+        const tplTaName = (data.template?.ta_name ?? '').toString();
+        const tplTaRole = (data.template?.ta_role ?? '').toString();
         const tplNote = (data.template?.note_to_toc ?? '').toString();
-        const planNote = (data.plan.override_note_to_toc ?? '').toString();
-        setOverrideNoteToToc(planNote || tplNote);
+
+        const oTeacher = (data.plan.override_teacher_name ?? '').toString();
+        const oPhone = (data.plan.override_phone_policy ?? '').toString();
+        const oTaName = (data.plan.override_ta_name ?? '').toString();
+        const oTaRole = (data.plan.override_ta_role ?? '').toString();
+        const oNote = (data.plan.override_note_to_toc ?? '').toString();
+
+        setOverrideTeacherName(oTeacher || tplTeacher);
+        setOverridePhonePolicy(oPhone || tplPhone);
+        setOverrideTaName(oTaName || tplTaName);
+        setOverrideTaRole(oTaRole || tplTaRole);
+        setOverrideNoteToToc(oNote || tplNote);
 
         setPlanMode(asPlanMode(data.plan.plan_mode));
         setOpeningRoutine(data.openingRoutine);
@@ -521,14 +531,33 @@ export default function TocBlockPlanInlineEditor({ dayPlanBlockId, classId }: { 
         .from('toc_block_plans')
         .update({
           plan_mode: planMode,
-          override_teacher_name: cleanTextOrNull(overrideTeacherName),
-          override_phone_policy: cleanTextOrNull(overridePhonePolicy),
-          override_ta_name: cleanTextOrNull(overrideTaName),
-          override_ta_role: cleanTextOrNull(overrideTaRole),
+          override_teacher_name: (() => {
+            const v = cleanTextOrNull(overrideTeacherName);
+            const base = cleanTextOrNull(tpl?.teacher_name ?? '');
+            if (v && base && v === base) return null;
+            return v;
+          })(),
+          override_phone_policy: (() => {
+            const v = cleanTextOrNull(overridePhonePolicy);
+            const base = cleanTextOrNull(tpl?.phone_policy ?? 'Not permitted');
+            if (v && base && v === base) return null;
+            return v;
+          })(),
+          override_ta_name: (() => {
+            const v = cleanTextOrNull(overrideTaName);
+            const base = cleanTextOrNull(tpl?.ta_name ?? '');
+            if (v && base && v === base) return null;
+            return v;
+          })(),
+          override_ta_role: (() => {
+            const v = cleanTextOrNull(overrideTaRole);
+            const base = cleanTextOrNull(tpl?.ta_role ?? '');
+            if (v && base && v === base) return null;
+            return v;
+          })(),
           override_note_to_toc: (() => {
             const v = cleanTextOrNull(overrideNoteToToc);
             const base = cleanTextOrNull(tpl?.note_to_toc ?? '');
-            // If the note matches the template, store null to keep the DB clean.
             if (v && base && v === base) return null;
             return v;
           })(),
