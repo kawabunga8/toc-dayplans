@@ -24,6 +24,7 @@ export function inferTemplateDefaults(blockLabel: string | null) {
           'This block is Chapel.',
           'Supervise student movement and behaviour.',
           'Take attendance if required by the day’s procedure.',
+          'Worship Leadership (WL) students pack up after Chapel.',
           'If something urgent comes up, contact the office.',
         ].join('\n')
       : isFlex
@@ -78,7 +79,12 @@ export function inferTemplateDefaults(blockLabel: string | null) {
   const openingRoutine = isLunch
     ? ['Students eat lunch', 'Supervise and keep students safe and respectful']
     : isChapel
-      ? ['Transition to Chapel', 'Supervise students', 'Follow school procedures for seating/attendance']
+      ? [
+          'Transition to Chapel',
+          'Supervise students',
+          'Follow school procedures for seating/attendance',
+          'Worship Leadership (WL) students pack up after Chapel',
+        ]
       : isFlex
         ? ['Students begin Flex activities', 'Supervise and keep students on task / where they should be']
         : isMusic
