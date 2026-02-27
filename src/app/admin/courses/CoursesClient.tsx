@@ -13,11 +13,17 @@ type CourseRow = {
   block_label: string | null;
 };
 
+type TemplateTagRow = {
+  class_id: string;
+  default_tags: string[] | null;
+};
+
 type Status = 'loading' | 'idle' | 'error';
 
 export default function CoursesClient() {
   const { isDemo } = useDemo();
   const [items, setItems] = useState<CourseRow[]>([]);
+  const [tagsByClassId, setTagsByClassId] = useState<Record<string, string[]>>({});
   const [status, setStatus] = useState<Status>('loading');
   const [error, setError] = useState<string | null>(null);
 
@@ -27,13 +33,37 @@ export default function CoursesClient() {
 
     try {
       const supabase = getSupabaseClient();
-          const { data, error } = await supabase
+      const { data, error } = await supabase
         .from('classes')
         .select('id,name,room,sort_order,block_label')
         .order('sort_order', { ascending: true, nullsFirst: false })
         .order('name', { ascending: true });
       if (error) throw error;
-      setItems((data ?? []) as CourseRow[]);
+
+      const rows = (data ?? []) as CourseRow[];
+      setItems(rows);
+
+      // Load default tags from the active TOC template (if any)
+      const classIds = rows.map((r) => r.id);
+      if (classIds.length > 0) {
+        const { data: tplRows, error: tplErr } = await supabase
+          .from('class_toc_templates')
+          .select('class_id,default_tags')
+          .eq('is_active', true)
+          .in('class_id', classIds);
+        if (tplErr) throw tplErr;
+
+        const map: Record<string, string[]> = {};
+        for (const r of (tplRows ?? []) as any[]) {
+          const cid = String(r.class_id);
+          const tags = Array.isArray(r.default_tags) ? (r.default_tags as string[]).map((t) => String(t).trim()).filter(Boolean) : [];
+          map[cid] = tags;
+        }
+        setTagsByClassId(map);
+      } else {
+        setTagsByClassId({});
+      }
+
       setStatus('idle');
     } catch (e: any) {
       setStatus('error');
@@ -81,6 +111,7 @@ export default function CoursesClient() {
                   <th style={styles.th}>Block</th>
                   <th style={styles.th}>Class</th>
                   <th style={styles.th}>Room</th>
+                  <th style={styles.th}>#Tags</th>
                   <th style={styles.th}></th>
                 </tr>
               </thead>
@@ -90,6 +121,7 @@ export default function CoursesClient() {
                     <td style={styles.tdLabel}>{c.block_label ?? '—'}</td>
                     <td style={styles.td}>{c.name}</td>
                     <td style={styles.td}>{c.room || '—'}</td>
+                    <td style={styles.td}> {(tagsByClassId[c.id] ?? []).map((t) => `#${t}`).join(' ')} </td>
                     <td style={styles.tdRight}>
                       <Link href={`/admin/courses/${c.id}/toc-template`} style={styles.primaryLink}>
                         TOC Template
