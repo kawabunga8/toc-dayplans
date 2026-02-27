@@ -56,6 +56,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
   const [taRole, setTaRole] = useState('');
   const [phonePolicy, setPhonePolicy] = useState('Not permitted');
   const [noteTOC, setNoteTOC] = useState('');
+  const [templateNoteTOC, setTemplateNoteTOC] = useState('');
 
   const [openingSteps, setOpeningSteps] = useState<OpeningStep[]>([]);
   const [phases, setPhases] = useState<Phase[]>([]);
@@ -287,7 +288,17 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
     setTaName(plan.override_ta_name ?? '');
     setTaRole(plan.override_ta_role ?? '');
     setPhonePolicy(plan.override_phone_policy ?? 'Not permitted');
-    setNoteTOC(plan.override_note_to_toc ?? '');
+
+    // Default Note to TOC from the linked template when no override exists.
+    let tplNote = '';
+    if (plan.template_id) {
+      const { data: tpl } = await supabase.from('class_toc_templates').select('note_to_toc').eq('id', plan.template_id).maybeSingle();
+      tplNote = (tpl?.note_to_toc ?? '').toString();
+    }
+    setTemplateNoteTOC(tplNote);
+
+    const override = (plan.override_note_to_toc ?? '').toString();
+    setNoteTOC(override || tplNote);
 
     const { data: oSteps, error: oErr } = await supabase
       .from('toc_opening_routine_steps')
@@ -374,7 +385,12 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         override_ta_name: taName.trim() ? taName.trim() : null,
         override_ta_role: taRole.trim() ? taRole.trim() : null,
         override_phone_policy: phonePolicy || null,
-        override_note_to_toc: noteTOC.trim() ? noteTOC.trim() : null,
+        override_note_to_toc: (() => {
+          const v = noteTOC.trim() ? noteTOC.trim() : null;
+          const base = templateNoteTOC.trim() ? templateNoteTOC.trim() : null;
+          if (v && base && v === base) return null;
+          return v;
+        })(),
       };
       const { error: upErr } = await supabase.from('toc_block_plans').update(headerPayload).eq('id', tocBlockPlanId);
       if (upErr) throw upErr;
@@ -527,8 +543,15 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         </label>
 
         <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
-          <span style={styles.label}>Note to TOC (override)</span>
-          <textarea value={noteTOC} onChange={(e) => setNoteTOC(e.target.value)} rows={3} style={styles.textarea} disabled={isDemo} />
+          <span style={styles.label}>Note to TOC (blank = use template)</span>
+          <textarea
+            value={noteTOC}
+            placeholder={templateNoteTOC || ''}
+            onChange={(e) => setNoteTOC(e.target.value)}
+            rows={3}
+            style={styles.textarea}
+            disabled={isDemo}
+          />
         </label>
       </div>
 

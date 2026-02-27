@@ -483,7 +483,10 @@ export default function TocBlockPlanInlineEditor({ dayPlanBlockId, classId }: { 
         setOverridePhonePolicy(data.plan.override_phone_policy ?? '');
         setOverrideTaName(data.plan.override_ta_name ?? '');
         setOverrideTaRole(data.plan.override_ta_role ?? '');
-        setOverrideNoteToToc(data.plan.override_note_to_toc ?? '');
+        // Populate Note to TOC from template by default (but we still treat it as an override only if changed).
+        const tplNote = (data.template?.note_to_toc ?? '').toString();
+        const planNote = (data.plan.override_note_to_toc ?? '').toString();
+        setOverrideNoteToToc(planNote || tplNote);
 
         setPlanMode(asPlanMode(data.plan.plan_mode));
         setOpeningRoutine(data.openingRoutine);
@@ -522,7 +525,13 @@ export default function TocBlockPlanInlineEditor({ dayPlanBlockId, classId }: { 
           override_phone_policy: cleanTextOrNull(overridePhonePolicy),
           override_ta_name: cleanTextOrNull(overrideTaName),
           override_ta_role: cleanTextOrNull(overrideTaRole),
-          override_note_to_toc: cleanTextOrNull(overrideNoteToToc),
+          override_note_to_toc: (() => {
+            const v = cleanTextOrNull(overrideNoteToToc);
+            const base = cleanTextOrNull(tpl?.note_to_toc ?? '');
+            // If the note matches the template, store null to keep the DB clean.
+            if (v && base && v === base) return null;
+            return v;
+          })(),
           updated_at: new Date().toISOString(),
         })
         .eq('id', plan.id);
