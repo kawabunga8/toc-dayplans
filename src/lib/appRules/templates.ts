@@ -8,66 +8,96 @@ export function inferTemplateDefaults(blockLabel: string | null) {
   const isComputer = block === 'A' || block === 'G';
   const isWorship = block === 'F';
   const isCle = block === 'CLE';
+  const isFlex = block === 'FLEX';
+  const isChapel = block === 'CHAPEL';
+  const isLunch = block === 'LUNCH';
 
-  const noteToToc = isComputer
+  const noteToToc = isLunch
     ? [
-        'Students are self-sufficient and generally know what they are doing — your main job is to keep the room on task.',
-        'If a student is stuck, ask them to check the course instructions first, then ask their partner.',
-        'Partners are already chosen (students know who they are with).',
-        'Food policy: water is allowed. Food is not allowed unless students ask.',
-        'Audio devices: allowed when a student asks.',
-        'Mr. Kawamura is reachable on Microsoft Teams if anything urgent comes up.',
+        'This block is Lunch.',
+        'Students may eat in designated areas per school expectations.',
+        'Supervise and keep the area safe and respectful.',
+        'If something urgent comes up, contact the office.',
       ].join('\n')
-    : isMusic
+    : isChapel
       ? [
-          'Students know the warm-up routine. Keep the rehearsal moving and keep students on task.',
-          'Take attendance during the warm-up window.',
-          'Food policy: water is allowed. Food is not allowed unless students ask.',
-          'Audio devices: allowed when a student asks.',
-          'If you need support, follow the TA/student leaders when present.',
-          'Mr. Kawamura is reachable on Microsoft Teams if anything urgent comes up.',
+          'This block is Chapel.',
+          'Supervise student movement and behaviour.',
+          'Take attendance if required by the day’s procedure.',
+          'If something urgent comes up, contact the office.',
         ].join('\n')
-      : isWorship
+      : isFlex
         ? [
-            'This class is student-led. Your main job is attendance and supervision.',
-            'Encourage respectful participation and keep students on task.',
-            'Food policy: water is allowed. Food is not allowed unless students ask.',
-            'Audio devices: allowed when a student asks.',
-            'If something urgent comes up, contact Mr. Kawamura on Microsoft Teams.',
+            'This block is Flex.',
+            'Students may be working, meeting teachers, or attending support activities.',
+            'Supervise and keep students on task / where they are supposed to be.',
+            'If something urgent comes up, contact the office.',
           ].join('\n')
-        : isCle
+        : isComputer
           ? [
-              'This is self-directed work time. Students should know what they are working on.',
-              'Take attendance, circulate, and keep students on task.',
-              'Food policy: water is allowed. Food is not allowed unless students ask.',
-              'Audio devices: allowed when a student asks.',
-              'If something urgent comes up, contact Mr. Kawamura on Microsoft Teams.',
-            ].join('\n')
-          : [
-              'Take attendance and keep students on task.',
-              'Follow the plan below. If a TA is present, follow their lead.',
+              'Students are self-sufficient and generally know what they are doing — your main job is to keep the room on task.',
+              'If a student is stuck, ask them to check the course instructions first, then ask their partner.',
+              'Partners are already chosen (students know who they are with).',
               'Food policy: water is allowed. Food is not allowed unless students ask.',
               'Audio devices: allowed when a student asks.',
               'Mr. Kawamura is reachable on Microsoft Teams if anything urgent comes up.',
-            ].join('\n');
+            ].join('\n')
+          : isMusic
+            ? [
+                'Students know the warm-up routine. Keep the rehearsal moving and keep students on task.',
+                'Take attendance during the warm-up window.',
+                'Food policy: water is allowed. Food is not allowed unless students ask.',
+                'Audio devices: allowed when a student asks.',
+                'If you need support, follow the TA/student leaders when present.',
+                'Mr. Kawamura is reachable on Microsoft Teams if anything urgent comes up.',
+              ].join('\n')
+            : isWorship
+              ? [
+                  'This class is student-led. Your main job is attendance and supervision.',
+                  'Encourage respectful participation and keep students on task.',
+                  'Food policy: water is allowed. Food is not allowed unless students ask.',
+                  'Audio devices: allowed when a student asks.',
+                  'If something urgent comes up, contact Mr. Kawamura on Microsoft Teams.',
+                ].join('\n')
+              : isCle
+                ? [
+                    'This is self-directed work time. Students should know what they are working on.',
+                    'Take attendance, circulate, and keep students on task.',
+                    'Food policy: water is allowed. Food is not allowed unless students ask.',
+                    'Audio devices: allowed when a student asks.',
+                    'If something urgent comes up, contact Mr. Kawamura on Microsoft Teams.',
+                  ].join('\n')
+                : [
+                    'Take attendance and keep students on task.',
+                    'Follow the plan below. If a TA is present, follow their lead.',
+                    'Food policy: water is allowed. Food is not allowed unless students ask.',
+                    'Audio devices: allowed when a student asks.',
+                    'Mr. Kawamura is reachable on Microsoft Teams if anything urgent comes up.',
+                  ].join('\n');
 
-  const openingRoutine = isMusic
-    ? [
-        'Students enter, unpack instruments, and begin individual warm-up independently',
-        'Run the standard full-band warm-up (scales, long tones, rhythm reading)',
-        'TOC takes attendance during warm-up',
-      ]
-    : isComputer
-      ? [
-          'Students enter and log into their computers / course environment independently',
-          'TOC takes attendance',
-          'Students begin working on the assigned task — they know what to do',
-        ]
-      : isWorship
-        ? ['Students enter and settle', 'TOC takes attendance', 'Students begin the planned student-led activity']
-        : isCle
-          ? ['Students enter and begin their self-directed work', 'TOC takes attendance', 'Circulate and keep students on task']
-          : ['Students enter and settle', 'TOC takes attendance', 'Begin the planned activity'];
+  const openingRoutine = isLunch
+    ? ['Students eat lunch', 'Supervise and keep students safe and respectful']
+    : isChapel
+      ? ['Transition to Chapel', 'Supervise students', 'Follow school procedures for seating/attendance']
+      : isFlex
+        ? ['Students begin Flex activities', 'Supervise and keep students on task / where they should be']
+        : isMusic
+          ? [
+              'Students enter, unpack instruments, and begin individual warm-up independently',
+              'Run the standard full-band warm-up (scales, long tones, rhythm reading)',
+              'TOC takes attendance during warm-up',
+            ]
+          : isComputer
+            ? [
+                'Students enter and log into their computers / course environment independently',
+                'TOC takes attendance',
+                'Students begin working on the assigned task — they know what to do',
+              ]
+            : isWorship
+              ? ['Students enter and settle', 'TOC takes attendance', 'Students begin the planned student-led activity']
+              : isCle
+                ? ['Students enter and begin their self-directed work', 'TOC takes attendance', 'Circulate and keep students on task']
+                : ['Students enter and settle', 'TOC takes attendance', 'Begin the planned activity'];
 
   const lessonFlow = isComputer
     ? [
