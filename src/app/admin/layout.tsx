@@ -105,6 +105,7 @@ export default function AdminLayout({ children }: PropsWithChildren) {
             <span style={disabledNav()}>Courses/Rooms</span>
             <span style={disabledNav()}>Class lists</span>
             <span style={disabledNav()}>Publishing</span>
+            <span style={disabledNav()}>Policies</span>
           </div>
 
           <button onClick={logout} style={btnOutline()}>
@@ -163,6 +164,9 @@ export default function AdminLayout({ children }: PropsWithChildren) {
             </Link>
             <Link href="/admin/publishing" style={navLink('/admin/publishing', pathname)}>
               Publishing
+            </Link>
+            <Link href="/admin/policies" style={navLink('/admin/policies', pathname)}>
+              Policies
             </Link>
             <Link href="/toc" style={{ textDecoration: 'none', color: '#1F4E79', fontWeight: 800 }}>
               TOC view
