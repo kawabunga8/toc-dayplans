@@ -147,28 +147,13 @@ function parseRubricText(text) {
       }
     }
 
-    // Build a merged fallback (useful when pdftotext interleaves columns and grade markers are missing)
-    const merged = initLevels();
-    for (const k of ['emerging', 'developing', 'proficient', 'extending']) {
-      merged[k].push(...(allGrades[k] ?? []));
-      for (const g of [9, 10, 11, 12]) merged[k].push(...(buf[g][k] ?? []));
-    }
-
-    const anyMerged = Object.values(merged).some((arr) => (arr?.length ?? 0) > 0);
-
     for (const g of [9, 10, 11, 12]) {
       const lv = buf[g];
 
-      // If any level is empty for this grade, backfill from section-wide merged text.
-      for (const k of ['emerging', 'developing', 'proficient', 'extending']) {
-        if ((lv[k]?.length ?? 0) === 0 && (merged[k]?.length ?? 0) > 0) {
-          lv[k] = [...merged[k]];
-        }
-      }
-
-      // If grade has no data at all but the section does, still create rows for all grades.
+      // STRICT MODE: do not backfill from other grades or section-wide text.
+      // Only create rows when we have at least some text for this grade.
       const any = Object.values(lv).some((arr) => (arr?.length ?? 0) > 0);
-      if (!any && !anyMerged) continue;
+      if (!any) continue;
 
       out.push({
         subject,
@@ -275,7 +260,8 @@ function joinLines(arr) {
 }
 
 function pdftotext(path) {
-  return execSync(`pdftotext ${shellEscape(path)} -`, { encoding: 'utf8' });
+  // -layout preserves columns which helps rubric parsing.
+  return execSync(`pdftotext -layout ${shellEscape(path)} -`, { encoding: 'utf8' });
 }
 
 function shellEscape(s) {
