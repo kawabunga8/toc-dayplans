@@ -38,6 +38,7 @@ alter table day_plans add column if not exists share_expires_at timestamptz;
 alter table day_plans add column if not exists trashed_at timestamptz;
 alter table day_plans add column if not exists learning_standard_focus text;
 alter table day_plans add column if not exists core_competency_focus text;
+alter table day_plans add column if not exists tags text[];
 
 -- Allow multiple plans per day; prevent duplicates per (date, slot, friday_type)
 -- Use COALESCE so non-Friday (null friday_type) still participates in uniqueness.
@@ -462,6 +463,7 @@ create table if not exists class_toc_templates (
   phone_policy text not null default 'Not permitted',
   note_to_toc text not null,
   plan_mode text not null,
+  default_tags text[],
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint class_toc_templates_plan_mode_check check (plan_mode in ('lesson_flow','activity_options'))

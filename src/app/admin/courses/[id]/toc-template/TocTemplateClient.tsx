@@ -26,6 +26,7 @@ type TemplateRow = {
   phone_policy: string;
   note_to_toc: string;
   plan_mode: PlanMode;
+  default_tags: string[] | null;
 };
 
 type RoutineStep = { id?: string; text: string };
@@ -70,6 +71,7 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
   const [taRole, setTaRole] = useState('');
   const [phonePolicy, setPhonePolicy] = useState('Not permitted');
   const [noteToToc, setNoteToToc] = useState('');
+  const [defaultTags, setDefaultTags] = useState<string>(''); // comma-separated
 
   // ordered content
   const [openingRoutine, setOpeningRoutine] = useState<RoutineStep[]>([]);
@@ -128,6 +130,9 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
 
           // 1) Default teacher name (new templates only)
           setTeacherName('Mr. Shingo Kawamura');
+
+          // Default tags (empty)
+          setDefaultTags('');
 
           // 2) Default TA fields: blank
           setTaName('');
@@ -189,6 +194,7 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
         setTaRole(tplRow.ta_role ?? '');
         setPhonePolicy(tplRow.phone_policy ?? 'Not permitted');
         setNoteToToc(tplRow.note_to_toc ?? '');
+        setDefaultTags(Array.isArray((tplRow as any).default_tags) ? (tplRow as any).default_tags.join(', ') : '');
         setPlanMode(tplRow.plan_mode);
 
         const templateId = tplRow.id;
@@ -315,6 +321,11 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
       const supabase = getSupabaseClient();
 
       // upsert template
+      const tagsArr = defaultTags
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+
       const payload: any = {
         class_id: effectiveClassId,
         is_active: true,
@@ -324,6 +335,7 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
         phone_policy: phonePolicy.trim(),
         note_to_toc: noteToToc.trim() ? noteToToc.trim() : '',
         plan_mode: planMode,
+        default_tags: tagsArr.length ? tagsArr : null,
         updated_at: new Date().toISOString(),
       };
 
@@ -524,18 +536,33 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
             </div>
           </section>
 
-          {/* 2) Note to TOC */}
+          {/* 2) Tags */}
           <section style={styles.card}>
-            <div style={styles.sectionHeader}>2. Note to TOC</div>
+            <div style={styles.sectionHeader}>2. Tags (defaults)</div>
+            <label style={styles.field}>
+              <div style={styles.label}>Default tags (comma-separated, no #)</div>
+              <input
+                value={defaultTags}
+                onChange={(e) => setDefaultTags(e.target.value)}
+                style={styles.input}
+                placeholder="ADST, Gr10"
+              />
+              <div style={styles.mutedSmall}>Examples: ADST, FA, Bible, Gr9, Gr10, Gr11, Gr12</div>
+            </label>
+          </section>
+
+          {/* 3) Note to TOC */}
+          <section style={styles.card}>
+            <div style={styles.sectionHeader}>3. Note to TOC</div>
             <label style={styles.field}>
               <div style={styles.label}>Note to the TOC (plain text)</div>
               <textarea value={noteToToc} onChange={(e) => setNoteToToc(e.target.value)} rows={6} style={styles.textarea} />
             </label>
           </section>
 
-          {/* 3) Opening routine */}
+          {/* 4) Opening routine */}
           <section style={styles.card}>
-            <div style={styles.sectionHeader}>3. Opening routine</div>
+            <div style={styles.sectionHeader}>4. Opening routine</div>
             <div style={styles.mutedSmall}>Ordered steps. Use up/down to reorder.</div>
 
             <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
