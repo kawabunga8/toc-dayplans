@@ -799,7 +799,7 @@ begin
   end if;
 
   -- Only return the block that matches this plan's slot (e.g. Block F), not the entire day schedule.
-  -- We match via classes.block_label (joined by class_id).
+  -- Prefer matching via classes.block_label (joined by class_id), but fall back to parsing "(Block X)" from class_name.
   select coalesce(
     jsonb_agg(
       jsonb_build_object(
@@ -810,7 +810,7 @@ begin
         'class_name', b.class_name,
         'details', b.details,
         'class_id', b.class_id,
-        'block_label', c.block_label,
+        'block_label', coalesce(c.block_label, substring(b.class_name from '\\(Block ([^\\)]+)\\)')),
         'students', (
           select coalesce(
             jsonb_agg(
@@ -832,8 +832,7 @@ begin
   from day_plan_blocks b
   left join classes c on c.id = b.class_id
   where b.day_plan_id = p.id
-    and c.block_label is not null
-    and upper(c.block_label) = upper(p.slot);
+    and upper(coalesce(c.block_label, substring(b.class_name from '\\(Block ([^\\)]+)\\)'))) = upper(p.slot);
 
   return jsonb_build_object(
     'id', p.id,
