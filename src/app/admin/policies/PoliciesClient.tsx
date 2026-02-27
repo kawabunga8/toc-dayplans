@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { useDemo } from '@/app/admin/DemoContext';
 
@@ -33,6 +34,22 @@ const LEVELS: Array<{ level: Level; label: string }> = [
 
 export default function PoliciesClient() {
   const { isDemo } = useDemo();
+  const searchParams = useSearchParams();
+
+  const returnHref = useMemo(() => {
+    const r = searchParams.get('return');
+    return r && r.startsWith('/') ? r : null;
+  }, [searchParams]);
+
+  const initialSubject = useMemo(() => {
+    const s = (searchParams.get('subject') ?? '').trim();
+    return s;
+  }, [searchParams]);
+
+  const initialGrade = useMemo(() => {
+    const g = Number(searchParams.get('grade'));
+    return Number.isFinite(g) ? g : null;
+  }, [searchParams]);
 
   const [status, setStatus] = useState<Status>('loading');
   const [error, setError] = useState<string | null>(null);
@@ -99,9 +116,13 @@ export default function PoliciesClient() {
       const distinct = Array.from(new Set((data ?? []).map((r: any) => String(r.subject ?? '').trim()).filter(Boolean)));
       setSubjects(distinct);
 
-      // Auto-select first subject
-      if (distinct.length > 0) setSelectedSubject((prev) => prev || distinct[0]);
-      else setSelectedSubject('');
+      // Auto-select / deep-link subject
+      if (distinct.length > 0) {
+        const wanted = initialSubject && distinct.includes(initialSubject) ? initialSubject : distinct[0];
+        setSelectedSubject((prev) => prev || wanted);
+      } else {
+        setSelectedSubject('');
+      }
 
       setStatus('idle');
     } catch (e: any) {
@@ -126,8 +147,12 @@ export default function PoliciesClient() {
       const distinct = Array.from(new Set((data ?? []).map((r: any) => Number(r.grade)).filter((n) => Number.isFinite(n))));
       setGrades(distinct);
 
-      if (distinct.length > 0) setSelectedGrade((prev) => (prev && distinct.includes(prev) ? prev : distinct[0]));
-      else setSelectedGrade(null);
+      if (distinct.length > 0) {
+        const wanted = initialGrade && distinct.includes(initialGrade) ? initialGrade : distinct[0];
+        setSelectedGrade((prev) => (prev && distinct.includes(prev) ? prev : wanted));
+      } else {
+        setSelectedGrade(null);
+      }
 
       setSelectedStandardId('');
       setStandards([]);
@@ -267,6 +292,14 @@ export default function PoliciesClient() {
 
       <section style={styles.card}>
         <div style={styles.sectionHeader}>Learning Standards</div>
+
+        {returnHref ? (
+          <div style={{ marginBottom: 12 }}>
+            <a href={returnHref} style={styles.secondaryBtn}>
+              ← Back
+            </a>
+          </div>
+        ) : null}
 
         {status === 'error' && error ? <div style={styles.errorBox}>{error}</div> : null}
 

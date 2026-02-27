@@ -36,6 +36,8 @@ alter table day_plans add column if not exists visibility text not null default 
 alter table day_plans add column if not exists share_token_hash text;
 alter table day_plans add column if not exists share_expires_at timestamptz;
 alter table day_plans add column if not exists trashed_at timestamptz;
+alter table day_plans add column if not exists learning_standard_focus text;
+alter table day_plans add column if not exists core_competency_focus text;
 
 -- Allow multiple plans per day; prevent duplicates per (date, slot, friday_type)
 -- Use COALESCE so non-Friday (null friday_type) still participates in uniqueness.

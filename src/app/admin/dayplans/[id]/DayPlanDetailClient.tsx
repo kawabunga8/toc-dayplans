@@ -15,6 +15,8 @@ type DayPlanRow = {
   friday_type: 'day1' | 'day2' | null;
   title: string;
   notes: string | null;
+  learning_standard_focus: string | null;
+  core_competency_focus: string | null;
   visibility: 'private' | 'link';
   share_expires_at: string | null;
   trashed_at: string | null;
@@ -53,6 +55,8 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
 
   const [draftTitle, setDraftTitle] = useState('');
   const [draftNotes, setDraftNotes] = useState('');
+  const [draftLearningStandardFocus, setDraftLearningStandardFocus] = useState('');
+  const [draftCoreCompetencyFocus, setDraftCoreCompetencyFocus] = useState('');
 
   const [blocks, setBlocks] = useState<PlanBlockRow[]>([]);
   const [classes, setClasses] = useState<ClassRow[]>([]);
@@ -79,7 +83,7 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
         await Promise.all([
           supabase
             .from('day_plans')
-            .select('id,plan_date,slot,friday_type,title,notes,visibility,share_expires_at,trashed_at')
+            .select('id,plan_date,slot,friday_type,title,notes,learning_standard_focus,core_competency_focus,visibility,share_expires_at,trashed_at')
             .eq('id', id)
             .single(),
           supabase
@@ -101,6 +105,8 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
       setPlan(p);
       setDraftTitle(p.title ?? '');
       setDraftNotes(p.notes ?? '');
+      setDraftLearningStandardFocus(p.learning_standard_focus ?? '');
+      setDraftCoreCompetencyFocus(p.core_competency_focus ?? '');
 
       setBlocks((blockData ?? []).map((b: any) => ({
         id: b.id,
@@ -181,7 +187,13 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
       const supabase = getSupabaseClient();
       const { error } = await supabase
         .from('day_plans')
-        .update({ title: draftTitle.trim(), notes: draftNotes.trim() ? draftNotes.trim() : null, updated_at: new Date().toISOString() })
+        .update({
+          title: draftTitle.trim(),
+          notes: draftNotes.trim() ? draftNotes.trim() : null,
+          learning_standard_focus: draftLearningStandardFocus.trim() ? draftLearningStandardFocus.trim() : null,
+          core_competency_focus: draftCoreCompetencyFocus.trim() ? draftCoreCompetencyFocus.trim() : null,
+          updated_at: new Date().toISOString(),
+        })
         .eq('id', plan.id);
       if (error) throw error;
       await load();
@@ -508,6 +520,63 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
               <label style={{ display: 'grid', gap: 6 }}>
                 <span style={styles.label}>Notes (optional)</span>
                 <textarea value={draftNotes} onChange={(e) => setDraftNotes(e.target.value)} rows={4} style={styles.textarea} />
+              </label>
+
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span style={styles.label}>Learning Standard Focus (optional)</span>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'stretch', flexWrap: 'wrap' }}>
+                  <input
+                    value={draftLearningStandardFocus}
+                    onChange={(e) => setDraftLearningStandardFocus(e.target.value)}
+                    style={{ ...styles.input, flex: 1, minWidth: 260 }}
+                    placeholder="(empty)"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const className = blocks?.[0]?.class_name ?? plan?.title ?? '';
+                      const upper = String(className).toUpperCase();
+                      const isAdst = upper.includes('COMPUTER') || upper.includes('PROGRAM');
+                      const isFa = upper.includes('BAND') || upper.includes('WORSHIP') || upper.includes('ART');
+
+                      const m = String(className).match(/\b(9|10|11|12)\b/);
+                      const grade = m ? m[1] : '';
+
+                      const subject = isAdst ? 'ADST' : isFa ? 'FA' : '';
+                      const qs = new URLSearchParams();
+                      if (subject) qs.set('subject', subject);
+                      if (grade) qs.set('grade', grade);
+                      qs.set('return', `/admin/dayplans/${id}`);
+                      window.location.href = `/admin/policies?${qs.toString()}`;
+                    }}
+                    style={styles.secondaryBtn}
+                  >
+                    Select…
+                  </button>
+                </div>
+              </label>
+
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span style={styles.label}>Core Competency Focus (optional)</span>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'stretch', flexWrap: 'wrap' }}>
+                  <input
+                    value={draftCoreCompetencyFocus}
+                    onChange={(e) => setDraftCoreCompetencyFocus(e.target.value)}
+                    style={{ ...styles.input, flex: 1, minWidth: 260 }}
+                    placeholder="(empty)"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const qs = new URLSearchParams();
+                      qs.set('return', `/admin/dayplans/${id}`);
+                      window.location.href = `/admin/policies?${qs.toString()}`;
+                    }}
+                    style={styles.secondaryBtn}
+                  >
+                    Select…
+                  </button>
+                </div>
               </label>
 
               {isFridayLocal(plan.plan_date) && (
