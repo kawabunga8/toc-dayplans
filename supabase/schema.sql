@@ -120,14 +120,13 @@ create index if not exists classes_block_label_idx on classes(block_label);
 -- ----------------------
 -- POLICIES: LEARNING STANDARDS (structured)
 -- ----------------------
--- Learning standards catalog (no grade-specific titles; titles are shared across grades within a subject)
+-- Learning standards catalog (titles shared across grades within a subject)
 create table if not exists learning_standards (
   id uuid primary key default gen_random_uuid(),
   subject text not null,
   standard_key text not null,
   standard_title text not null,
   sort_order int,
-  summary_text text,
   source_pdf_path text,
   page_ref text,
   created_at timestamptz not null default now(),
@@ -136,6 +135,23 @@ create table if not exists learning_standards (
 );
 
 create index if not exists learning_standards_subject_idx on learning_standards(subject);
+
+-- Rubric leaf nodes (grade x level) with editable override + reset-to-original
+create table if not exists learning_standard_rubrics (
+  id uuid primary key default gen_random_uuid(),
+  learning_standard_id uuid not null references learning_standards(id) on delete cascade,
+  grade int not null,
+  level text not null,
+  original_text text not null default '',
+  edited_text text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint learning_standard_rubrics_grade_check check (grade in (9,10,11,12)),
+  constraint learning_standard_rubrics_level_check check (level in ('emerging','developing','proficient','extending')),
+  constraint learning_standard_rubrics_unique unique(learning_standard_id, grade, level)
+);
+
+create index if not exists learning_standard_rubrics_std_grade_idx on learning_standard_rubrics(learning_standard_id, grade);
 
 -- ----------------------
 -- ROW LEVEL SECURITY
@@ -613,6 +629,7 @@ alter table toc_activity_options enable row level security;
 alter table toc_activity_option_steps enable row level security;
 alter table toc_what_to_do_if_items enable row level security;
 alter table learning_standards enable row level security;
+alter table learning_standard_rubrics enable row level security;
 
 -- Template + instance content: staff can read; demo cannot write.
 
@@ -913,7 +930,16 @@ for update using (can_write()) with check (can_write());
 create policy "learning_standards_staff_delete" on learning_standards
 for delete using (can_write());
 
--- (learning_standard_levels policies removed; catalog-only learning_standards)
+-- learning_standard_rubrics
+drop policy if exists "learning_standard_rubrics_staff_all" on learning_standard_rubrics;
+create policy "learning_standard_rubrics_staff_select" on learning_standard_rubrics
+for select using (is_staff());
+create policy "learning_standard_rubrics_staff_insert" on learning_standard_rubrics
+for insert with check (can_write());
+create policy "learning_standard_rubrics_staff_update" on learning_standard_rubrics
+for update using (can_write()) with check (can_write());
+create policy "learning_standard_rubrics_staff_delete" on learning_standard_rubrics
+for delete using (can_write());
 
 -- PUBLIC ACCESS NOTE:
 -- Public TOC links should be served through a *server-side* route or edge function

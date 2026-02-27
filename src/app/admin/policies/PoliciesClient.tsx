@@ -13,7 +13,15 @@ type StandardRow = {
   standard_key: string;
   standard_title: string;
   sort_order: number | null;
-  summary_text: string | null;
+};
+
+type RubricRow = {
+  id: string;
+  learning_standard_id: string;
+  grade: number;
+  level: Level;
+  original_text: string;
+  edited_text: string | null;
 };
 
 type Status = 'loading' | 'idle' | 'saving' | 'error';
@@ -41,7 +49,7 @@ export default function PoliciesClient() {
 
   const initialGrade = useMemo(() => {
     const g = Number(searchParams.get('grade'));
-    return Number.isFinite(g) ? g : null;
+    return [9, 10, 11, 12].includes(g) ? g : 9;
   }, [searchParams]);
 
   const [status, setStatus] = useState<Status>('loading');
@@ -50,10 +58,17 @@ export default function PoliciesClient() {
   const [subjects, setSubjects] = useState<string[]>([]);
   const [selectedSubject, setSelectedSubject] = useState<string>('');
 
+  const [selectedGrade, setSelectedGrade] = useState<number>(initialGrade);
+
   const [standards, setStandards] = useState<StandardRow[]>([]);
   const [selectedStandardId, setSelectedStandardId] = useState<string>('');
 
-  const [draftSummary, setDraftSummary] = useState<string>('');
+  const [rubrics, setRubrics] = useState<Record<Level, RubricRow | null>>({
+    emerging: null,
+    developing: null,
+    proficient: null,
+    extending: null,
+  });
 
   const selectedStandard = useMemo(
     () => standards.find((s) => s.id === selectedStandardId) ?? null,
@@ -72,9 +87,13 @@ export default function PoliciesClient() {
   }, [selectedSubject]);
 
   useEffect(() => {
-    const s = standards.find((x) => x.id === selectedStandardId);
-    setDraftSummary(s?.summary_text ?? '');
-  }, [selectedStandardId, standards]);
+    if (!selectedStandardId) {
+      setRubrics({ emerging: null, developing: null, proficient: null, extending: null });
+      return;
+    }
+    void loadRubrics(selectedStandardId, selectedGrade);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedStandardId, selectedGrade]);
 
   async function loadSubjects() {
     setStatus('loading');
@@ -82,16 +101,12 @@ export default function PoliciesClient() {
 
     try {
       const supabase = getSupabaseClient();
-      const { data, error } = await supabase
-        .from('learning_standards')
-        .select('subject')
-        .order('subject', { ascending: true });
+      const { data, error } = await supabase.from('learning_standards').select('subject').order('subject', { ascending: true });
       if (error) throw error;
 
       const distinct = Array.from(new Set((data ?? []).map((r: any) => String(r.subject ?? '').trim()).filter(Boolean)));
       setSubjects(distinct);
 
-      // Auto-select / deep-link subject
       if (distinct.length > 0) {
         const wanted = initialSubject && distinct.includes(initialSubject) ? initialSubject : distinct[0];
         setSelectedSubject((prev) => prev || wanted);
@@ -114,7 +129,7 @@ export default function PoliciesClient() {
       const supabase = getSupabaseClient();
       const { data, error } = await supabase
         .from('learning_standards')
-        .select('id,subject,standard_key,standard_title,sort_order,summary_text')
+        .select('id,subject,standard_key,standard_title,sort_order')
         .eq('subject', subject)
         .order('sort_order', { ascending: true, nullsFirst: false })
         .order('standard_title', { ascending: true });
@@ -132,6 +147,43 @@ export default function PoliciesClient() {
     }
   }
 
+  async function loadRubrics(learningStandardId: string, grade: number) {
+    setStatus('loading');
+    setError(null);
+
+    try {
+      const res = await fetch(
+        `/api/admin/learning-standards/rubric?learning_standard_id=${encodeURIComponent(learningStandardId)}&grade=${encodeURIComponent(String(grade))}`
+      );
+      const j = await res.json();
+      if (!res.ok) throw new Error(j?.error ?? 'Failed to load rubric');
+
+      const map: Record<Level, RubricRow | null> = { emerging: null, developing: null, proficient: null, extending: null };
+      for (const r of (j?.rows ?? []) as any[]) {
+        const lvl = String(r.level) as Level;
+        if (lvl in map) map[lvl] = r as RubricRow;
+      }
+      setRubrics(map);
+      setStatus('idle');
+    } catch (e: any) {
+      setStatus('error');
+      setError(e?.message ?? 'Failed to load rubric');
+    }
+  }
+
+  function displayedText(lvl: Level): string {
+    const r = rubrics[lvl];
+    return (r?.edited_text ?? r?.original_text ?? '').toString();
+  }
+
+  function setDisplayedText(lvl: Level, next: string) {
+    setRubrics((prev) => {
+      const cur = prev[lvl];
+      if (!cur) return prev;
+      return { ...prev, [lvl]: { ...cur, edited_text: next } };
+    });
+  }
+
   async function saveEdits() {
     if (!selectedStandardId) return;
 
@@ -140,13 +192,19 @@ export default function PoliciesClient() {
 
     try {
       const supabase = getSupabaseClient();
-      const { error } = await supabase
-        .from('learning_standards')
-        .update({ summary_text: draftSummary.trim() ? draftSummary : null, updated_at: new Date().toISOString() })
-        .eq('id', selectedStandardId);
-      if (error) throw error;
+      for (const { level } of LEVELS) {
+        const row = rubrics[level];
+        if (!row) continue;
+        const edited = (row.edited_text ?? '').toString();
+        const patch = {
+          edited_text: edited.trim() && edited !== row.original_text ? edited : null,
+          updated_at: new Date().toISOString(),
+        };
+        const { error } = await supabase.from('learning_standard_rubrics').update(patch).eq('id', row.id);
+        if (error) throw error;
+      }
 
-      await loadStandards(selectedSubject);
+      await loadRubrics(selectedStandardId, selectedGrade);
       setStatus('idle');
     } catch (e: any) {
       setStatus('error');
@@ -156,22 +214,24 @@ export default function PoliciesClient() {
 
   async function resetToOriginal() {
     if (!selectedStandardId) return;
-    const ok = window.confirm('Clear the summary text for this learning standard?');
+    const ok = window.confirm('Reset all 4 levels for this grade to the original text?');
     if (!ok) return;
 
-    setDraftSummary('');
     setStatus('saving');
     setError(null);
 
     try {
       const supabase = getSupabaseClient();
-      const { error } = await supabase
-        .from('learning_standards')
-        .update({ summary_text: null, updated_at: new Date().toISOString() })
-        .eq('id', selectedStandardId);
-      if (error) throw error;
+      const ids = LEVELS.map(({ level }) => rubrics[level]?.id).filter(Boolean) as string[];
+      if (ids.length > 0) {
+        const { error } = await supabase
+          .from('learning_standard_rubrics')
+          .update({ edited_text: null, updated_at: new Date().toISOString() })
+          .in('id', ids);
+        if (error) throw error;
+      }
 
-      await loadStandards(selectedSubject);
+      await loadRubrics(selectedStandardId, selectedGrade);
       setStatus('idle');
     } catch (e: any) {
       setStatus('error');
@@ -182,9 +242,7 @@ export default function PoliciesClient() {
   return (
     <main style={styles.page}>
       <h1 style={styles.h1}>Policies</h1>
-      <p style={styles.muted}>
-        Learning standards lookup (filter by Subject → Grade → Standard). Editable overrides with a Reset to original button.
-      </p>
+      <p style={styles.muted}>Learning standards lookup (Subject → Standard → Grade). Editable overrides with Reset to original.</p>
 
       <section style={styles.card}>
         <div style={styles.sectionHeader}>Learning Standards</div>
@@ -200,7 +258,7 @@ export default function PoliciesClient() {
         {status === 'error' && error ? <div style={styles.errorBox}>{error}</div> : null}
 
         {subjects.length === 0 ? (
-          <div style={{ opacity: 0.85 }}>No learning standards found yet. Import the PDFs into the learning standards tables.</div>
+          <div style={{ opacity: 0.85 }}>No learning standards found yet. Seed learning_standards + learning_standard_rubrics.</div>
         ) : (
           <div style={{ display: 'grid', gap: 12 }}>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
@@ -226,6 +284,17 @@ export default function PoliciesClient() {
                 </select>
               </label>
 
+              <label style={styles.fieldInline}>
+                <div style={styles.label}>Grade</div>
+                <select value={selectedGrade} onChange={(e) => setSelectedGrade(Number(e.target.value))} style={styles.input}>
+                  {[9, 10, 11, 12].map((g) => (
+                    <option key={g} value={g}>
+                      {g}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
               <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
                 <button onClick={saveEdits} style={styles.primaryBtn} disabled={isDemo || status !== 'idle' || !selectedStandardId}>
                   {status === 'saving' ? 'Saving…' : 'Save'}
@@ -239,24 +308,29 @@ export default function PoliciesClient() {
             {selectedStandard ? (
               <div style={styles.callout}>
                 <div style={{ fontWeight: 900, color: RCS.deepNavy }}>
-                  {selectedStandard.subject} — {selectedStandard.standard_title}
+                  {selectedStandard.subject} Grade {selectedGrade} — {selectedStandard.standard_title}
                 </div>
                 <div style={{ fontSize: 12, opacity: 0.85 }}>Key: {selectedStandard.standard_key}</div>
               </div>
             ) : null}
 
             <div style={{ display: 'grid', gap: 12 }}>
-              <div style={styles.levelCard}>
-                <div style={styles.levelHeader}>Summary (optional)</div>
-                <textarea
-                  value={draftSummary}
-                  onChange={(e) => setDraftSummary(e.target.value)}
-                  rows={8}
-                  style={styles.textarea}
-                  disabled={isDemo || status !== 'idle'}
-                  placeholder="Add a short, TOC-friendly summary or focus statement…"
-                />
-              </div>
+              {LEVELS.map(({ level, label }) => (
+                <div key={level} style={styles.levelCard}>
+                  <div style={styles.levelHeader}>{label}</div>
+                  {rubrics[level] ? (
+                    <textarea
+                      value={displayedText(level)}
+                      onChange={(e) => setDisplayedText(level, e.target.value)}
+                      rows={7}
+                      style={styles.textarea}
+                      disabled={isDemo || status !== 'idle'}
+                    />
+                  ) : (
+                    <div style={{ opacity: 0.75 }}>—</div>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -272,7 +346,6 @@ const RCS = {
   gold: '#C9A84C',
   paleGold: '#FDF3DC',
   white: '#FFFFFF',
-  lightGray: '#F5F5F5',
   textDark: '#1A1A1A',
 } as const;
 
@@ -295,7 +368,7 @@ const styles: Record<string, React.CSSProperties> = {
   input: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.deepNavy}`, background: RCS.white, color: RCS.textDark },
   textarea: { width: '100%', padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.deepNavy}`, background: RCS.white, color: RCS.textDark, fontFamily: 'inherit' },
   primaryBtn: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.gold}`, background: RCS.deepNavy, color: RCS.white, cursor: 'pointer', fontWeight: 900 },
-  secondaryBtn: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.gold}`, background: 'transparent', color: RCS.deepNavy, cursor: 'pointer', fontWeight: 900 },
+  secondaryBtn: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.gold}`, background: 'transparent', color: RCS.deepNavy, cursor: 'pointer', fontWeight: 900, textDecoration: 'none', display: 'inline-block' },
   errorBox: { marginTop: 10, padding: 12, borderRadius: 10, border: '1px solid #991b1b', background: '#FEE2E2', color: '#7F1D1D' },
   callout: { border: `1px solid ${RCS.gold}`, borderRadius: 12, padding: 12, background: RCS.paleGold },
   levelCard: { border: `1px solid ${RCS.deepNavy}`, borderRadius: 12, padding: 12, background: RCS.lightBlue },
