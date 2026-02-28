@@ -539,10 +539,7 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
           <section style={styles.card}>
             <div style={styles.sectionHeader}>Plan info</div>
             <div style={{ display: 'grid', gap: 10 }}>
-              <label style={{ display: 'grid', gap: 6 }}>
-                <span style={styles.label}>Title</span>
-                <input value={draftTitle} onChange={(e) => setDraftTitle(e.target.value)} style={styles.input} />
-              </label>
+              {/* Title is derived from the class/block. Hidden to reduce drift. */}
 
               <label style={{ display: 'grid', gap: 6 }}>
                 <span style={styles.label}>Notes (optional)</span>
