@@ -65,6 +65,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
   const [tplWhatIf, setTplWhatIf] = useState<Array<{ scenario_text: string; response_text: string }>>([]);
   const [tplLessonFlow, setTplLessonFlow] = useState<Array<{ time_text: string; phase_text: string; activity_text: string; purpose_text: string | null }>>([]);
   const [tplActivityOptions, setTplActivityOptions] = useState<ActivityOption[]>([]);
+  const [tplRoles, setTplRoles] = useState<Array<{ who: string; responsibility: string }>>([]);
 
   // Overrides (instance)
   const [openingSteps, setOpeningSteps] = useState<OpeningStep[]>([]);
@@ -79,6 +80,10 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
 
   const [whatIfItems, setWhatIfItems] = useState<WhatIf[]>([]);
   const [whatIfOverride, setWhatIfOverride] = useState(false);
+
+  const [roles, setRoles] = useState<Array<{ who: string; responsibility: string; source_template_role_row_id: string | null }>>([]);
+  const [rolesOverride, setRolesOverride] = useState(false);
+  const [showRolesEditor, setShowRolesEditor] = useState(false);
 
   const [showOpeningEditor, setShowOpeningEditor] = useState(false);
   const [showWhatIfEditor, setShowWhatIfEditor] = useState(false);
@@ -189,16 +194,18 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
 
     // template previews
     if (tplId) {
-      const [orRes, wiRes, lfRes, optRes] = await Promise.all([
+      const [orRes, wiRes, lfRes, optRes, roleRes] = await Promise.all([
         supabase.from('class_opening_routine_steps').select('sort_order,step_text').eq('template_id', tplId).order('sort_order', { ascending: true }),
         supabase.from('class_what_to_do_if_items').select('sort_order,scenario_text,response_text').eq('template_id', tplId).order('sort_order', { ascending: true }),
         supabase.from('class_lesson_flow_phases').select('sort_order,time_text,phase_text,activity_text,purpose_text').eq('template_id', tplId).order('sort_order', { ascending: true }),
         supabase.from('class_activity_options').select('id,sort_order,title,description,details_text,toc_role_text').eq('template_id', tplId).order('sort_order', { ascending: true }),
+        supabase.from('class_role_rows').select('sort_order,who,responsibility').eq('template_id', tplId).order('sort_order', { ascending: true }),
       ]);
       if (orRes.error) throw orRes.error;
       if (wiRes.error) throw wiRes.error;
       if (lfRes.error) throw lfRes.error;
       if (optRes.error) throw optRes.error;
+      if (roleRes.error) throw roleRes.error;
 
       setTplOpeningSteps((orRes.data ?? []).map((r: any) => ({ step_text: r.step_text })));
       setTplWhatIf((wiRes.data ?? []).map((r: any) => ({ scenario_text: r.scenario_text, response_text: r.response_text })));
@@ -230,15 +237,18 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
           steps: (tStepsByOpt[o.id] ?? []).map((s: any) => ({ step_text: s.step_text, source_template_option_step_id: null })),
         }))
       );
+
+      setTplRoles((roleRes.data ?? []).map((r: any) => ({ who: r.who, responsibility: r.responsibility })));
     } else {
       setTplOpeningSteps([]);
       setTplWhatIf([]);
       setTplLessonFlow([]);
       setTplActivityOptions([]);
+      setTplRoles([]);
     }
 
     // overrides (instance)
-    const [or2, lf2, wi2, opt2] = await Promise.all([
+    const [or2, lf2, wi2, opt2, role2] = await Promise.all([
       supabase
         .from('toc_opening_routine_steps')
         .select('sort_order,step_text,source_template_step_id')
@@ -259,11 +269,17 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         .select('id,sort_order,title,description,details_text,toc_role_text,source_template_option_id')
         .eq('toc_block_plan_id', tocPlanId)
         .order('sort_order', { ascending: true }),
+      supabase
+        .from('toc_role_rows')
+        .select('sort_order,who,responsibility,source_template_role_row_id')
+        .eq('toc_block_plan_id', tocPlanId)
+        .order('sort_order', { ascending: true }),
     ]);
     if (or2.error) throw or2.error;
     if (lf2.error) throw lf2.error;
     if (wi2.error) throw wi2.error;
     if (opt2.error) throw opt2.error;
+    if (role2.error) throw role2.error;
 
     setOpeningSteps((or2.data ?? []).map((r: any) => ({ step_text: r.step_text, source_template_step_id: r.source_template_step_id ?? null })));
     setOpeningOverride((or2.data ?? []).length > 0);
@@ -310,6 +326,9 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
       }))
     );
     setActivityOverride(opts.length > 0);
+
+    setRoles((role2.data ?? []).map((r: any) => ({ who: r.who, responsibility: r.responsibility, source_template_role_row_id: r.source_template_role_row_id ?? null })));
+    setRolesOverride((role2.data ?? []).length > 0);
   }
 
   async function createOpeningOverride() {
@@ -376,6 +395,42 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
       await loadAll(supabase, tocBlockPlanId, templateId);
       setWhatIfOverride(true);
       setShowWhatIfEditor(true);
+      setStatus('idle');
+    } catch (e: any) {
+      setStatus('error');
+      setError(e?.message ?? 'Failed to create override');
+    }
+  }
+
+  async function createRolesOverride() {
+    if (!tocBlockPlanId || !templateId || isDemo) return;
+    setStatus('saving');
+    setError(null);
+    try {
+      const supabase = getSupabaseClient();
+      const { data: rows0, error: tErr } = await supabase
+        .from('class_role_rows')
+        .select('id,sort_order,who,responsibility')
+        .eq('template_id', templateId)
+        .order('sort_order', { ascending: true });
+      if (tErr) throw tErr;
+
+      await supabase.from('toc_role_rows').delete().eq('toc_block_plan_id', tocBlockPlanId);
+      if ((rows0?.length ?? 0) > 0) {
+        const rows = (rows0 ?? []).map((r: any) => ({
+          toc_block_plan_id: tocBlockPlanId,
+          sort_order: r.sort_order,
+          who: r.who,
+          responsibility: r.responsibility,
+          source_template_role_row_id: r.id,
+        }));
+        const { error } = await supabase.from('toc_role_rows').insert(rows);
+        if (error) throw error;
+      }
+
+      await loadAll(supabase, tocBlockPlanId, templateId);
+      setRolesOverride(true);
+      setShowRolesEditor(true);
       setStatus('idle');
     } catch (e: any) {
       setStatus('error');
@@ -551,6 +606,22 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
             source_template_item_id: w.source_template_item_id,
           }));
           const { error } = await supabase.from('toc_what_to_do_if_items').insert(rows);
+          if (error) throw error;
+        }
+      }
+
+      // Roles overrides only if created
+      if (rolesOverride) {
+        await supabase.from('toc_role_rows').delete().eq('toc_block_plan_id', tocBlockPlanId);
+        if (roles.length > 0) {
+          const rows = roles.map((r, i) => ({
+            toc_block_plan_id: tocBlockPlanId,
+            sort_order: i + 1,
+            who: r.who,
+            responsibility: r.responsibility,
+            source_template_role_row_id: r.source_template_role_row_id,
+          }));
+          const { error } = await supabase.from('toc_role_rows').insert(rows);
           if (error) throw error;
         }
       }
@@ -823,6 +894,55 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
             ))}
             <button onClick={() => setOpeningSteps((p) => [...p, { step_text: '', source_template_step_id: null }])} style={styles.secondaryBtn} disabled={isDemo}>
               + Add step
+            </button>
+          </div>
+        ) : (
+          <div style={{ fontSize: 12, opacity: 0.8 }}>Override exists. Click “Edit override” to change it.</div>
+        )}
+      </div>
+
+      {/* Division of Roles: template preview unless override */}
+      <div style={styles.previewCard}>
+        <div style={styles.previewHeader}>
+          <div style={{ fontWeight: 900 }}>Division of Roles</div>
+          {!rolesOverride ? (
+            <button onClick={createRolesOverride} style={styles.secondaryBtn} disabled={isDemo || status === 'saving'}>
+              Create Day Override
+            </button>
+          ) : (
+            <button onClick={() => setShowRolesEditor((x) => !x)} style={styles.secondaryBtn} disabled={isDemo}>
+              {showRolesEditor ? 'Hide editor' : 'Edit override'}
+            </button>
+          )}
+        </div>
+
+        {!rolesOverride ? (
+          <div style={{ display: 'grid', gap: 6 }}>
+            {(tplRoles.length ? tplRoles : [{ who: '—', responsibility: '' }]).map((r, i) => (
+              <div key={i} style={{ opacity: r.who === '—' ? 0.6 : 1 }}>
+                <b>{r.who}:</b> {r.responsibility}
+              </div>
+            ))}
+          </div>
+        ) : showRolesEditor ? (
+          <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
+            {roles.map((r, idx) => (
+              <div key={idx} style={styles.whatIfRow}>
+                <input value={r.who} onChange={(e) => setRoles((prev) => prev.map((x, i) => (i === idx ? { ...x, who: e.target.value } : x)))} style={styles.input} disabled={isDemo} placeholder="Who" />
+                <input
+                  value={r.responsibility}
+                  onChange={(e) => setRoles((prev) => prev.map((x, i) => (i === idx ? { ...x, responsibility: e.target.value } : x)))}
+                  style={styles.input}
+                  disabled={isDemo}
+                  placeholder="Responsibility"
+                />
+                <button onClick={() => setRoles((prev) => prev.filter((_, i) => i !== idx))} style={styles.dangerBtn} disabled={isDemo}>
+                  Remove
+                </button>
+              </div>
+            ))}
+            <button onClick={() => setRoles((p) => [...p, { who: '', responsibility: '', source_template_role_row_id: null }])} style={styles.secondaryBtn} disabled={isDemo}>
+              + Add role row
             </button>
           </div>
         ) : (

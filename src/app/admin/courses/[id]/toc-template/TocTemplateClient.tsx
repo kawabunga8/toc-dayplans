@@ -52,6 +52,8 @@ type ActivityOption = {
 
 type WhatIfItem = { id?: string; scenario_text: string; response_text: string };
 
+type RoleRow = { id?: string; who: string; responsibility: string };
+
 type Status = 'loading' | 'idle' | 'saving' | 'error';
 
 export default function TocTemplateClient({ classId }: { classId?: string }) {
@@ -81,6 +83,7 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
   const [activityOptions, setActivityOptions] = useState<ActivityOption[]>([]);
 
   const [whatIfItems, setWhatIfItems] = useState<WhatIfItem[]>([]);
+  const [roles, setRoles] = useState<RoleRow[]>([]);
 
   const title = useMemo(() => {
     if (!klass) return 'TOC Template';
@@ -182,6 +185,12 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
             }))
           );
 
+          // 10) Default roles
+          setRoles([
+            { who: 'TOC', responsibility: 'Take attendance. Supervise throughout.' },
+            { who: 'Students', responsibility: 'Follow the plan and stay on task.' },
+          ]);
+
           setStatus('idle');
           return;
         }
@@ -200,7 +209,7 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
         const templateId = tplRow.id;
 
         // child rows
-        const [routineRes, phaseRes, optRes, optStepsRes, whatIfRes] = await Promise.all([
+        const [routineRes, phaseRes, optRes, optStepsRes, whatIfRes, roleRes] = await Promise.all([
           supabase
             .from('class_opening_routine_steps')
             .select('*')
@@ -229,12 +238,18 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
             .select('*')
             .eq('template_id', templateId)
             .order('sort_order', { ascending: true }),
+          supabase
+            .from('class_role_rows')
+            .select('*')
+            .eq('template_id', templateId)
+            .order('sort_order', { ascending: true }),
         ]);
 
         if (routineRes.error) throw routineRes.error;
         if (phaseRes.error) throw phaseRes.error;
         if (optRes.error) throw optRes.error;
         if (whatIfRes.error) throw whatIfRes.error;
+        if (roleRes.error) throw roleRes.error;
 
         const routine = (routineRes.data ?? []).map((r: any) => ({ id: r.id, text: r.step_text })) as RoutineStep[];
         const phases = (phaseRes.data ?? []).map((r: any) => ({
@@ -280,11 +295,18 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
           response_text: r.response_text,
         })) as WhatIfItem[];
 
+        const roleRows = (roleRes.data ?? []).map((r: any) => ({
+          id: r.id,
+          who: r.who,
+          responsibility: r.responsibility,
+        })) as RoleRow[];
+
         if (cancelled) return;
         setOpeningRoutine(routine);
         setLessonFlow(phases);
         setActivityOptions(options);
         setWhatIfItems(whatIf);
+        setRoles(roleRows);
 
         setStatus('idle');
       } catch (e: any) {
@@ -455,6 +477,26 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
 
         if (rows.length > 0) {
           const { error: insErr } = await supabase.from('class_what_to_do_if_items').insert(rows);
+          if (insErr) throw insErr;
+        }
+      }
+
+      // Division of Roles
+      {
+        const { error: delErr } = await supabase.from('class_role_rows').delete().eq('template_id', templateId);
+        if (delErr) throw delErr;
+
+        const rows = roles
+          .map((r, idx) => ({
+            template_id: templateId,
+            sort_order: idx + 1,
+            who: r.who.trim(),
+            responsibility: r.responsibility.trim(),
+          }))
+          .filter((r) => r.who || r.responsibility);
+
+        if (rows.length > 0) {
+          const { error: insErr } = await supabase.from('class_role_rows').insert(rows);
           if (insErr) throw insErr;
         }
       }
@@ -885,9 +927,55 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
             </section>
           )}
 
-          {/* 6) What to do if */}
+          {/* 6) Division of Roles */}
           <section style={styles.card}>
-            <div style={styles.sectionHeader}>6. What to do if…</div>
+            <div style={styles.sectionHeader}>6. Division of Roles</div>
+            <div style={styles.mutedSmall}>Ordered rows: who / responsibility.</div>
+
+            <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
+              {roles.map((r, idx) => (
+                <div key={idx} style={styles.cardInner}>
+                  <div style={styles.rowBetween}>
+                    <div style={{ fontWeight: 900, color: RCS.deepNavy }}>Row {idx + 1}</div>
+                    <div style={styles.rowBtns}>
+                      <button onClick={() => setRoles((prev) => moveUp(prev, idx))} style={styles.smallBtn}>
+                        ↑
+                      </button>
+                      <button onClick={() => setRoles((prev) => moveDown(prev, idx))} style={styles.smallBtn}>
+                        ↓
+                      </button>
+                      <button onClick={() => setRoles((prev) => prev.filter((_, i) => i !== idx))} style={styles.smallBtnDanger}>
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+
+                  <div style={styles.grid2}>
+                    <label style={styles.field}>
+                      <div style={styles.label}>Who</div>
+                      <input value={r.who} onChange={(e) => setRoles((prev) => prev.map((x, i) => (i === idx ? { ...x, who: e.target.value } : x)))} style={styles.input} />
+                    </label>
+                    <label style={styles.field}>
+                      <div style={styles.label}>Responsibility</div>
+                      <input
+                        value={r.responsibility}
+                        onChange={(e) => setRoles((prev) => prev.map((x, i) => (i === idx ? { ...x, responsibility: e.target.value } : x)))}
+                        style={styles.input}
+                      />
+                    </label>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <button onClick={() => setRoles((prev) => [...prev, { who: '', responsibility: '' }])} disabled={isDemo} style={styles.secondaryBtn}>
+              + Add role row
+            </button>
+          </section>
+
+          {/* 7) What to do if */}
+          <section style={styles.card}>
+            <div style={styles.sectionHeader}>7. What to do if…</div>
             <div style={styles.mutedSmall}>Ordered scenario/response pairs.</div>
 
             <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
@@ -950,9 +1038,9 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
             </button>
           </section>
 
-          {/* 7) Save */}
+          {/* 8) Save */}
           <section style={styles.card}>
-            <div style={styles.sectionHeader}>7. Save</div>
+            <div style={styles.sectionHeader}>8. Save</div>
             <div style={styles.mutedSmall}>
               Saves the template and all sections to Supabase. (One-click save; writes occur sequentially under the hood.)
             </div>
