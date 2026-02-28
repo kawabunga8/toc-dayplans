@@ -49,6 +49,10 @@ type PublicPlanDetail = {
     lesson_flow_phases: Array<{ time_text: string; phase_text: string; activity_text: string; purpose_text: string | null }>;
     activity_options: Array<{ title: string; description: string; details_text: string; toc_role_text: string | null; steps: Array<{ step_text: string }> }>;
     what_to_do_if_items: Array<{ scenario_text: string; response_text: string }>;
+    class_overview_rows?: Array<{ label: string; value: string }>;
+    division_of_roles_rows?: Array<{ who: string; responsibility: string }>;
+    end_of_class_items?: Array<{ item_text: string }>;
+    attendance_note?: string;
   };
 };
 
@@ -623,6 +627,45 @@ export default function TocClient({
               <div style={styles.notesBox}>
                 <div style={styles.notesLabel}>Teacher Notes</div>
                 <div style={styles.notesText}>{openPlan.notes}</div>
+              </div>
+            ) : null}
+
+            {openPlan.toc?.class_overview_rows?.length ? (
+              <div style={styles.planBlockCard}>
+                <div style={{ fontWeight: 900, marginBottom: 6 }}>Class Overview</div>
+                <div style={{ display: 'grid', gap: 6 }}>
+                  {openPlan.toc.class_overview_rows.map((r, idx) => (
+                    <div key={idx}>
+                      <b>{r.label}:</b> <span style={{ whiteSpace: 'pre-wrap' }}>{r.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {openPlan.toc?.division_of_roles_rows?.length ? (
+              <div style={styles.planBlockCard}>
+                <div style={{ fontWeight: 900, marginBottom: 6 }}>Division of Roles</div>
+                <div style={{ display: 'grid', gap: 6 }}>
+                  {openPlan.toc.division_of_roles_rows.map((r, idx) => (
+                    <div key={idx}>
+                      <b>{r.who}:</b> <span style={{ whiteSpace: 'pre-wrap' }}>{r.responsibility}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {openPlan.toc?.end_of_class_items?.length ? (
+              <div style={styles.planBlockCard}>
+                <div style={{ fontWeight: 900, marginBottom: 6 }}>End of Class — Room Cleanup</div>
+                <ul style={{ margin: 0, paddingLeft: 18 }}>
+                  {openPlan.toc.end_of_class_items.map((it, idx) => (
+                    <li key={idx} style={{ marginBottom: 4 }}>
+                      {it.item_text}
+                    </li>
+                  ))}
+                </ul>
               </div>
             ) : null}
 

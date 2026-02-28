@@ -53,6 +53,10 @@ type PublicPlan = {
     lesson_flow_phases: TocLessonFlowPhase[];
     activity_options: TocActivityOption[];
     what_to_do_if_items: TocWhatIf[];
+    class_overview_rows?: Array<{ label: string; value: string }>;
+    division_of_roles_rows?: Array<{ who: string; responsibility: string }>;
+    end_of_class_items?: Array<{ item_text: string }>;
+    attendance_note?: string;
   };
 };
 
@@ -317,6 +321,68 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
                       {plan.toc.phone_policy ? <span> • <b>Phones:</b> {plan.toc.phone_policy}</span> : null}
                     </div>
 
+                    {plan.toc.class_overview_rows?.length ? (
+                      <div style={styles.tocSection}>
+                        <div style={styles.tocSectionTitle}>Class Overview</div>
+                        <div className="print-only" style={styles.printOnly}>
+                          <table style={styles.printTable as any}>
+                            <tbody>
+                              {plan.toc.class_overview_rows.map((r, idx) => (
+                                <tr key={idx}>
+                                  <td style={styles.printTd as any}>
+                                    <b>{r.label}</b>
+                                  </td>
+                                  <td style={styles.printTd as any}>{r.value}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        <div className="no-print" style={{ display: 'grid', gap: 6 }}>
+                          {plan.toc.class_overview_rows.map((r, idx) => (
+                            <div key={idx} style={styles.tocCard}>
+                              <div style={{ fontWeight: 900 }}>{r.label}</div>
+                              <div style={{ whiteSpace: 'pre-wrap' }}>{r.value}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {plan.toc.division_of_roles_rows?.length ? (
+                      <div style={styles.tocSection}>
+                        <div style={styles.tocSectionTitle}>Division of Roles</div>
+                        <div className="print-only" style={styles.printOnly}>
+                          <table style={styles.printTable as any}>
+                            <thead>
+                              <tr>
+                                <th style={styles.printTh as any}>WHO</th>
+                                <th style={styles.printTh as any}>RESPONSIBILITY</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {plan.toc.division_of_roles_rows.map((r, idx) => (
+                                <tr key={idx}>
+                                  <td style={styles.printTd as any}>
+                                    <b>{r.who}</b>
+                                  </td>
+                                  <td style={styles.printTd as any}>{r.responsibility}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        <div className="no-print" style={{ display: 'grid', gap: 6 }}>
+                          {plan.toc.division_of_roles_rows.map((r, idx) => (
+                            <div key={idx} style={styles.tocCard}>
+                              <div style={{ fontWeight: 900 }}>{r.who}</div>
+                              <div style={{ whiteSpace: 'pre-wrap' }}>{r.responsibility}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
                     {plan.toc.opening_routine_steps?.length ? (
                       <div style={styles.tocSection}>
                         <div style={styles.tocSectionTitle}>Opening routine</div>
@@ -406,7 +472,7 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
 
                     {plan.toc.what_to_do_if_items?.length ? (
                       <div style={styles.tocSection}>
-                        <div style={styles.tocSectionTitle}>What to do if…</div>
+                        <div style={styles.tocSectionTitle}>What to Do If…</div>
 
                         {/* Screen rendering */}
                         <div className="no-print" style={{ display: 'grid', gap: 8 }}>
@@ -445,17 +511,47 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
                         </div>
                       </div>
                     ) : null}
+
+                    {plan.toc.end_of_class_items?.length ? (
+                      <div style={styles.tocSection}>
+                        <div style={styles.tocSectionTitle}>End of Class — Room Cleanup</div>
+
+                        <div className="no-print" style={{ display: 'grid', gap: 6 }}>
+                          {plan.toc.end_of_class_items.map((it, idx) => (
+                            <div key={idx} style={styles.tocCard}>
+                              • {it.item_text}
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="print-only" style={styles.printOnly}>
+                          <ul style={{ margin: 0, paddingLeft: 18 }}>
+                            {plan.toc.end_of_class_items.map((it, idx) => (
+                              <li key={idx} style={{ marginBottom: 4 }}>
+                                {it.item_text}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
 
                 {showAttendance && open && (
                   <div className="attendanceWrap" style={styles.attendanceWrap}>
                     <div style={styles.attendanceHeader}>
-                      <div style={{ fontWeight: 900, color: RCS.navy }}>Attendance List</div>
+                      <div style={{ fontWeight: 900, color: RCS.navy }}>Attendance Sheet</div>
                       <button className="no-print" onClick={() => downloadAttendanceDocx(plan.id, b.id)} style={styles.primaryBtn}>
                         Download Attendance (.docx)
                       </button>
                     </div>
+
+                    {plan.toc?.attendance_note?.trim() ? (
+                      <div className="print-only" style={{ ...(styles.printOnly as any), marginBottom: 10, fontSize: 12 }}>
+                        {plan.toc.attendance_note}
+                      </div>
+                    ) : null}
 
                     {/* Screen attendance checklist (interactive) */}
                     <div className="no-print" style={{ display: 'grid', gap: 6 }}>
