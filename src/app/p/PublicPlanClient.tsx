@@ -397,7 +397,7 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
                     ) : null}
 
                     {plan.toc.plan_mode === 'lesson_flow' && plan.toc.lesson_flow_phases?.length ? (
-                      <div style={styles.tocSection}>
+                      <div style={{ ...styles.tocSection, background: RCS.lightGold, borderColor: RCS.gold }}>
                         <div style={styles.tocSectionTitle}>Lesson flow</div>
 
                         <table style={styles.printTable as any}>
@@ -451,7 +451,7 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
                     ) : null}
 
                     {plan.toc.what_to_do_if_items?.length ? (
-                      <div style={{ ...styles.tocSection, background: RCS.lightGold, borderColor: RCS.gold }}>
+                      <div style={{ ...styles.tocSection, background: RCS.lightBlue, borderColor: RCS.navy }}>
                         <div style={styles.tocSectionTitle}>What to Do If…</div>
 
                         <table style={styles.printTable as any}>
