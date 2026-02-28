@@ -355,11 +355,17 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
       const { error: delErr } = await supabase.from('day_plan_blocks').delete().eq('day_plan_id', plan.id);
       if (delErr) throw delErr;
 
+      const classRoomById = new Map<string, string>();
+      for (const c of classes) {
+        if (c.id && c.room) classRoomById.set(c.id, c.room);
+      }
+
       const payload = blocks.map((b) => ({
         day_plan_id: plan.id,
         start_time: b.start_time,
         end_time: b.end_time,
-        room: b.room || '—',
+        // Room is class-owned (template-as-source). Persist the canonical class room.
+        room: (b.class_id ? classRoomById.get(b.class_id) : null) ?? b.room ?? '—',
         class_name: b.class_name || '—',
         details: b.details?.trim() ? b.details.trim() : null,
         class_id: b.class_id,
@@ -678,12 +684,8 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                         />
                       </label>
                       <label style={{ display: 'grid', gap: 6 }}>
-                        <span style={styles.label}>Room</span>
-                        <input
-                          value={b.room}
-                          onChange={(e) => setBlocks((prev) => prev.map((x, i) => (i === idx ? { ...x, room: e.target.value } : x)))}
-                          style={styles.input}
-                        />
+                        <span style={styles.label}>Room (from class)</span>
+                        <input value={b.room} style={{ ...styles.input, background: '#F5F5F5' }} disabled />
                       </label>
                       <label style={{ display: 'grid', gap: 6, gridColumn: '1 / -1' }}>
                         <span style={styles.label}>Details (optional)</span>
