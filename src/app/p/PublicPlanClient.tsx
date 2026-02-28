@@ -234,13 +234,6 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
             <a href="/admin" style={styles.secondaryBtn}>
               Staff admin
             </a>
-            <button onClick={() => selectAll(true)} style={styles.secondaryBtn}>
-              Select all
-            </button>
-            <button onClick={() => selectAll(false)} style={styles.secondaryBtn}>
-              Select none
-            </button>
-
             <div style={{ flex: 1 }} />
 
             <div style={{ opacity: 0.9, fontWeight: 700 }}>
