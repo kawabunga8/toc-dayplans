@@ -820,8 +820,36 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
 
       {/* Lesson flow: template-first; first edit creates a day override */}
       <div style={styles.section}>
-        <div style={styles.sectionHeader}>
-          Lesson Flow {lessonOverride ? '(overridden for this day)' : '(using template)'}
+        <div style={{ ...styles.sectionHeader, display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <div>Lesson Flow {lessonOverride ? '(overridden for this day)' : '(using template)'}</div>
+          {lessonOverride ? (
+            <button
+              type="button"
+              onClick={async () => {
+                if (!tocBlockPlanId) return;
+                if (isDemo) return;
+                const ok = window.confirm('Revert lesson flow to the class template? This will delete day-specific overrides.');
+                if (!ok) return;
+                try {
+                  setStatus('saving');
+                  const supabase = getSupabaseClient();
+                  await supabase.from('toc_lesson_flow_phases').delete().eq('toc_block_plan_id', tocBlockPlanId);
+                  setLessonOverride(false);
+                  setLessonTouched(false);
+                  setPhases([]);
+                  await loadAll(supabase, tocBlockPlanId, templateId);
+                  setStatus('idle');
+                } catch (e: any) {
+                  setStatus('error');
+                  setError(e?.message ?? 'Failed to revert');
+                }
+              }}
+              style={styles.secondaryBtn}
+              disabled={isDemo || status === 'saving'}
+            >
+              Revert to template
+            </button>
+          ) : null}
         </div>
 
         <div style={{ display: 'grid', gap: 8 }}>
