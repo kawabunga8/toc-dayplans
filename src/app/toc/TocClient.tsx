@@ -38,6 +38,18 @@ type PublicPlanDetail = {
     details: string | null;
     class_id: string | null;
   }>;
+  toc?: {
+    plan_mode: 'lesson_flow' | 'activity_options';
+    teacher_name: string;
+    ta_name: string;
+    ta_role: string;
+    phone_policy: string;
+    note_to_toc: string;
+    opening_routine_steps: Array<{ step_text: string }>;
+    lesson_flow_phases: Array<{ time_text: string; phase_text: string; activity_text: string; purpose_text: string | null }>;
+    activity_options: Array<{ title: string; description: string; details_text: string; toc_role_text: string | null; steps: Array<{ step_text: string }> }>;
+    what_to_do_if_items: Array<{ scenario_text: string; response_text: string }>;
+  };
 };
 
 export default function TocClient({
@@ -602,10 +614,113 @@ export default function TocClient({
               </a>
             </div>
 
-            {openPlan.notes?.trim() ? (
+            {openPlan.toc?.note_to_toc?.trim() ? (
               <div style={styles.notesBox}>
-                <div style={styles.notesLabel}>Notes</div>
+                <div style={styles.notesLabel}>Note to the TOC</div>
+                <div style={styles.notesText}>{openPlan.toc.note_to_toc}</div>
+              </div>
+            ) : openPlan.notes?.trim() ? (
+              <div style={styles.notesBox}>
+                <div style={styles.notesLabel}>Teacher Notes</div>
                 <div style={styles.notesText}>{openPlan.notes}</div>
+              </div>
+            ) : null}
+
+            {openPlan.toc ? (
+              <div style={{ display: 'grid', gap: 10 }}>
+                <div style={{ fontSize: 12, opacity: 0.9 }}>
+                  {openPlan.toc.teacher_name ? (
+                    <span>
+                      <b>Teacher:</b> {openPlan.toc.teacher_name}
+                    </span>
+                  ) : null}
+                  {openPlan.toc.ta_name ? (
+                    <span>
+                      {' '}
+                      • <b>TA:</b> {openPlan.toc.ta_name}
+                      {openPlan.toc.ta_role ? ` (${openPlan.toc.ta_role})` : ''}
+                    </span>
+                  ) : null}
+                  {openPlan.toc.phone_policy ? (
+                    <span>
+                      {' '}
+                      • <b>Phones:</b> {openPlan.toc.phone_policy}
+                    </span>
+                  ) : null}
+                </div>
+
+                {openPlan.toc.opening_routine_steps?.length ? (
+                  <div style={styles.planBlockCard}>
+                    <div style={{ fontWeight: 900, marginBottom: 6 }}>Opening routine</div>
+                    <ol style={{ margin: 0, paddingLeft: 18 }}>
+                      {openPlan.toc.opening_routine_steps.map((s, idx) => (
+                        <li key={idx} style={{ marginBottom: 4 }}>
+                          {s.step_text}
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                ) : null}
+
+                {openPlan.toc.plan_mode === 'lesson_flow' && openPlan.toc.lesson_flow_phases?.length ? (
+                  <div style={styles.planBlockCard}>
+                    <div style={{ fontWeight: 900, marginBottom: 6 }}>Lesson flow</div>
+                    <div style={{ display: 'grid', gap: 8 }}>
+                      {openPlan.toc.lesson_flow_phases.map((p, idx) => (
+                        <div key={idx} style={{ borderTop: idx ? '1px solid rgba(0,0,0,0.08)' : 'none', paddingTop: idx ? 8 : 0 }}>
+                          <div>
+                            <b>{p.time_text}</b> — {p.phase_text}
+                          </div>
+                          <div style={{ opacity: 0.9 }}>{p.activity_text}</div>
+                          {p.purpose_text ? <div style={{ fontSize: 12, opacity: 0.85 }}><b>Purpose:</b> {p.purpose_text}</div> : null}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {openPlan.toc.plan_mode === 'activity_options' && openPlan.toc.activity_options?.length ? (
+                  <div style={styles.planBlockCard}>
+                    <div style={{ fontWeight: 900, marginBottom: 6 }}>Activity options</div>
+                    <div style={{ display: 'grid', gap: 10 }}>
+                      {openPlan.toc.activity_options.map((o, idx) => (
+                        <div key={idx} style={{ borderTop: idx ? '1px solid rgba(0,0,0,0.08)' : 'none', paddingTop: idx ? 8 : 0 }}>
+                          <div style={{ fontWeight: 900 }}>{o.title}</div>
+                          <div style={{ opacity: 0.9 }}>{o.description}</div>
+                          <div style={{ marginTop: 6 }}>{o.details_text}</div>
+                          {o.toc_role_text ? <div style={{ fontSize: 12, opacity: 0.85, marginTop: 6 }}><b>TOC role:</b> {o.toc_role_text}</div> : null}
+                          {o.steps?.length ? (
+                            <ol style={{ marginTop: 8, paddingLeft: 18 }}>
+                              {o.steps.map((st, j) => (
+                                <li key={j} style={{ marginBottom: 4 }}>
+                                  {st.step_text}
+                                </li>
+                              ))}
+                            </ol>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {openPlan.toc.what_to_do_if_items?.length ? (
+                  <div style={styles.planBlockCard}>
+                    <div style={{ fontWeight: 900, marginBottom: 6 }}>What to do if…</div>
+                    <div style={{ display: 'grid', gap: 8 }}>
+                      {openPlan.toc.what_to_do_if_items.map((w, idx) => (
+                        <div key={idx} style={{ borderTop: idx ? '1px solid rgba(0,0,0,0.08)' : 'none', paddingTop: idx ? 8 : 0 }}>
+                          <div>
+                            <b>If:</b> {w.scenario_text}
+                          </div>
+                          <div>
+                            <b>Then:</b> {w.response_text}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             ) : null}
 

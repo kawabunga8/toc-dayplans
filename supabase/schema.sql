@@ -773,6 +773,7 @@ alter table learning_standard_rubrics enable row level security;
 -- Token is compared by sha256 hash to day_plans.share_token_hash.
 -- SECURITY DEFINER so anon callers can access without opening table RLS.
 -- Public dayplan payload (by day_plans.id)
+-- Includes TOC content (template merged with per-day overrides).
 create or replace function get_public_day_plan_by_id(plan_id uuid)
 returns jsonb
 language plpgsql
@@ -782,6 +783,28 @@ as $$
 declare
   p record;
   blocks jsonb;
+  primary_block_id uuid;
+
+  tbp record;
+  tpl record;
+
+  has_or boolean;
+  has_lf boolean;
+  has_opt boolean;
+  has_wi boolean;
+
+  toc_opening jsonb;
+  toc_lesson_flow jsonb;
+  toc_activity_options jsonb;
+  toc_whatif jsonb;
+
+  eff_plan_mode text;
+  eff_teacher text;
+  eff_ta_name text;
+  eff_ta_role text;
+  eff_phone text;
+  eff_note text;
+
 begin
   if plan_id is null then
     return null;
@@ -798,7 +821,6 @@ begin
     return null;
   end if;
 
-  -- Only return the block that matches this plan's slot (e.g. Block F), not the entire day schedule.
   -- Prefer matching via classes.block_label (joined by class_id), but fall back to parsing from class_name.
   -- We support both "(Block X)" and "Block X" formats.
   select coalesce(
@@ -843,8 +865,7 @@ begin
       substring(b.class_name from 'Block\\s+([A-Za-z0-9]+)')
     )) = upper(p.slot);
 
-  -- If we couldn't determine the primary block (e.g. class_name doesn't encode the block label),
-  -- fall back to returning all blocks so the page never shows Selected 0/0.
+  -- If we couldn't determine the primary block, fall back to returning all blocks.
   if blocks is null or blocks = '[]'::jsonb then
     select coalesce(
       jsonb_agg(
@@ -880,6 +901,177 @@ begin
     where b.day_plan_id = p.id;
   end if;
 
+  -- Determine a primary day_plan_block_id for TOC content.
+  select b.id into primary_block_id
+  from day_plan_blocks b
+  left join classes c on c.id = b.class_id
+  where b.day_plan_id = p.id
+    and upper(coalesce(
+      c.block_label,
+      substring(b.class_name from '\\(Block ([^\\)]+)\\)'),
+      substring(b.class_name from 'Block\\s+([A-Za-z0-9]+)')
+    )) = upper(p.slot)
+  order by b.start_time asc
+  limit 1;
+
+  if primary_block_id is null then
+    select b.id into primary_block_id
+    from day_plan_blocks b
+    where b.day_plan_id = p.id
+    order by b.start_time asc
+    limit 1;
+  end if;
+
+  -- Load toc_block_plan + template (if any)
+  if primary_block_id is not null then
+    select * into tbp
+    from toc_block_plans
+    where day_plan_block_id = primary_block_id
+    limit 1;
+
+    if tbp.template_id is not null then
+      select * into tpl
+      from class_toc_templates
+      where id = tbp.template_id
+      limit 1;
+    else
+      tpl := null;
+    end if;
+
+    eff_plan_mode := coalesce(tbp.plan_mode, tpl.plan_mode, 'lesson_flow');
+    eff_teacher := coalesce(nullif(tbp.override_teacher_name, ''), tpl.teacher_name, '');
+    eff_ta_name := coalesce(nullif(tbp.override_ta_name, ''), tpl.ta_name, '');
+    eff_ta_role := coalesce(nullif(tbp.override_ta_role, ''), tpl.ta_role, '');
+    eff_phone := coalesce(nullif(tbp.override_phone_policy, ''), tpl.phone_policy, 'Not permitted');
+    eff_note := coalesce(nullif(tbp.override_note_to_toc, ''), tpl.note_to_toc, '');
+
+    -- Child tables: use instance if it exists, otherwise template.
+    select exists(select 1 from toc_opening_routine_steps where toc_block_plan_id = tbp.id) into has_or;
+    select exists(select 1 from toc_lesson_flow_phases where toc_block_plan_id = tbp.id) into has_lf;
+    select exists(select 1 from toc_activity_options where toc_block_plan_id = tbp.id) into has_opt;
+    select exists(select 1 from toc_what_to_do_if_items where toc_block_plan_id = tbp.id) into has_wi;
+
+    if has_or then
+      select coalesce(jsonb_agg(jsonb_build_object('step_text', s.step_text) order by s.sort_order asc), '[]'::jsonb)
+      into toc_opening
+      from toc_opening_routine_steps s
+      where s.toc_block_plan_id = tbp.id;
+    else
+      select coalesce(jsonb_agg(jsonb_build_object('step_text', s.step_text) order by s.sort_order asc), '[]'::jsonb)
+      into toc_opening
+      from class_opening_routine_steps s
+      where tpl.id is not null and s.template_id = tpl.id;
+    end if;
+
+    if has_lf then
+      select coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'time_text', p2.time_text,
+            'phase_text', p2.phase_text,
+            'activity_text', p2.activity_text,
+            'purpose_text', p2.purpose_text
+          )
+          order by p2.sort_order asc
+        ),
+        '[]'::jsonb
+      )
+      into toc_lesson_flow
+      from toc_lesson_flow_phases p2
+      where p2.toc_block_plan_id = tbp.id;
+    else
+      select coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'time_text', p2.time_text,
+            'phase_text', p2.phase_text,
+            'activity_text', p2.activity_text,
+            'purpose_text', p2.purpose_text
+          )
+          order by p2.sort_order asc
+        ),
+        '[]'::jsonb
+      )
+      into toc_lesson_flow
+      from class_lesson_flow_phases p2
+      where tpl.id is not null and p2.template_id = tpl.id;
+    end if;
+
+    if has_opt then
+      select coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'title', o.title,
+            'description', o.description,
+            'details_text', o.details_text,
+            'toc_role_text', o.toc_role_text,
+            'steps', (
+              select coalesce(
+                jsonb_agg(jsonb_build_object('step_text', st.step_text) order by st.sort_order asc),
+                '[]'::jsonb
+              )
+              from toc_activity_option_steps st
+              where st.toc_activity_option_id = o.id
+            )
+          )
+          order by o.sort_order asc
+        ),
+        '[]'::jsonb
+      )
+      into toc_activity_options
+      from toc_activity_options o
+      where o.toc_block_plan_id = tbp.id;
+    else
+      select coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'title', o.title,
+            'description', o.description,
+            'details_text', o.details_text,
+            'toc_role_text', o.toc_role_text,
+            'steps', (
+              select coalesce(
+                jsonb_agg(jsonb_build_object('step_text', st.step_text) order by st.sort_order asc),
+                '[]'::jsonb
+              )
+              from class_activity_option_steps st
+              where st.activity_option_id = o.id
+            )
+          )
+          order by o.sort_order asc
+        ),
+        '[]'::jsonb
+      )
+      into toc_activity_options
+      from class_activity_options o
+      where tpl.id is not null and o.template_id = tpl.id;
+    end if;
+
+    if has_wi then
+      select coalesce(
+        jsonb_agg(
+          jsonb_build_object('scenario_text', w.scenario_text, 'response_text', w.response_text)
+          order by w.sort_order asc
+        ),
+        '[]'::jsonb
+      )
+      into toc_whatif
+      from toc_what_to_do_if_items w
+      where w.toc_block_plan_id = tbp.id;
+    else
+      select coalesce(
+        jsonb_agg(
+          jsonb_build_object('scenario_text', w.scenario_text, 'response_text', w.response_text)
+          order by w.sort_order asc
+        ),
+        '[]'::jsonb
+      )
+      into toc_whatif
+      from class_what_to_do_if_items w
+      where tpl.id is not null and w.template_id = tpl.id;
+    end if;
+  end if;
+
   return jsonb_build_object(
     'id', p.id,
     'plan_date', p.plan_date,
@@ -887,7 +1079,19 @@ begin
     'friday_type', p.friday_type,
     'title', p.title,
     'notes', p.notes,
-    'blocks', blocks
+    'blocks', blocks,
+    'toc', jsonb_build_object(
+      'plan_mode', coalesce(eff_plan_mode, 'lesson_flow'),
+      'teacher_name', coalesce(eff_teacher, ''),
+      'ta_name', coalesce(eff_ta_name, ''),
+      'ta_role', coalesce(eff_ta_role, ''),
+      'phone_policy', coalesce(eff_phone, 'Not permitted'),
+      'note_to_toc', coalesce(eff_note, ''),
+      'opening_routine_steps', coalesce(toc_opening, '[]'::jsonb),
+      'lesson_flow_phases', coalesce(toc_lesson_flow, '[]'::jsonb),
+      'activity_options', coalesce(toc_activity_options, '[]'::jsonb),
+      'what_to_do_if_items', coalesce(toc_whatif, '[]'::jsonb)
+    )
   );
 end;
 $$;

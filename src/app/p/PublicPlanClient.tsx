@@ -15,6 +15,25 @@ type Block = {
   students?: Student[];
 };
 
+type TocOpeningStep = { step_text: string };
+
+type TocLessonFlowPhase = {
+  time_text: string;
+  phase_text: string;
+  activity_text: string;
+  purpose_text: string | null;
+};
+
+type TocActivityOption = {
+  title: string;
+  description: string;
+  details_text: string;
+  toc_role_text: string | null;
+  steps: Array<{ step_text: string }>;
+};
+
+type TocWhatIf = { scenario_text: string; response_text: string };
+
 type PublicPlan = {
   id: string;
   plan_date: string;
@@ -23,6 +42,18 @@ type PublicPlan = {
   title: string;
   notes: string | null;
   blocks: Block[];
+  toc?: {
+    plan_mode: 'lesson_flow' | 'activity_options';
+    teacher_name: string;
+    ta_name: string;
+    ta_role: string;
+    phone_policy: string;
+    note_to_toc: string;
+    opening_routine_steps: TocOpeningStep[];
+    lesson_flow_phases: TocLessonFlowPhase[];
+    activity_options: TocActivityOption[];
+    what_to_do_if_items: TocWhatIf[];
+  };
 };
 
 export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
@@ -211,9 +242,14 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
             </button>
           </div>
 
-          {plan.notes?.trim() ? (
+          {plan.toc?.note_to_toc?.trim() ? (
             <div style={styles.notesBox}>
               <div style={styles.notesLabel}>Note to the TOC</div>
+              <div style={styles.notesText}>{plan.toc.note_to_toc}</div>
+            </div>
+          ) : plan.notes?.trim() ? (
+            <div style={styles.notesBox}>
+              <div style={styles.notesLabel}>Teacher Notes</div>
               <div style={styles.notesText}>{plan.notes}</div>
             </div>
           ) : null}
@@ -265,6 +301,80 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
                 </div>
 
                 {b.details?.trim() ? <div style={styles.blockDetails}>{b.details}</div> : null}
+
+                {/* TOC plan content (template + overrides) */}
+                {plan.toc ? (
+                  <div style={styles.tocWrap}>
+                    <div style={styles.tocMeta}>
+                      {plan.toc.teacher_name ? <span><b>Teacher:</b> {plan.toc.teacher_name}</span> : null}
+                      {plan.toc.ta_name ? <span> • <b>TA:</b> {plan.toc.ta_name}{plan.toc.ta_role ? ` (${plan.toc.ta_role})` : ''}</span> : null}
+                      {plan.toc.phone_policy ? <span> • <b>Phones:</b> {plan.toc.phone_policy}</span> : null}
+                    </div>
+
+                    {plan.toc.opening_routine_steps?.length ? (
+                      <div style={styles.tocSection}>
+                        <div style={styles.tocSectionTitle}>Opening routine</div>
+                        <ol style={styles.tocList as any}>
+                          {plan.toc.opening_routine_steps.map((s, idx) => (
+                            <li key={idx} style={{ marginBottom: 4 }}>{s.step_text}</li>
+                          ))}
+                        </ol>
+                      </div>
+                    ) : null}
+
+                    {plan.toc.plan_mode === 'lesson_flow' && plan.toc.lesson_flow_phases?.length ? (
+                      <div style={styles.tocSection}>
+                        <div style={styles.tocSectionTitle}>Lesson flow</div>
+                        <div style={{ display: 'grid', gap: 8 }}>
+                          {plan.toc.lesson_flow_phases.map((p, idx) => (
+                            <div key={idx} style={styles.tocCard}>
+                              <div><b>{p.time_text}</b> — {p.phase_text}</div>
+                              <div style={{ opacity: 0.9 }}>{p.activity_text}</div>
+                              {p.purpose_text ? <div style={{ fontSize: 12, opacity: 0.85 }}><b>Purpose:</b> {p.purpose_text}</div> : null}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {plan.toc.plan_mode === 'activity_options' && plan.toc.activity_options?.length ? (
+                      <div style={styles.tocSection}>
+                        <div style={styles.tocSectionTitle}>Activity options</div>
+                        <div style={{ display: 'grid', gap: 10 }}>
+                          {plan.toc.activity_options.map((o, idx) => (
+                            <div key={idx} style={styles.tocCard}>
+                              <div style={{ fontWeight: 900 }}>{o.title}</div>
+                              <div style={{ opacity: 0.9 }}>{o.description}</div>
+                              <div style={{ marginTop: 6 }}>{o.details_text}</div>
+                              {o.toc_role_text ? <div style={{ fontSize: 12, opacity: 0.85, marginTop: 6 }}><b>TOC role:</b> {o.toc_role_text}</div> : null}
+                              {o.steps?.length ? (
+                                <ol style={{ marginTop: 8 }}>
+                                  {o.steps.map((st, j) => (
+                                    <li key={j} style={{ marginBottom: 4 }}>{st.step_text}</li>
+                                  ))}
+                                </ol>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {plan.toc.what_to_do_if_items?.length ? (
+                      <div style={styles.tocSection}>
+                        <div style={styles.tocSectionTitle}>What to do if…</div>
+                        <div style={{ display: 'grid', gap: 8 }}>
+                          {plan.toc.what_to_do_if_items.map((w, idx) => (
+                            <div key={idx} style={styles.tocCard}>
+                              <div><b>If:</b> {w.scenario_text}</div>
+                              <div><b>Then:</b> {w.response_text}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 {showAttendance && open && (
                   <div className="attendanceWrap" style={styles.attendanceWrap}>
@@ -454,6 +564,14 @@ const styles: Record<string, React.CSSProperties> = {
   blockRoom: { opacity: 0.9, fontSize: 12 },
   checkboxLabel: { display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, color: RCS.text, fontSize: 12 },
   blockDetails: { padding: 12, whiteSpace: 'pre-wrap', fontSize: 14, color: '#222222' },
+
+  tocWrap: { padding: 12, borderTop: `1px solid ${RCS.midGrey}`, background: RCS.white },
+  tocMeta: { fontSize: 12, opacity: 0.9, marginBottom: 10 },
+  tocSection: { marginTop: 12 },
+  tocSectionTitle: { fontWeight: 900, color: RCS.navy, marginBottom: 8 },
+  tocList: { margin: 0, paddingLeft: 18 },
+  tocCard: { border: `1px solid ${RCS.midGrey}`, borderRadius: 10, padding: 10, background: RCS.offWhite },
+
   attendanceWrap: { padding: 12, background: RCS.white },
   attendanceHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 10 },
   studentRow: { display: 'flex', gap: 10, alignItems: 'center' },
