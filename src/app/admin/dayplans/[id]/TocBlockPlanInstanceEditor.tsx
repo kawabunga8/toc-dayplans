@@ -70,19 +70,24 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
   // Overrides (instance)
   const [openingSteps, setOpeningSteps] = useState<OpeningStep[]>([]);
   const [openingOverride, setOpeningOverride] = useState(false);
+  const [openingTouched, setOpeningTouched] = useState(false);
 
   const [phases, setPhases] = useState<Phase[]>([]);
   const [lessonOverride, setLessonOverride] = useState(false);
+  const [lessonTouched, setLessonTouched] = useState(false);
   const [dragPhaseIdx, setDragPhaseIdx] = useState<number | null>(null);
 
   const [activityOptions, setActivityOptions] = useState<ActivityOption[]>([]);
   const [activityOverride, setActivityOverride] = useState(false);
+  const [activityTouched, setActivityTouched] = useState(false);
 
   const [whatIfItems, setWhatIfItems] = useState<WhatIf[]>([]);
   const [whatIfOverride, setWhatIfOverride] = useState(false);
+  const [whatIfTouched, setWhatIfTouched] = useState(false);
 
   const [roles, setRoles] = useState<Array<{ who: string; responsibility: string; source_template_role_row_id: string | null }>>([]);
   const [rolesOverride, setRolesOverride] = useState(false);
+  const [rolesTouched, setRolesTouched] = useState(false);
   const [showRolesEditor, setShowRolesEditor] = useState(false);
 
   const [showOpeningEditor, setShowOpeningEditor] = useState(false);
@@ -96,22 +101,72 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [blockId, classId]);
 
-  // Allow parent to request a save (e.g., Publish should save TOC plan first)
+  // Allow parent to request a publish-time cleanup+save.
+  // This deletes legacy overrides that were never intentionally touched in this session,
+  // so published /p reflects the template-first model.
   useEffect(() => {
-    const type = `toc-save-request:${blockId}`;
+    const type = `toc-publish-request:${blockId}`;
     const handler = async (e: Event) => {
       const evt = e as CustomEvent<{ resolve?: (x: any) => void; reject?: (err: any) => void }>;
       try {
+        const supabase = getSupabaseClient();
+        if (tocBlockPlanId) {
+          // Lesson flow: if legacy override exists but user didn't touch, revert to template.
+          if (!lessonTouched) {
+            await supabase.from('toc_lesson_flow_phases').delete().eq('toc_block_plan_id', tocBlockPlanId);
+            setLessonOverride(false);
+            setPhases([]);
+          }
+
+          if (openingOverride && !openingTouched) {
+            await supabase.from('toc_opening_routine_steps').delete().eq('toc_block_plan_id', tocBlockPlanId);
+            setOpeningOverride(false);
+            setOpeningSteps([]);
+            setShowOpeningEditor(false);
+          }
+
+          if (whatIfOverride && !whatIfTouched) {
+            await supabase.from('toc_what_to_do_if_items').delete().eq('toc_block_plan_id', tocBlockPlanId);
+            setWhatIfOverride(false);
+            setWhatIfItems([]);
+            setShowWhatIfEditor(false);
+          }
+
+          if (rolesOverride && !rolesTouched) {
+            await supabase.from('toc_role_rows').delete().eq('toc_block_plan_id', tocBlockPlanId);
+            setRolesOverride(false);
+            setRoles([]);
+            setShowRolesEditor(false);
+          }
+
+          if (activityOverride && !activityTouched) {
+            // Delete steps first, then options
+            const { data: existing, error: exErr } = await supabase.from('toc_activity_options').select('id').eq('toc_block_plan_id', tocBlockPlanId);
+            if (!exErr) {
+              const ids = (existing ?? []).map((r: any) => r.id);
+              if (ids.length) await supabase.from('toc_activity_option_steps').delete().in('toc_activity_option_id', ids);
+            }
+            await supabase.from('toc_activity_options').delete().eq('toc_block_plan_id', tocBlockPlanId);
+            setActivityOverride(false);
+            setActivityOptions([]);
+            setShowActivityEditor(false);
+          }
+
+          // Refresh from DB after pruning.
+          await loadAll(supabase, tocBlockPlanId, templateId);
+        }
+
         await saveAll();
         evt.detail?.resolve?.(true);
       } catch (err) {
         evt.detail?.reject?.(err);
       }
     };
+
     window.addEventListener(type, handler as any);
     return () => window.removeEventListener(type, handler as any);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [blockId, tocBlockPlanId, templateId, planMode, noteTOC, templateNoteTOC, phases, lessonOverride, openingOverride, openingSteps, whatIfOverride, whatIfItems, rolesOverride, roles, activityOverride, activityOptions]);
+  }, [blockId, tocBlockPlanId, templateId, lessonTouched, openingTouched, whatIfTouched, rolesTouched, activityTouched, openingOverride, whatIfOverride, rolesOverride, activityOverride]);
 
   async function ensureAndLoad() {
     setStatus('loading');
@@ -375,6 +430,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
 
       await loadAll(supabase, tocBlockPlanId, templateId);
       setOpeningOverride(true);
+      setOpeningTouched(true);
       setShowOpeningEditor(true);
       setStatus('idle');
     } catch (e: any) {
@@ -411,6 +467,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
 
       await loadAll(supabase, tocBlockPlanId, templateId);
       setWhatIfOverride(true);
+      setWhatIfTouched(true);
       setShowWhatIfEditor(true);
       setStatus('idle');
     } catch (e: any) {
@@ -447,6 +504,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
 
       await loadAll(supabase, tocBlockPlanId, templateId);
       setRolesOverride(true);
+      setRolesTouched(true);
       setShowRolesEditor(true);
       setStatus('idle');
     } catch (e: any) {
@@ -528,6 +586,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
 
       await loadAll(supabase, tocBlockPlanId, templateId);
       setActivityOverride(true);
+      setActivityTouched(true);
       setShowActivityEditor(true);
       setStatus('idle');
     } catch (e: any) {
@@ -548,6 +607,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
     }));
 
     setLessonOverride(true);
+    setLessonTouched(true);
     setPhases(seeded);
     return seeded;
   }
@@ -880,7 +940,14 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
               Create Day Override
             </button>
           ) : (
-            <button onClick={() => setShowOpeningEditor((x) => !x)} style={styles.secondaryBtn} disabled={isDemo}>
+            <button
+              onClick={() => {
+                setOpeningTouched(true);
+                setShowOpeningEditor((x) => !x);
+              }}
+              style={styles.secondaryBtn}
+              disabled={isDemo}
+            >
               {showOpeningEditor ? 'Hide editor' : 'Edit override'}
             </button>
           )}
@@ -927,7 +994,14 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
               Create Day Override
             </button>
           ) : (
-            <button onClick={() => setShowRolesEditor((x) => !x)} style={styles.secondaryBtn} disabled={isDemo}>
+            <button
+              onClick={() => {
+                setRolesTouched(true);
+                setShowRolesEditor((x) => !x);
+              }}
+              style={styles.secondaryBtn}
+              disabled={isDemo}
+            >
               {showRolesEditor ? 'Hide editor' : 'Edit override'}
             </button>
           )}
@@ -976,7 +1050,14 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
               Create Day Override
             </button>
           ) : (
-            <button onClick={() => setShowWhatIfEditor((x) => !x)} style={styles.secondaryBtn} disabled={isDemo}>
+            <button
+              onClick={() => {
+                setWhatIfTouched(true);
+                setShowWhatIfEditor((x) => !x);
+              }}
+              style={styles.secondaryBtn}
+              disabled={isDemo}
+            >
               {showWhatIfEditor ? 'Hide editor' : 'Edit override'}
             </button>
           )}
@@ -1027,9 +1108,16 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                 Create Day Override
               </button>
             ) : (
-              <button onClick={() => setShowActivityEditor((x) => !x)} style={styles.secondaryBtn} disabled={isDemo}>
-                {showActivityEditor ? 'Hide editor' : 'Edit override'}
-              </button>
+              <button
+              onClick={() => {
+                setActivityTouched(true);
+                setShowActivityEditor((x) => !x);
+              }}
+              style={styles.secondaryBtn}
+              disabled={isDemo}
+            >
+              {showActivityEditor ? 'Hide editor' : 'Edit override'}
+            </button>
             )}
           </div>
 

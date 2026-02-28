@@ -182,11 +182,11 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, status, plan, blocks.length, id]);
 
-  function requestTocSaveForBlock(dayPlanBlockId: string): Promise<void> {
+  function requestTocPublishForBlock(dayPlanBlockId: string): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
         window.dispatchEvent(
-          new CustomEvent(`toc-save-request:${dayPlanBlockId}`, {
+          new CustomEvent(`toc-publish-request:${dayPlanBlockId}`, {
             detail: {
               resolve: () => resolve(),
               reject: (err: any) => reject(err),
@@ -204,11 +204,10 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
     setError(null);
 
     try {
-      // Publish should save TOC plan first so /p matches what you edited.
-      // Only request saves for blocks that actually exist.
+      // Publish should prune legacy TOC overrides (template-first) and save intended day overrides.
       const ids = (blocks ?? []).map((b) => b.id).filter(Boolean) as string[];
       for (const bid of ids) {
-        await requestTocSaveForBlock(bid);
+        await requestTocPublishForBlock(bid);
       }
 
       const res = await fetch(`/api/admin/dayplans/${id}/publish`, { method: 'POST' });
