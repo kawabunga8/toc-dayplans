@@ -182,11 +182,35 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, status, plan, blocks.length, id]);
 
+  function requestTocSaveForBlock(dayPlanBlockId: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      try {
+        window.dispatchEvent(
+          new CustomEvent(`toc-save-request:${dayPlanBlockId}`, {
+            detail: {
+              resolve: () => resolve(),
+              reject: (err: any) => reject(err),
+            },
+          })
+        );
+      } catch (e) {
+        reject(e);
+      }
+    });
+  }
+
   async function publish() {
     setStatus('publishing');
     setError(null);
 
     try {
+      // Publish should save TOC plan first so /p matches what you edited.
+      // Only request saves for blocks that actually exist.
+      const ids = (blocks ?? []).map((b) => b.id).filter(Boolean) as string[];
+      for (const bid of ids) {
+        await requestTocSaveForBlock(bid);
+      }
+
       const res = await fetch(`/api/admin/dayplans/${id}/publish`, { method: 'POST' });
       const j = await res.json();
       if (!res.ok) throw new Error(j?.error ?? 'Failed to publish');
@@ -738,7 +762,7 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
 
             <div style={{ display: 'flex', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
               <button onClick={publish} disabled={status !== 'idle' || trashed} style={styles.primaryBtn}>
-                {published ? 'Republish' : 'Publish'}
+                {status === 'publishing' ? 'Publishing…' : published ? 'Republish' : 'Publish'}
               </button>
               <button onClick={revoke} disabled={!published || status !== 'idle'} style={styles.dangerBtn}>
                 Revoke

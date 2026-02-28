@@ -96,6 +96,23 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [blockId, classId]);
 
+  // Allow parent to request a save (e.g., Publish should save TOC plan first)
+  useEffect(() => {
+    const type = `toc-save-request:${blockId}`;
+    const handler = async (e: Event) => {
+      const evt = e as CustomEvent<{ resolve?: (x: any) => void; reject?: (err: any) => void }>;
+      try {
+        await saveAll();
+        evt.detail?.resolve?.(true);
+      } catch (err) {
+        evt.detail?.reject?.(err);
+      }
+    };
+    window.addEventListener(type, handler as any);
+    return () => window.removeEventListener(type, handler as any);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [blockId, tocBlockPlanId, templateId, planMode, noteTOC, templateNoteTOC, phases, lessonOverride, openingOverride, openingSteps, whatIfOverride, whatIfItems, rolesOverride, roles, activityOverride, activityOptions]);
+
   async function ensureAndLoad() {
     setStatus('loading');
     setError(null);
@@ -704,9 +721,9 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
           </div>
         </div>
 
-        <button onClick={saveAll} disabled={isDemo || status === 'saving'} style={styles.primaryBtn}>
-          {isDemo ? 'Demo' : status === 'saving' ? 'Saving…' : 'Save TOC plan'}
-        </button>
+        <div style={{ fontSize: 12, opacity: 0.8 }}>
+          {status === 'saving' ? 'Saving…' : status === 'error' ? 'Not saved' : ' '}
+        </div>
       </div>
 
       <div style={styles.templateHint}>
