@@ -674,20 +674,13 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                       </div>
                     </div>
 
-                    <div style={styles.grid2}>
+                    <div style={{ marginTop: 6, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'baseline' }}>
+                      <div style={{ fontWeight: 900, color: RCS.deepNavy }}>{b.class_name}</div>
+                      <div style={{ opacity: 0.8, fontSize: 12 }}>Room {b.room}</div>
+                    </div>
+
+                    <div style={{ marginTop: 10, display: 'grid', gap: 6 }}>
                       <label style={{ display: 'grid', gap: 6 }}>
-                        <span style={styles.label}>Class</span>
-                        <input
-                          value={b.class_name}
-                          onChange={(e) => setBlocks((prev) => prev.map((x, i) => (i === idx ? { ...x, class_name: e.target.value } : x)))}
-                          style={styles.input}
-                        />
-                      </label>
-                      <label style={{ display: 'grid', gap: 6 }}>
-                        <span style={styles.label}>Room (from class)</span>
-                        <input value={b.room} style={{ ...styles.input, background: '#F5F5F5' }} disabled />
-                      </label>
-                      <label style={{ display: 'grid', gap: 6, gridColumn: '1 / -1' }}>
                         <span style={styles.label}>Details (optional)</span>
                         <textarea
                           value={b.details ?? ''}
