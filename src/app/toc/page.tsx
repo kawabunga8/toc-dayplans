@@ -13,20 +13,14 @@ function mondayOfWeek(d: Date) {
   return m;
 }
 
-function coerceToSchoolDay(d: Date) {
-  // If opened on Saturday/Sunday, treat "today" as next Monday.
-  const day = d.getDay();
-  if (day === 6) {
-    const x = new Date(d);
-    x.setDate(d.getDate() + 2);
-    return x;
+function nextSchoolDay(d: Date) {
+  // Default date should be the NEXT school day (skip weekends).
+  const x = new Date(d);
+  x.setDate(x.getDate() + 1);
+  while (x.getDay() === 0 || x.getDay() === 6) {
+    x.setDate(x.getDate() + 1);
   }
-  if (day === 0) {
-    const x = new Date(d);
-    x.setDate(d.getDate() + 1);
-    return x;
-  }
-  return d;
+  return x;
 }
 
 export default async function TocPage({
@@ -42,7 +36,7 @@ export default async function TocPage({
   if (week && /^\d{4}-\d{2}-\d{2}$/.test(week)) {
     weekStart = week;
   } else {
-    const base = coerceToSchoolDay(new Date());
+    const base = nextSchoolDay(new Date());
     weekStart = mondayOfWeek(base).toISOString().slice(0, 10);
   }
 

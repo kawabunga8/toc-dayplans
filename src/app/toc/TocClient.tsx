@@ -51,10 +51,12 @@ export default function TocClient({
   initialView?: 'today' | 'calendar';
 }) {
   const today = useMemo(() => {
+    // Default should be the NEXT school day (skip weekends).
     const d = new Date();
-    const day = d.getDay();
-    if (day === 6) d.setDate(d.getDate() + 2); // Sat -> Mon
-    if (day === 0) d.setDate(d.getDate() + 1); // Sun -> Mon
+    d.setDate(d.getDate() + 1);
+    while (d.getDay() === 0 || d.getDay() === 6) {
+      d.setDate(d.getDate() + 1);
+    }
     return d.toISOString().slice(0, 10);
   }, []);
 
