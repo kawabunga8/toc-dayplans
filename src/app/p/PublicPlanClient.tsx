@@ -240,6 +240,19 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
             <button onClick={() => selectAll(false)} style={styles.secondaryBtn}>
               Select none
             </button>
+
+            <div style={{ flex: 1 }} />
+
+            <div style={{ opacity: 0.9, fontWeight: 700 }}>
+              Selected: <b>{selectedCount}</b> / {blocksToShow.length}
+            </div>
+            <button
+              onClick={() => window.print()}
+              disabled={selectedCount === 0}
+              style={selectedCount === 0 ? styles.primaryBtnDisabled : styles.primaryBtn}
+            >
+              Print Selected
+            </button>
           </div>
 
           {plan.toc?.note_to_toc?.trim() ? (
@@ -404,14 +417,7 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
           })}
         </div>
 
-        <div className="no-print stickyBar" style={styles.stickyBar}>
-          <div style={{ opacity: 0.9 }}>
-            Selected: <b>{selectedCount}</b> / {blocksToShow.length}
-          </div>
-          <button onClick={() => window.print()} disabled={selectedCount === 0} style={selectedCount === 0 ? styles.primaryBtnDisabled : styles.primaryBtn}>
-            Print Selected
-          </button>
-        </div>
+        {/* Print Selected moved to top */}
 
         <style>{`
         @media print {
