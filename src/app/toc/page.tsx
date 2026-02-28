@@ -29,7 +29,9 @@ export default async function TocPage({
     weekStart = week;
   } else {
     const base = nextSchoolDayDate(new Date());
-    weekStart = mondayOfWeek(base).toISOString().slice(0, 10);
+    // Use local YYYY-MM-DD to avoid UTC date drift.
+    const { yyyyMmDdLocal } = await import('@/lib/appRules/dates');
+    weekStart = yyyyMmDdLocal(mondayOfWeek(base));
   }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
