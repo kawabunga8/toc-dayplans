@@ -40,7 +40,13 @@ export async function GET(req: Request) {
     .eq('learning_standard_id', learningStandardId)
     .eq('grade', grade);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  if (error) {
+    const msg = String((error as any)?.message ?? '');
+    const code = String((error as any)?.code ?? '');
+    const isMissingTable = code === '42P01' || /Could not find the table/i.test(msg) || /schema cache/i.test(msg);
+    if (isMissingTable) return NextResponse.json({ rows: [], missingTable: true });
+    return NextResponse.json({ error: error.message }, { status: 400 });
+  }
 
-  return NextResponse.json({ rows: data ?? [] });
+  return NextResponse.json({ rows: data ?? [], missingTable: false });
 }

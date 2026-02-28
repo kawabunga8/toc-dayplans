@@ -55,6 +55,7 @@ export default function PoliciesClient() {
 
   const [status, setStatus] = useState<Status>('loading');
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
 
   const [subjects, setSubjects] = useState<string[]>([]);
   const [selectedSubject, setSelectedSubject] = useState<string>('');
@@ -144,6 +145,7 @@ export default function PoliciesClient() {
   async function loadRubrics(learningStandardId: string, grade: number) {
     setStatus('loading');
     setError(null);
+    setWarning(null);
 
     try {
       const res = await fetch(
@@ -151,6 +153,13 @@ export default function PoliciesClient() {
       );
       const j = await res.json();
       if (!res.ok) throw new Error(j?.error ?? 'Failed to load rubric');
+
+      if (j?.missingTable) {
+        setWarning('Rubrics table is not installed in Supabase yet (learning_standard_rubrics). Apply the latest schema to enable rubric text + editing.');
+        setRubrics({ emerging: null, developing: null, proficient: null, extending: null });
+        setStatus('idle');
+        return;
+      }
 
       const map: Record<Level, RubricRow | null> = { emerging: null, developing: null, proficient: null, extending: null };
       for (const r of (j?.rows ?? []) as any[]) {
@@ -250,6 +259,7 @@ export default function PoliciesClient() {
         ) : null}
 
         {status === 'error' && error ? <div style={styles.errorBox}>{error}</div> : null}
+        {warning ? <div style={styles.warnBox}>{warning}</div> : null}
 
         {subjects.length === 0 ? (
           <div style={{ opacity: 0.85 }}>No learning standards found yet. Seed learning_standards + learning_standard_rubrics.</div>
@@ -364,6 +374,7 @@ const styles: Record<string, React.CSSProperties> = {
   primaryBtn: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.gold}`, background: RCS.deepNavy, color: RCS.white, cursor: 'pointer', fontWeight: 900 },
   secondaryBtn: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.gold}`, background: 'transparent', color: RCS.deepNavy, cursor: 'pointer', fontWeight: 900, textDecoration: 'none', display: 'inline-block' },
   errorBox: { marginTop: 10, padding: 12, borderRadius: 10, border: '1px solid #991b1b', background: '#FEE2E2', color: '#7F1D1D' },
+  warnBox: { marginTop: 10, padding: 12, borderRadius: 10, border: `1px solid ${RCS.gold}`, background: RCS.paleGold, color: RCS.deepNavy },
   callout: { border: `1px solid ${RCS.gold}`, borderRadius: 12, padding: 12, background: RCS.paleGold },
   levelCard: { border: `1px solid ${RCS.deepNavy}`, borderRadius: 12, padding: 12, background: RCS.lightBlue },
   levelHeader: { fontWeight: 900, color: RCS.deepNavy, marginBottom: 8 },
