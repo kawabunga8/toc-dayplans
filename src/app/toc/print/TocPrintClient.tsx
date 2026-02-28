@@ -142,12 +142,19 @@ export default function TocPrintClient({
                       <div style={{ background: '#1F4E79', color: 'white', padding: '6px 10px', fontWeight: 900 }}>Class Overview</div>
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                         <tbody>
-                          {toc.class_overview_rows.map((r, i) => (
-                            <tr key={i}>
-                              <td style={{ borderTop: '1px solid #D6E4F0', padding: 8, width: '30%', fontWeight: 900 }}>{r.label}</td>
-                              <td style={{ borderTop: '1px solid #D6E4F0', padding: 8, whiteSpace: 'pre-wrap' }}>{r.value || '—'}</td>
-                            </tr>
-                          ))}
+                          {toc.class_overview_rows.map((r, i) => {
+                            const resolved = String(r.value ?? '')
+                              .replaceAll('{{class_name}}', String(b0?.class_name ?? p.title ?? ''))
+                              .replaceAll('{{room}}', b0?.room ? `Room ${b0.room}` : '')
+                              .replaceAll('{{time_range}}', range ?? (b0 ? `${fmtTime(b0.start_time)}–${fmtTime(b0.end_time)}` : ''))
+                              .trim();
+                            return (
+                              <tr key={i}>
+                                <td style={{ borderTop: '1px solid #D6E4F0', padding: 8, width: '30%', fontWeight: 900 }}>{r.label}</td>
+                                <td style={{ borderTop: '1px solid #D6E4F0', padding: 8, whiteSpace: 'pre-wrap' }}>{resolved || '—'}</td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>

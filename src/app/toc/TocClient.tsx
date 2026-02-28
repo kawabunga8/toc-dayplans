@@ -635,10 +635,16 @@ export default function TocClient({
                 <div style={{ fontWeight: 900, marginBottom: 6 }}>Class Overview</div>
                 <div style={{ display: 'grid', gap: 6 }}>
                   {openPlan.toc.class_overview_rows.map((r, idx) => {
-                    const raw = String(r.value ?? '').trim();
+                    const b0 = openPlanPrimaryBlocks[0];
+                    const timeRange = openPlanTimeRange ? `${openPlanTimeRange.start}–${openPlanTimeRange.end}` : null;
+                    const resolved = String(r.value ?? '')
+                      .replaceAll('{{class_name}}', String(b0?.class_name ?? openPlan.title ?? ''))
+                      .replaceAll('{{room}}', b0?.room ? `Room ${b0.room}` : '')
+                      .replaceAll('{{time_range}}', timeRange ?? (b0 ? `${formatTime(b0.start_time)}–${formatTime(b0.end_time)}` : ''))
+                      .trim();
                     return (
                       <div key={idx}>
-                        <b>{r.label}:</b> <span style={{ whiteSpace: 'pre-wrap' }}>{raw || '—'}</span>
+                        <b>{r.label}:</b> <span style={{ whiteSpace: 'pre-wrap' }}>{resolved || '—'}</span>
                       </div>
                     );
                   })}

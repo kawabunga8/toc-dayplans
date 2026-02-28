@@ -134,16 +134,18 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
     return { start: t.start, end: t.end, slot };
   }, [plan.plan_date, plan.slot, rotationBlocks, blockTimesBySlot]);
 
-  function autoOverviewValue(label: string, block: Block): string {
-    const key = String(label ?? '').trim().toLowerCase();
-    if (key === 'class') return String(block.class_name ?? '').trim();
-    if (key === 'room') return block.room ? `Room ${block.room}` : '';
-    if (key === 'time') {
-      if (computedRange?.start && computedRange?.end) return `${computedRange.start}–${computedRange.end}`;
-      if (block.start_time && block.end_time) return `${formatTime(block.start_time)}–${formatTime(block.end_time)}`;
-      return '';
-    }
-    return '';
+  function resolveTokens(raw: string, block: Block): string {
+    const timeRange =
+      computedRange?.start && computedRange?.end
+        ? `${computedRange.start}–${computedRange.end}`
+        : block.start_time && block.end_time
+          ? `${formatTime(block.start_time)}–${formatTime(block.end_time)}`
+          : '';
+
+    return String(raw ?? '')
+      .replaceAll('{{class_name}}', String(block.class_name ?? ''))
+      .replaceAll('{{room}}', block.room ? `Room ${block.room}` : '')
+      .replaceAll('{{time_range}}', timeRange);
   }
 
   const allIds = useMemo(() => blocksToShow.map((b) => b.id), [blocksToShow]);
@@ -340,14 +342,13 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
                           <table style={styles.printTable as any}>
                             <tbody>
                               {plan.toc.class_overview_rows.map((r, idx) => {
-                                const auto = autoOverviewValue(r.label, b);
-                                const v = String(r.value ?? '').trim() ? r.value : auto;
+                                const v = resolveTokens(String(r.value ?? ''), b);
                                 return (
                                   <tr key={idx}>
                                     <td style={styles.printTd as any}>
                                       <b>{r.label}</b>
                                     </td>
-                                    <td style={styles.printTd as any}>{v}</td>
+                                    <td style={styles.printTd as any}>{v || ''}</td>
                                   </tr>
                                 );
                               })}
@@ -356,12 +357,11 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
                         </div>
                         <div className="no-print" style={{ display: 'grid', gap: 6 }}>
                           {plan.toc.class_overview_rows.map((r, idx) => {
-                            const auto = autoOverviewValue(r.label, b);
-                            const v = String(r.value ?? '').trim() ? r.value : auto;
+                            const v = resolveTokens(String(r.value ?? ''), b);
                             return (
                               <div key={idx} style={styles.tocCard}>
                                 <div style={{ fontWeight: 900 }}>{r.label}</div>
-                                <div style={{ whiteSpace: 'pre-wrap' }}>{v}</div>
+                                <div style={{ whiteSpace: 'pre-wrap' }}>{v || ''}</div>
                               </div>
                             );
                           })}
