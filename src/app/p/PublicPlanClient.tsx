@@ -386,12 +386,13 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
                   <div className="attendanceWrap" style={styles.attendanceWrap}>
                     <div style={styles.attendanceHeader}>
                       <div style={{ fontWeight: 900, color: RCS.navy }}>Attendance List</div>
-                      <button onClick={() => downloadAttendanceDocx(plan.id, b.id)} style={styles.primaryBtn}>
+                      <button className="no-print" onClick={() => downloadAttendanceDocx(plan.id, b.id)} style={styles.primaryBtn}>
                         Download Attendance (.docx)
                       </button>
                     </div>
 
-                    <div style={{ display: 'grid', gap: 6 }}>
+                    {/* Screen attendance checklist (interactive) */}
+                    <div className="no-print" style={{ display: 'grid', gap: 6 }}>
                       {(b.students ?? []).map((s) => {
                         const present = attendance[b.id]?.[s.id] ?? true;
                         return (
@@ -402,6 +403,39 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
                           </label>
                         );
                       })}
+                    </div>
+
+                    {/* Print attendance table (RCS-style) */}
+                    <div className="print-only" style={styles.printOnly}>
+                      <table style={styles.printTable as any}>
+                        <thead>
+                          <tr>
+                            <th style={styles.printTh as any}>#</th>
+                            <th style={styles.printTh as any}>Student Name</th>
+                            <th style={styles.printTh as any}>Present</th>
+                            <th style={styles.printTh as any}>Absent</th>
+                            <th style={styles.printTh as any}>Late</th>
+                            <th style={styles.printTh as any}>Notes</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(b.students ?? []).map((s, idx) => (
+                            <tr key={s.id}>
+                              <td style={styles.printTd as any}>{idx + 1}</td>
+                              <td style={styles.printTd as any}>
+                                <b>{s.last_name},</b> {s.first_name}
+                              </td>
+                              <td style={styles.printTd as any}></td>
+                              <td style={styles.printTd as any}></td>
+                              <td style={styles.printTd as any}></td>
+                              <td style={styles.printTd as any}></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      <div style={{ marginTop: 12, fontSize: 12 }}>
+                        <b>TOC Signature:</b> ______________________________
+                      </div>
                     </div>
                   </div>
                 )}
@@ -416,6 +450,7 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
         @media print {
           body { background: white !important; }
           .no-print { display: none !important; }
+          .print-only { display: block !important; }
 
           /* Print must match screen */
           html, body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
@@ -474,6 +509,10 @@ const RCS = {
 } as const;
 
 const styles: Record<string, React.CSSProperties> = {
+  printOnly: { display: 'none' },
+  printTable: { width: '100%', borderCollapse: 'collapse' },
+  printTh: { background: RCS.blue, color: 'white', border: `1px solid ${RCS.midGrey}`, padding: '8px 8px', fontSize: 12, textAlign: 'left' },
+  printTd: { border: `1px solid ${RCS.midGrey}`, padding: '8px 8px', fontSize: 12, verticalAlign: 'top' },
   backdrop: {
     minHeight: '100vh',
     background: '#F0F4F8',
