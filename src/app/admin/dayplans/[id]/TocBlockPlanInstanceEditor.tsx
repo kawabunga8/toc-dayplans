@@ -85,7 +85,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
   const [whatIfOverride, setWhatIfOverride] = useState(false);
   const [whatIfTouched, setWhatIfTouched] = useState(false);
 
-  const [roles, setRoles] = useState<Array<{ who: string; responsibility: string; source_template_role_row_id: string | null }>>([]);
+  const [roles, setRoles] = useState<Array<{ who: string; responsibility: string }>>([]);
   const [rolesOverride, setRolesOverride] = useState(false);
   const [rolesTouched, setRolesTouched] = useState(false);
   const [showRolesEditor, setShowRolesEditor] = useState(false);
@@ -343,7 +343,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         .order('sort_order', { ascending: true }),
       supabase
         .from('toc_role_rows')
-        .select('sort_order,who,responsibility,source_template_role_row_id')
+        .select('sort_order,who,responsibility')
         .eq('toc_block_plan_id', tocPlanId)
         .order('sort_order', { ascending: true }),
     ]);
@@ -399,7 +399,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
     );
     setActivityOverride(opts.length > 0);
 
-    setRoles((role2.data ?? []).map((r: any) => ({ who: r.who, responsibility: r.responsibility, source_template_role_row_id: r.source_template_role_row_id ?? null })));
+    setRoles((role2.data ?? []).map((r: any) => ({ who: r.who, responsibility: r.responsibility })));
     setRolesOverride((role2.data ?? []).length > 0);
   }
 
@@ -496,7 +496,6 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
           sort_order: r.sort_order,
           who: r.who,
           responsibility: r.responsibility,
-          source_template_role_row_id: r.id,
         }));
         const { error } = await supabase.from('toc_role_rows').insert(rows);
         if (error) throw error;
@@ -696,7 +695,6 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
             sort_order: i + 1,
             who: r.who,
             responsibility: r.responsibility,
-            source_template_role_row_id: r.source_template_role_row_id,
           }));
           const { error } = await supabase.from('toc_role_rows').insert(rows);
           if (error) throw error;
@@ -1060,7 +1058,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                 </button>
               </div>
             ))}
-            <button onClick={() => setRoles((p) => [...p, { who: '', responsibility: '', source_template_role_row_id: null }])} style={styles.secondaryBtn} disabled={isDemo}>
+            <button onClick={() => setRoles((p) => [...p, { who: '', responsibility: '' }])} style={styles.secondaryBtn} disabled={isDemo}>
               + Add role row
             </button>
           </div>
