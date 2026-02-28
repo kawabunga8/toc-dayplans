@@ -26,6 +26,8 @@ type RubricRow = {
 
 type Status = 'loading' | 'idle' | 'saving' | 'error';
 
+const SUBJECTS = ['ADST', 'FA', 'Bible'] as const;
+
 const LEVELS: Array<{ level: Level; label: string }> = [
   { level: 'emerging', label: 'Emerging' },
   { level: 'developing', label: 'Developing' },
@@ -96,23 +98,16 @@ export default function PoliciesClient() {
   }, [selectedStandardId, selectedGrade]);
 
   async function loadSubjects() {
+    // Subjects are canonical + fixed (must always show all 3 options)
     setStatus('loading');
     setError(null);
 
     try {
-      const supabase = getSupabaseClient();
-      const { data, error } = await supabase.from('learning_standards').select('subject').order('subject', { ascending: true });
-      if (error) throw error;
+      const fixed = [...SUBJECTS];
+      setSubjects(fixed);
 
-      const distinct = Array.from(new Set((data ?? []).map((r: any) => String(r.subject ?? '').trim()).filter(Boolean)));
-      setSubjects(distinct);
-
-      if (distinct.length > 0) {
-        const wanted = initialSubject && distinct.includes(initialSubject) ? initialSubject : distinct[0];
-        setSelectedSubject((prev) => prev || wanted);
-      } else {
-        setSelectedSubject('');
-      }
+      const wanted = initialSubject && fixed.includes(initialSubject as any) ? initialSubject : fixed[0];
+      setSelectedSubject((prev) => prev || wanted);
 
       setStatus('idle');
     } catch (e: any) {
