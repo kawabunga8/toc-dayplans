@@ -490,6 +490,8 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
     }
   }
 
+  const [showOverrides, setShowOverrides] = useState(false);
+
   if (status === 'loading') return <div style={{ marginTop: 12, opacity: 0.75 }}>Loading TOC plan…</div>;
 
   return (
@@ -498,13 +500,23 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         <div>
           <div style={{ fontWeight: 900 }}>TOC Plan (instance)</div>
           <div style={{ fontSize: 12, opacity: 0.8 }}>
-            Mode: <b>{modeLabel}</b> {templateId ? '• copied from active template' : '• no template found'}
+            Mode: <b>{modeLabel}</b> {templateId ? '• based on active template' : '• no template found'}
           </div>
         </div>
 
         <button onClick={saveAll} disabled={isDemo || status === 'saving'} style={styles.primaryBtn}>
           {isDemo ? 'Demo' : status === 'saving' ? 'Saving…' : 'Save TOC plan'}
         </button>
+      </div>
+
+      <div style={styles.templateHint}>
+        <div style={{ fontWeight: 900, color: '#1F4E79' }}>Most TOC instructions come from the Class Template.</div>
+        <div style={{ fontSize: 12, opacity: 0.85 }}>
+          Edit the template to change defaults across all days.
+        </div>
+        <a href={`/admin/courses/${classId}/toc-template`} style={styles.templateLink}>
+          Edit class template →
+        </a>
       </div>
 
       {error ? <div style={styles.errorBox}>{error}</div> : null}
@@ -555,213 +567,222 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         </label>
       </div>
 
-      <div style={styles.section}>
-        <div style={styles.sectionHeader}>Opening Routine</div>
-        <div style={{ display: 'grid', gap: 8 }}>
-          {openingSteps.map((s, idx) => (
-            <div key={idx} style={styles.row3}>
-              <input
-                value={s.step_text}
-                onChange={(e) => setOpeningSteps((prev) => prev.map((x, i) => (i === idx ? { ...x, step_text: e.target.value } : x)))}
-                style={styles.input}
-                disabled={isDemo}
-              />
-              <button
-                onClick={() => setOpeningSteps((prev) => prev.filter((_, i) => i !== idx))}
-                style={styles.dangerBtn}
-                disabled={isDemo}
-              >
-                Remove
-              </button>
-            </div>
-          ))}
-          <button onClick={() => setOpeningSteps((p) => [...p, { step_text: '', source_template_step_id: null }])} style={styles.secondaryBtn} disabled={isDemo}>
-            + Add step
-          </button>
-        </div>
-      </div>
-
-      {planMode === 'lesson_flow' ? (
-        <div style={styles.section}>
-          <div style={styles.sectionHeader}>Lesson Flow</div>
-          <div style={{ display: 'grid', gap: 8 }}>
-            {phases.map((p, idx) => (
-              <div
-                key={idx}
-                style={{
-                  ...styles.phaseRow,
-                  opacity: dragPhaseIdx === idx ? 0.6 : 1,
-                  borderStyle: dragPhaseIdx !== null && dragPhaseIdx !== idx ? 'dashed' : (styles.phaseRow as any).borderStyle,
-                }}
-                draggable={!isDemo}
-                onDragStart={() => {
-                  if (isDemo) return;
-                  setDragPhaseIdx(idx);
-                }}
-                onDragEnd={() => setDragPhaseIdx(null)}
-                onDragOver={(e) => {
-                  if (isDemo) return;
-                  e.preventDefault();
-                }}
-                onDrop={() => {
-                  if (isDemo) return;
-                  if (dragPhaseIdx === null || dragPhaseIdx === idx) return;
-                  setPhases((prev) => {
-                    const copy = [...prev];
-                    const [moved] = copy.splice(dragPhaseIdx, 1);
-                    copy.splice(idx, 0, moved);
-                    return copy;
-                  });
-                  setDragPhaseIdx(null);
-                }}
-              >
-                <div style={styles.dragHandle} title="Drag to reorder">⋮⋮</div>
-                <input value={p.time_text} onChange={(e) => setPhases((prev) => prev.map((x, i) => (i === idx ? { ...x, time_text: e.target.value } : x)))} style={styles.input} disabled={isDemo} placeholder="Time" />
-                <input value={p.phase_text} onChange={(e) => setPhases((prev) => prev.map((x, i) => (i === idx ? { ...x, phase_text: e.target.value } : x)))} style={styles.input} disabled={isDemo} placeholder="Phase" />
-                <input value={p.activity_text} onChange={(e) => setPhases((prev) => prev.map((x, i) => (i === idx ? { ...x, activity_text: e.target.value } : x)))} style={styles.input} disabled={isDemo} placeholder="Activity" />
-                <input value={p.purpose_text} onChange={(e) => setPhases((prev) => prev.map((x, i) => (i === idx ? { ...x, purpose_text: e.target.value } : x)))} style={styles.input} disabled={isDemo} placeholder="Purpose (optional)" />
-                <button onClick={() => setPhases((prev) => prev.filter((_, i) => i !== idx))} style={styles.dangerBtn} disabled={isDemo}>
-                  Remove
-                </button>
-              </div>
-            ))}
-            <button
-              onClick={() =>
-                setPhases((p) => [
-                  ...p,
-                  { time_text: '', phase_text: '', activity_text: '', purpose_text: '', source_template_phase_id: null },
-                ])
-              }
-              style={styles.secondaryBtn}
-              disabled={isDemo}
-            >
-              + Add phase
-            </button>
+      <details open={showOverrides} onToggle={(e) => setShowOverrides((e.currentTarget as HTMLDetailsElement).open)} style={styles.details}>
+        <summary style={styles.detailsSummary}>Advanced: override template content for this day</summary>
+        <div style={{ display: 'grid', gap: 14, marginTop: 10 }}>
+          <div style={{ fontSize: 12, opacity: 0.85 }}>
+            Leave these alone for normal use. Edit the class template to change the default routine.
           </div>
-        </div>
-      ) : (
-        <div style={styles.section}>
-          <div style={styles.sectionHeader}>Activity Options</div>
-          <div style={{ display: 'grid', gap: 12 }}>
-            {activityOptions.map((o, idx) => (
-              <div key={idx} style={styles.optionCard}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-                  <div style={{ fontWeight: 900 }}>Option {idx + 1}</div>
-                  <button onClick={() => setActivityOptions((prev) => prev.filter((_, i) => i !== idx))} style={styles.dangerBtn} disabled={isDemo}>
-                    Remove option
+
+          <div style={styles.section}>
+            <div style={styles.sectionHeader}>Opening Routine</div>
+            <div style={{ display: 'grid', gap: 8 }}>
+              {openingSteps.map((s, idx) => (
+                <div key={idx} style={styles.row3}>
+                  <input
+                    value={s.step_text}
+                    onChange={(e) => setOpeningSteps((prev) => prev.map((x, i) => (i === idx ? { ...x, step_text: e.target.value } : x)))}
+                    style={styles.input}
+                    disabled={isDemo}
+                  />
+                  <button
+                    onClick={() => setOpeningSteps((prev) => prev.filter((_, i) => i !== idx))}
+                    style={styles.dangerBtn}
+                    disabled={isDemo}
+                  >
+                    Remove
                   </button>
                 </div>
+              ))}
+              <button onClick={() => setOpeningSteps((p) => [...p, { step_text: '', source_template_step_id: null }])} style={styles.secondaryBtn} disabled={isDemo}>
+                + Add step
+              </button>
+            </div>
+          </div>
 
-                <div style={styles.grid2}>
-                  <label style={styles.field}>
-                    <span style={styles.label}>Title</span>
-                    <input value={o.title} onChange={(e) => setActivityOptions((prev) => prev.map((x, i) => (i === idx ? { ...x, title: e.target.value } : x)))} style={styles.input} disabled={isDemo} />
-                  </label>
-                  <label style={styles.field}>
-                    <span style={styles.label}>TOC role text (optional)</span>
-                    <input value={o.toc_role_text} onChange={(e) => setActivityOptions((prev) => prev.map((x, i) => (i === idx ? { ...x, toc_role_text: e.target.value } : x)))} style={styles.input} disabled={isDemo} />
-                  </label>
-                  <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
-                    <span style={styles.label}>Description</span>
-                    <textarea value={o.description} onChange={(e) => setActivityOptions((prev) => prev.map((x, i) => (i === idx ? { ...x, description: e.target.value } : x)))} rows={2} style={styles.textarea} disabled={isDemo} />
-                  </label>
-                  <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
-                    <span style={styles.label}>Details</span>
-                    <textarea value={o.details_text} onChange={(e) => setActivityOptions((prev) => prev.map((x, i) => (i === idx ? { ...x, details_text: e.target.value } : x)))} rows={3} style={styles.textarea} disabled={isDemo} />
-                  </label>
-                </div>
+          {planMode === 'lesson_flow' ? (
+            <div style={styles.section}>
+              <div style={styles.sectionHeader}>Lesson Flow</div>
+              <div style={{ display: 'grid', gap: 8 }}>
+                {phases.map((p, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      ...styles.phaseRow,
+                      opacity: dragPhaseIdx === idx ? 0.6 : 1,
+                      borderStyle: dragPhaseIdx !== null && dragPhaseIdx !== idx ? 'dashed' : (styles.phaseRow as any).borderStyle,
+                    }}
+                    draggable={!isDemo}
+                    onDragStart={() => {
+                      if (isDemo) return;
+                      setDragPhaseIdx(idx);
+                    }}
+                    onDragEnd={() => setDragPhaseIdx(null)}
+                    onDragOver={(e) => {
+                      if (isDemo) return;
+                      e.preventDefault();
+                    }}
+                    onDrop={() => {
+                      if (isDemo) return;
+                      if (dragPhaseIdx === null || dragPhaseIdx === idx) return;
+                      setPhases((prev) => {
+                        const copy = [...prev];
+                        const [moved] = copy.splice(dragPhaseIdx, 1);
+                        copy.splice(idx, 0, moved);
+                        return copy;
+                      });
+                      setDragPhaseIdx(null);
+                    }}
+                  >
+                    <div style={styles.dragHandle} title="Drag to reorder">⋮⋮</div>
+                    <input value={p.time_text} onChange={(e) => setPhases((prev) => prev.map((x, i) => (i === idx ? { ...x, time_text: e.target.value } : x)))} style={styles.input} disabled={isDemo} placeholder="Time" />
+                    <input value={p.phase_text} onChange={(e) => setPhases((prev) => prev.map((x, i) => (i === idx ? { ...x, phase_text: e.target.value } : x)))} style={styles.input} disabled={isDemo} placeholder="Phase" />
+                    <input value={p.activity_text} onChange={(e) => setPhases((prev) => prev.map((x, i) => (i === idx ? { ...x, activity_text: e.target.value } : x)))} style={styles.input} disabled={isDemo} placeholder="Activity" />
+                    <input value={p.purpose_text} onChange={(e) => setPhases((prev) => prev.map((x, i) => (i === idx ? { ...x, purpose_text: e.target.value } : x)))} style={styles.input} disabled={isDemo} placeholder="Purpose (optional)" />
+                    <button onClick={() => setPhases((prev) => prev.filter((_, i) => i !== idx))} style={styles.dangerBtn} disabled={isDemo}>
+                      Remove
+                    </button>
+                  </div>
+                ))}
+                <button
+                  onClick={() =>
+                    setPhases((p) => [
+                      ...p,
+                      { time_text: '', phase_text: '', activity_text: '', purpose_text: '', source_template_phase_id: null },
+                    ])
+                  }
+                  style={styles.secondaryBtn}
+                  disabled={isDemo}
+                >
+                  + Add phase
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div style={styles.section}>
+              <div style={styles.sectionHeader}>Activity Options</div>
+              <div style={{ display: 'grid', gap: 12 }}>
+                {activityOptions.map((o, idx) => (
+                  <div key={idx} style={styles.optionCard}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                      <div style={{ fontWeight: 900 }}>Option {idx + 1}</div>
+                      <button onClick={() => setActivityOptions((prev) => prev.filter((_, i) => i !== idx))} style={styles.dangerBtn} disabled={isDemo}>
+                        Remove option
+                      </button>
+                    </div>
 
-                <div style={{ marginTop: 10 }}>
-                  <div style={{ fontWeight: 900, color: '#1F4E79', marginBottom: 6 }}>Steps</div>
-                  <div style={{ display: 'grid', gap: 8 }}>
-                    {o.steps.map((s, sIdx) => (
-                      <div key={sIdx} style={styles.row3}>
-                        <input
-                          value={s.step_text}
-                          onChange={(e) =>
-                            setActivityOptions((prev) =>
-                              prev.map((x, i) =>
-                                i === idx
-                                  ? {
-                                      ...x,
-                                      steps: x.steps.map((st, j) => (j === sIdx ? { ...st, step_text: e.target.value } : st)),
-                                    }
-                                  : x
-                              )
-                            )
-                          }
-                          style={styles.input}
-                          disabled={isDemo}
-                        />
+                    <div style={styles.grid2}>
+                      <label style={styles.field}>
+                        <span style={styles.label}>Title</span>
+                        <input value={o.title} onChange={(e) => setActivityOptions((prev) => prev.map((x, i) => (i === idx ? { ...x, title: e.target.value } : x)))} style={styles.input} disabled={isDemo} />
+                      </label>
+                      <label style={styles.field}>
+                        <span style={styles.label}>TOC role text (optional)</span>
+                        <input value={o.toc_role_text} onChange={(e) => setActivityOptions((prev) => prev.map((x, i) => (i === idx ? { ...x, toc_role_text: e.target.value } : x)))} style={styles.input} disabled={isDemo} />
+                      </label>
+                      <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                        <span style={styles.label}>Description</span>
+                        <textarea value={o.description} onChange={(e) => setActivityOptions((prev) => prev.map((x, i) => (i === idx ? { ...x, description: e.target.value } : x)))} rows={2} style={styles.textarea} disabled={isDemo} />
+                      </label>
+                      <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                        <span style={styles.label}>Details</span>
+                        <textarea value={o.details_text} onChange={(e) => setActivityOptions((prev) => prev.map((x, i) => (i === idx ? { ...x, details_text: e.target.value } : x)))} rows={3} style={styles.textarea} disabled={isDemo} />
+                      </label>
+                    </div>
+
+                    <div style={{ marginTop: 10 }}>
+                      <div style={{ fontWeight: 900, color: '#1F4E79', marginBottom: 6 }}>Steps</div>
+                      <div style={{ display: 'grid', gap: 8 }}>
+                        {o.steps.map((s, sIdx) => (
+                          <div key={sIdx} style={styles.row3}>
+                            <input
+                              value={s.step_text}
+                              onChange={(e) =>
+                                setActivityOptions((prev) =>
+                                  prev.map((x, i) =>
+                                    i === idx
+                                      ? {
+                                          ...x,
+                                          steps: x.steps.map((st, j) => (j === sIdx ? { ...st, step_text: e.target.value } : st)),
+                                        }
+                                      : x
+                                  )
+                                )
+                              }
+                              style={styles.input}
+                              disabled={isDemo}
+                            />
+                            <button
+                              onClick={() =>
+                                setActivityOptions((prev) =>
+                                  prev.map((x, i) => (i === idx ? { ...x, steps: x.steps.filter((_, j) => j !== sIdx) } : x))
+                                )
+                              }
+                              style={styles.dangerBtn}
+                              disabled={isDemo}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ))}
                         <button
                           onClick={() =>
                             setActivityOptions((prev) =>
-                              prev.map((x, i) => (i === idx ? { ...x, steps: x.steps.filter((_, j) => j !== sIdx) } : x))
+                              prev.map((x, i) => (i === idx ? { ...x, steps: [...x.steps, { step_text: '', source_template_option_step_id: null }] } : x))
                             )
                           }
-                          style={styles.dangerBtn}
+                          style={styles.secondaryBtn}
                           disabled={isDemo}
                         >
-                          Remove
+                          + Add step
                         </button>
                       </div>
-                    ))}
-                    <button
-                      onClick={() =>
-                        setActivityOptions((prev) =>
-                          prev.map((x, i) => (i === idx ? { ...x, steps: [...x.steps, { step_text: '', source_template_option_step_id: null }] } : x))
-                        )
-                      }
-                      style={styles.secondaryBtn}
-                      disabled={isDemo}
-                    >
-                      + Add step
-                    </button>
+                    </div>
                   </div>
-                </div>
+                ))}
+
+                <button
+                  onClick={() =>
+                    setActivityOptions((p) => [
+                      ...p,
+                      {
+                        title: '',
+                        description: '',
+                        details_text: '',
+                        toc_role_text: '',
+                        source_template_option_id: null,
+                        steps: [],
+                      },
+                    ])
+                  }
+                  style={styles.secondaryBtn}
+                  disabled={isDemo}
+                >
+                  + Add activity option
+                </button>
               </div>
-            ))}
+            </div>
+          )}
 
-            <button
-              onClick={() =>
-                setActivityOptions((p) => [
-                  ...p,
-                  {
-                    title: '',
-                    description: '',
-                    details_text: '',
-                    toc_role_text: '',
-                    source_template_option_id: null,
-                    steps: [],
-                  },
-                ])
-              }
-              style={styles.secondaryBtn}
-              disabled={isDemo}
-            >
-              + Add activity option
-            </button>
-          </div>
-        </div>
-      )}
-
-      <div style={styles.section}>
-        <div style={styles.sectionHeader}>What to do if…</div>
-        <div style={{ display: 'grid', gap: 8 }}>
-          {whatIfItems.map((w, idx) => (
-            <div key={idx} style={styles.whatIfRow}>
-              <input value={w.scenario_text} onChange={(e) => setWhatIfItems((prev) => prev.map((x, i) => (i === idx ? { ...x, scenario_text: e.target.value } : x)))} style={styles.input} disabled={isDemo} placeholder="Scenario" />
-              <input value={w.response_text} onChange={(e) => setWhatIfItems((prev) => prev.map((x, i) => (i === idx ? { ...x, response_text: e.target.value } : x)))} style={styles.input} disabled={isDemo} placeholder="Response" />
-              <button onClick={() => setWhatIfItems((prev) => prev.filter((_, i) => i !== idx))} style={styles.dangerBtn} disabled={isDemo}>
-                Remove
+          <div style={styles.section}>
+            <div style={styles.sectionHeader}>What to do if…</div>
+            <div style={{ display: 'grid', gap: 8 }}>
+              {whatIfItems.map((w, idx) => (
+                <div key={idx} style={styles.whatIfRow}>
+                  <input value={w.scenario_text} onChange={(e) => setWhatIfItems((prev) => prev.map((x, i) => (i === idx ? { ...x, scenario_text: e.target.value } : x)))} style={styles.input} disabled={isDemo} placeholder="Scenario" />
+                  <input value={w.response_text} onChange={(e) => setWhatIfItems((prev) => prev.map((x, i) => (i === idx ? { ...x, response_text: e.target.value } : x)))} style={styles.input} disabled={isDemo} placeholder="Response" />
+                  <button onClick={() => setWhatIfItems((prev) => prev.filter((_, i) => i !== idx))} style={styles.dangerBtn} disabled={isDemo}>
+                    Remove
+                  </button>
+                </div>
+              ))}
+              <button onClick={() => setWhatIfItems((p) => [...p, { scenario_text: '', response_text: '', source_template_item_id: null }])} style={styles.secondaryBtn} disabled={isDemo}>
+                + Add what-if
               </button>
             </div>
-          ))}
-          <button onClick={() => setWhatIfItems((p) => [...p, { scenario_text: '', response_text: '', source_template_item_id: null }])} style={styles.secondaryBtn} disabled={isDemo}>
-            + Add what-if
-          </button>
+          </div>
         </div>
-      </div>
+      </details>
     </section>
   );
 }
@@ -779,6 +800,10 @@ const RCS = {
 const styles: Record<string, React.CSSProperties> = {
   wrap: { marginTop: 12, borderTop: `1px solid rgba(0,0,0,0.12)`, paddingTop: 12 },
   topRow: { display: 'flex', gap: 12, justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' },
+
+  templateHint: { marginTop: 10, padding: 12, borderRadius: 12, border: `1px solid ${RCS.deepNavy}`, background: RCS.lightBlue, display: 'flex', gap: 12, justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' },
+  templateLink: { padding: '8px 10px', borderRadius: 10, border: `1px solid ${RCS.gold}`, background: RCS.deepNavy, color: RCS.white, textDecoration: 'none', fontWeight: 900, whiteSpace: 'nowrap' },
+
   grid2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 10 },
   field: { display: 'grid', gap: 6 },
   label: { fontWeight: 900, fontSize: 12, color: RCS.midBlue },
@@ -788,6 +813,10 @@ const styles: Record<string, React.CSSProperties> = {
   secondaryBtn: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.gold}`, background: 'transparent', color: RCS.deepNavy, cursor: 'pointer', fontWeight: 900 },
   dangerBtn: { padding: '8px 10px', borderRadius: 10, border: '1px solid #991b1b', background: '#FEE2E2', color: '#7F1D1D', cursor: 'pointer', fontWeight: 900, whiteSpace: 'nowrap' },
   errorBox: { marginTop: 10, padding: 10, borderRadius: 10, background: '#FEE2E2', border: '1px solid #991b1b', color: '#7F1D1D', whiteSpace: 'pre-wrap' },
+
+  details: { marginTop: 14, border: `1px dashed rgba(31,78,121,0.65)`, borderRadius: 12, padding: 12, background: '#fff' },
+  detailsSummary: { cursor: 'pointer', fontWeight: 900, color: RCS.deepNavy },
+
   section: { marginTop: 14, border: `1px solid ${RCS.deepNavy}`, borderRadius: 12, padding: 12, background: RCS.lightBlue },
   sectionHeader: { fontWeight: 900, color: RCS.deepNavy, borderLeft: `6px solid ${RCS.gold}`, paddingLeft: 10, marginBottom: 10 },
   row3: { display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'center' },
