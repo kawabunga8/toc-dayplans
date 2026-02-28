@@ -331,14 +331,52 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
                     {plan.toc.plan_mode === 'lesson_flow' && plan.toc.lesson_flow_phases?.length ? (
                       <div style={styles.tocSection}>
                         <div style={styles.tocSectionTitle}>Lesson flow</div>
-                        <div style={{ display: 'grid', gap: 8 }}>
+
+                        {/* Screen rendering */}
+                        <div className="no-print" style={{ display: 'grid', gap: 8 }}>
                           {plan.toc.lesson_flow_phases.map((p, idx) => (
                             <div key={idx} style={styles.tocCard}>
-                              <div><b>{p.time_text}</b> — {p.phase_text}</div>
+                              <div>
+                                <b>{p.time_text}</b> — {p.phase_text}
+                              </div>
                               <div style={{ opacity: 0.9 }}>{p.activity_text}</div>
-                              {p.purpose_text ? <div style={{ fontSize: 12, opacity: 0.85 }}><b>Purpose:</b> {p.purpose_text}</div> : null}
+                              {p.purpose_text ? (
+                                <div style={{ fontSize: 12, opacity: 0.85 }}>
+                                  <b>Purpose:</b> {p.purpose_text}
+                                </div>
+                              ) : null}
                             </div>
                           ))}
+                        </div>
+
+                        {/* Print rendering (4-column table) */}
+                        <div className="print-only" style={styles.printOnly}>
+                          <table style={styles.printTable as any}>
+                            <thead>
+                              <tr>
+                                <th style={styles.printTh as any}>TIME</th>
+                                <th style={styles.printTh as any}>PHASE</th>
+                                <th style={styles.printTh as any}>ACTIVITY</th>
+                                <th style={styles.printTh as any}>PURPOSE</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {plan.toc.lesson_flow_phases.map((p, idx) => (
+                                <tr key={idx}>
+                                  <td style={styles.printTd as any}>
+                                    <b>{p.time_text}</b>
+                                  </td>
+                                  <td style={styles.printTd as any}>
+                                    <b>{p.phase_text}</b>
+                                  </td>
+                                  <td style={styles.printTd as any}>{p.activity_text}</td>
+                                  <td style={{ ...(styles.printTd as any), fontStyle: 'italic' } as any}>
+                                    {p.purpose_text ?? ''}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
                         </div>
                       </div>
                     ) : null}
@@ -369,13 +407,41 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
                     {plan.toc.what_to_do_if_items?.length ? (
                       <div style={styles.tocSection}>
                         <div style={styles.tocSectionTitle}>What to do if…</div>
-                        <div style={{ display: 'grid', gap: 8 }}>
+
+                        {/* Screen rendering */}
+                        <div className="no-print" style={{ display: 'grid', gap: 8 }}>
                           {plan.toc.what_to_do_if_items.map((w, idx) => (
                             <div key={idx} style={styles.tocCard}>
-                              <div><b>If:</b> {w.scenario_text}</div>
-                              <div><b>Then:</b> {w.response_text}</div>
+                              <div>
+                                <b>If:</b> {w.scenario_text}
+                              </div>
+                              <div>
+                                <b>Then:</b> {w.response_text}
+                              </div>
                             </div>
                           ))}
+                        </div>
+
+                        {/* Print rendering (2-column table) */}
+                        <div className="print-only" style={styles.printOnly}>
+                          <table style={styles.printTable as any}>
+                            <thead>
+                              <tr>
+                                <th style={styles.printTh as any}>IF</th>
+                                <th style={styles.printTh as any}>THEN</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {plan.toc.what_to_do_if_items.map((w, idx) => (
+                                <tr key={idx}>
+                                  <td style={styles.printTd as any}>
+                                    <b>{w.scenario_text}</b>
+                                  </td>
+                                  <td style={styles.printTd as any}>{w.response_text}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
                         </div>
                       </div>
                     ) : null}
