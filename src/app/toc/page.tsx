@@ -13,6 +13,22 @@ function mondayOfWeek(d: Date) {
   return m;
 }
 
+function coerceToSchoolDay(d: Date) {
+  // If opened on Saturday/Sunday, treat "today" as next Monday.
+  const day = d.getDay();
+  if (day === 6) {
+    const x = new Date(d);
+    x.setDate(d.getDate() + 2);
+    return x;
+  }
+  if (day === 0) {
+    const x = new Date(d);
+    x.setDate(d.getDate() + 1);
+    return x;
+  }
+  return d;
+}
+
 export default async function TocPage({
   searchParams,
 }: {
@@ -26,7 +42,8 @@ export default async function TocPage({
   if (week && /^\d{4}-\d{2}-\d{2}$/.test(week)) {
     weekStart = week;
   } else {
-    weekStart = mondayOfWeek(new Date()).toISOString().slice(0, 10);
+    const base = coerceToSchoolDay(new Date());
+    weekStart = mondayOfWeek(base).toISOString().slice(0, 10);
   }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;

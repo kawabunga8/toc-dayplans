@@ -50,7 +50,13 @@ export default function TocClient({
   classes: PublicClass[];
   initialView?: 'today' | 'calendar';
 }) {
-  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const today = useMemo(() => {
+    const d = new Date();
+    const day = d.getDay();
+    if (day === 6) d.setDate(d.getDate() + 2); // Sat -> Mon
+    if (day === 0) d.setDate(d.getDate() + 1); // Sun -> Mon
+    return d.toISOString().slice(0, 10);
+  }, []);
 
   const [view, setView] = useState<'today' | 'calendar'>(initialView ?? 'today');
   const [selectedDate, setSelectedDate] = useState<string>(today);
