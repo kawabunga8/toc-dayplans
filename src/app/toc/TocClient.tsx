@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useEffect } from 'react';
 import RcsBanner from '@/components/RcsBanner';
+import { nextSchoolDayIso } from '@/lib/appRules/dates';
 
 type PublicPlanSummary = {
   id: string;
@@ -52,12 +53,7 @@ export default function TocClient({
 }) {
   const today = useMemo(() => {
     // Default should be the NEXT school day (skip weekends).
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
-    while (d.getDay() === 0 || d.getDay() === 6) {
-      d.setDate(d.getDate() + 1);
-    }
-    return d.toISOString().slice(0, 10);
+    return nextSchoolDayIso(new Date());
   }, []);
 
   const [view, setView] = useState<'today' | 'calendar'>(initialView ?? 'today');

@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 import TocClient from './TocClient';
+import { nextSchoolDayDate } from '@/lib/appRules/dates';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,15 +14,6 @@ function mondayOfWeek(d: Date) {
   return m;
 }
 
-function nextSchoolDay(d: Date) {
-  // Default date should be the NEXT school day (skip weekends).
-  const x = new Date(d);
-  x.setDate(x.getDate() + 1);
-  while (x.getDay() === 0 || x.getDay() === 6) {
-    x.setDate(x.getDate() + 1);
-  }
-  return x;
-}
 
 export default async function TocPage({
   searchParams,
@@ -36,7 +28,7 @@ export default async function TocPage({
   if (week && /^\d{4}-\d{2}-\d{2}$/.test(week)) {
     weekStart = week;
   } else {
-    const base = nextSchoolDay(new Date());
+    const base = nextSchoolDayDate(new Date());
     weekStart = mondayOfWeek(base).toISOString().slice(0, 10);
   }
 

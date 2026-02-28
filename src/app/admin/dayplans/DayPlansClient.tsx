@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 // supabase client calls are done via server routes on this page (to avoid RLS issues)
 import { useDemo } from '@/app/admin/DemoContext';
 import { asFridayType, buildDayplanDetailHref, isYyyyMmDd } from '@/lib/appRules/navigation';
+import { nextSchoolDayIso } from '@/lib/appRules/dates';
 
 type ClassRow = {
   id: string;
@@ -19,7 +20,10 @@ export default function DayPlansClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const today = useMemo(() => {
+    // Default should be the NEXT school day (skip weekends).
+    return nextSchoolDayIso(new Date());
+  }, []);
 
   const [classes, setClasses] = useState<ClassRow[]>([]);
 
