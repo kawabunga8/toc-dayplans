@@ -72,6 +72,13 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
     return buildDayplansListHref({ date: isYyyyMmDd(d) ? d : null, fridayType: ft || null });
   }, [searchParams, plan]);
 
+  const headerTags = useMemo(() => {
+    const className = blocks?.[0]?.class_name ?? plan?.title ?? '';
+    const upper = String(className).toUpperCase();
+    const isFa = upper.includes('BAND') || upper.includes('WORSHIP') || upper.includes('ART');
+    return isFa ? ['#FA'] : [];
+  }, [blocks, plan]);
+
   async function load() {
     setStatus('loading');
     setError(null);
@@ -546,6 +553,15 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
               {isFridayLocal(plan.plan_date) ? ` • Friday ${plan.friday_type ? (plan.friday_type === 'day1' ? 'Day 1' : 'Day 2') : '(type not set)'}` : ''}
               {' • '}
               <b>{plan.title}</b>
+              {headerTags.length ? (
+                <span style={{ marginLeft: 10, display: 'inline-flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                  {headerTags.map((t) => (
+                    <span key={t} style={styles.tag}>
+                      {t}
+                    </span>
+                  ))}
+                </span>
+              ) : null}
             </div>
           )}
         </div>
@@ -927,6 +943,15 @@ const styles: Record<string, React.CSSProperties> = {
   page: { padding: 24, maxWidth: 1000, margin: '0 auto', fontFamily: 'system-ui', background: RCS.white, color: RCS.textDark },
   h1: { margin: 0, color: RCS.deepNavy },
   meta: { marginTop: 6, opacity: 0.9 },
+  tag: {
+    fontSize: 12,
+    fontWeight: 900,
+    padding: '2px 8px',
+    borderRadius: 999,
+    border: `1px solid ${RCS.gold}`,
+    background: RCS.paleGold,
+    color: RCS.deepNavy,
+  },
   rowBetween: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' },
   rowBetweenTight: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' },
   grid2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 },
