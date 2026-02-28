@@ -71,6 +71,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
   const [openingOverride, setOpeningOverride] = useState(false);
 
   const [phases, setPhases] = useState<Phase[]>([]);
+  const [lessonOverride, setLessonOverride] = useState(false);
   const [dragPhaseIdx, setDragPhaseIdx] = useState<number | null>(null);
 
   const [activityOptions, setActivityOptions] = useState<ActivityOption[]>([]);
@@ -160,40 +161,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         }
       }
 
-      // 3) Initialize Lesson Flow in instance if empty (copy from template once)
-      if (tpl?.id) {
-        const { data: hasPhases, error: hasPhErr } = await supabase
-          .from('toc_lesson_flow_phases')
-          .select('id')
-          .eq('toc_block_plan_id', plan.id)
-          .limit(1);
-        if (hasPhErr) throw hasPhErr;
-
-        if ((hasPhases?.length ?? 0) === 0) {
-          const { data: tPh, error: tPhErr } = await supabase
-            .from('class_lesson_flow_phases')
-            .select('id,sort_order,time_text,phase_text,activity_text,purpose_text')
-            .eq('template_id', tpl.id)
-            .order('sort_order', { ascending: true });
-          if (tPhErr) throw tPhErr;
-
-          if ((tPh?.length ?? 0) > 0) {
-            const rows = (tPh ?? []).map((r: any) => ({
-              toc_block_plan_id: plan.id,
-              sort_order: r.sort_order,
-              time_text: r.time_text,
-              phase_text: r.phase_text,
-              activity_text: r.activity_text,
-              purpose_text: r.purpose_text,
-              source_template_phase_id: r.id,
-            }));
-            const { error: insErr } = await supabase.from('toc_lesson_flow_phases').insert(rows);
-            if (insErr) throw insErr;
-          }
-        }
-      }
-
-      // 4) Load template previews + instance overrides
+      // 3) Load template previews + instance overrides
       await loadAll(supabase, plan.id, tpl?.id ?? null);
       setStatus('idle');
     } catch (e: any) {
@@ -309,6 +277,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         source_template_phase_id: r.source_template_phase_id ?? null,
       }))
     );
+    setLessonOverride((lf2.data ?? []).length > 0);
 
     setWhatIfItems((wi2.data ?? []).map((r: any) => ({ scenario_text: r.scenario_text, response_text: r.response_text, source_template_item_id: r.source_template_item_id ?? null })));
     setWhatIfOverride((wi2.data ?? []).length > 0);
@@ -495,6 +464,22 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
     }
   }
 
+  function ensureLessonOverrideForEdit(): Phase[] {
+    if (lessonOverride) return phases;
+
+    const seeded: Phase[] = (tplLessonFlow ?? []).map((r: any) => ({
+      time_text: String(r.time_text ?? ''),
+      phase_text: String(r.phase_text ?? ''),
+      activity_text: String(r.activity_text ?? ''),
+      purpose_text: String(r.purpose_text ?? ''),
+      source_template_phase_id: null,
+    }));
+
+    setLessonOverride(true);
+    setPhases(seeded);
+    return seeded;
+  }
+
   async function saveAll() {
     if (!tocBlockPlanId) return;
     if (isDemo) return;
@@ -521,20 +506,22 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         .eq('id', tocBlockPlanId);
       if (upErr) throw upErr;
 
-      // Lesson flow is always day-owned (editable by default)
-      await supabase.from('toc_lesson_flow_phases').delete().eq('toc_block_plan_id', tocBlockPlanId);
-      if (phases.length > 0) {
-        const rows = phases.map((p, i) => ({
-          toc_block_plan_id: tocBlockPlanId,
-          sort_order: i + 1,
-          time_text: p.time_text,
-          phase_text: p.phase_text,
-          activity_text: p.activity_text,
-          purpose_text: p.purpose_text || null,
-          source_template_phase_id: p.source_template_phase_id,
-        }));
-        const { error } = await supabase.from('toc_lesson_flow_phases').insert(rows);
-        if (error) throw error;
+      // Lesson flow: only persist an override if the user actually edited for this day.
+      if (lessonOverride) {
+        await supabase.from('toc_lesson_flow_phases').delete().eq('toc_block_plan_id', tocBlockPlanId);
+        if (phases.length > 0) {
+          const rows = phases.map((p, i) => ({
+            toc_block_plan_id: tocBlockPlanId,
+            sort_order: i + 1,
+            time_text: p.time_text,
+            phase_text: p.phase_text,
+            activity_text: p.activity_text,
+            purpose_text: p.purpose_text || null,
+            source_template_phase_id: p.source_template_phase_id,
+          }));
+          const { error } = await supabase.from('toc_lesson_flow_phases').insert(rows);
+          if (error) throw error;
+        }
       }
 
       // Opening routine overrides only if created
@@ -683,11 +670,14 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         </label>
       </div>
 
-      {/* Lesson flow: editable by default */}
+      {/* Lesson flow: template-first; first edit creates a day override */}
       <div style={styles.section}>
-        <div style={styles.sectionHeader}>Lesson Flow (editable for this day)</div>
+        <div style={styles.sectionHeader}>
+          Lesson Flow {lessonOverride ? '(overridden for this day)' : '(using template)'}
+        </div>
+
         <div style={{ display: 'grid', gap: 8 }}>
-          {phases.map((p, idx) => (
+          {(lessonOverride ? phases : (tplLessonFlow as any[])).map((p: any, idx: number) => (
             <div
               key={idx}
               style={{
@@ -695,18 +685,21 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                 opacity: dragPhaseIdx === idx ? 0.6 : 1,
                 borderStyle: dragPhaseIdx !== null && dragPhaseIdx !== idx ? 'dashed' : (styles.phaseRow as any).borderStyle,
               }}
-              draggable={!isDemo}
+              draggable={!isDemo && lessonOverride}
               onDragStart={() => {
                 if (isDemo) return;
+                if (!lessonOverride) return;
                 setDragPhaseIdx(idx);
               }}
               onDragEnd={() => setDragPhaseIdx(null)}
               onDragOver={(e) => {
                 if (isDemo) return;
+                if (!lessonOverride) return;
                 e.preventDefault();
               }}
               onDrop={() => {
                 if (isDemo) return;
+                if (!lessonOverride) return;
                 if (dragPhaseIdx === null || dragPhaseIdx === idx) return;
                 setPhases((prev) => {
                   const copy = [...prev];
@@ -717,29 +710,75 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                 setDragPhaseIdx(null);
               }}
             >
-              <div style={styles.dragHandle} title="Drag to reorder">
+              <div style={styles.dragHandle} title={lessonOverride ? 'Drag to reorder' : 'Template row'}>
                 ⋮⋮
               </div>
-              <input value={p.time_text} onChange={(e) => setPhases((prev) => prev.map((x, i) => (i === idx ? { ...x, time_text: e.target.value } : x)))} style={styles.input} disabled={isDemo} placeholder="Time" />
-              <input value={p.phase_text} onChange={(e) => setPhases((prev) => prev.map((x, i) => (i === idx ? { ...x, phase_text: e.target.value } : x)))} style={styles.input} disabled={isDemo} placeholder="Phase" />
-              <input value={p.activity_text} onChange={(e) => setPhases((prev) => prev.map((x, i) => (i === idx ? { ...x, activity_text: e.target.value } : x)))} style={styles.input} disabled={isDemo} placeholder="Activity" />
-              <input value={p.purpose_text} onChange={(e) => setPhases((prev) => prev.map((x, i) => (i === idx ? { ...x, purpose_text: e.target.value } : x)))} style={styles.input} disabled={isDemo} placeholder="Purpose (optional)" />
-              <button onClick={() => setPhases((prev) => prev.filter((_, i) => i !== idx))} style={styles.dangerBtn} disabled={isDemo}>
+              <input
+                value={String(p.time_text ?? '')}
+                onChange={(e) => {
+                  const next = ensureLessonOverrideForEdit();
+                  setPhases(next.map((x, i) => (i === idx ? { ...x, time_text: e.target.value } : x)));
+                }}
+                style={styles.input}
+                disabled={isDemo}
+                placeholder="Time"
+              />
+              <input
+                value={String(p.phase_text ?? '')}
+                onChange={(e) => {
+                  const next = ensureLessonOverrideForEdit();
+                  setPhases(next.map((x, i) => (i === idx ? { ...x, phase_text: e.target.value } : x)));
+                }}
+                style={styles.input}
+                disabled={isDemo}
+                placeholder="Phase"
+              />
+              <input
+                value={String(p.activity_text ?? '')}
+                onChange={(e) => {
+                  const next = ensureLessonOverrideForEdit();
+                  setPhases(next.map((x, i) => (i === idx ? { ...x, activity_text: e.target.value } : x)));
+                }}
+                style={styles.input}
+                disabled={isDemo}
+                placeholder="Activity"
+              />
+              <input
+                value={String(p.purpose_text ?? '')}
+                onChange={(e) => {
+                  const next = ensureLessonOverrideForEdit();
+                  setPhases(next.map((x, i) => (i === idx ? { ...x, purpose_text: e.target.value } : x)));
+                }}
+                style={styles.input}
+                disabled={isDemo}
+                placeholder="Purpose (optional)"
+              />
+              <button
+                onClick={() => {
+                  const next = ensureLessonOverrideForEdit();
+                  setPhases(next.filter((_, i) => i !== idx));
+                }}
+                style={styles.dangerBtn}
+                disabled={isDemo}
+              >
                 Remove
               </button>
             </div>
           ))}
+
           <button
-            onClick={() =>
-              setPhases((p) => [...p, { time_text: '', phase_text: '', activity_text: '', purpose_text: '', source_template_phase_id: null }])
-            }
+            onClick={() => {
+              const next = ensureLessonOverrideForEdit();
+              setPhases((p) => [...(lessonOverride ? p : next), { time_text: '', phase_text: '', activity_text: '', purpose_text: '', source_template_phase_id: null }]);
+            }}
             style={styles.secondaryBtn}
             disabled={isDemo}
           >
             + Add phase
           </button>
-          {tplLessonFlow.length && phases.length === 0 ? (
-            <div style={{ fontSize: 12, opacity: 0.8 }}>Template has {tplLessonFlow.length} lesson flow row(s), but this day has none.</div>
+
+          {!lessonOverride && tplLessonFlow.length === 0 ? (
+            <div style={{ fontSize: 12, opacity: 0.8 }}>No lesson flow rows in template.</div>
           ) : null}
         </div>
       </div>
