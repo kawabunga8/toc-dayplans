@@ -12,7 +12,6 @@ type StandardRow = {
   subject: string;
   standard_key: string;
   standard_title: string;
-  sort_order: number | null;
 };
 
 type RubricRow = {
@@ -124,9 +123,9 @@ export default function PoliciesClient() {
       const supabase = getSupabaseClient();
       const { data, error } = await supabase
         .from('learning_standards')
-        .select('id,subject,standard_key,standard_title,sort_order')
+        .select('id,subject,standard_key,standard_title')
         .eq('subject', subject)
-        .order('sort_order', { ascending: true, nullsFirst: false })
+        .order('standard_key', { ascending: true })
         .order('standard_title', { ascending: true });
       if (error) throw error;
 
