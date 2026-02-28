@@ -634,11 +634,14 @@ export default function TocClient({
               <div style={styles.planBlockCard}>
                 <div style={{ fontWeight: 900, marginBottom: 6 }}>Class Overview</div>
                 <div style={{ display: 'grid', gap: 6 }}>
-                  {openPlan.toc.class_overview_rows.map((r, idx) => (
-                    <div key={idx}>
-                      <b>{r.label}:</b> <span style={{ whiteSpace: 'pre-wrap' }}>{r.value}</span>
-                    </div>
-                  ))}
+                  {openPlan.toc.class_overview_rows.map((r, idx) => {
+                    const raw = String(r.value ?? '').trim();
+                    return (
+                      <div key={idx}>
+                        <b>{r.label}:</b> <span style={{ whiteSpace: 'pre-wrap' }}>{raw || '—'}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             ) : null}
