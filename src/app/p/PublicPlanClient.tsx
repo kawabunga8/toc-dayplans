@@ -343,7 +343,7 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
                             {plan.toc.class_overview_rows.map((r, idx) => {
                               const v = resolveTokens(String(r.value ?? ''), b);
                               return (
-                                <tr key={idx}>
+                                <tr key={idx} style={idx % 2 === 1 ? (styles.printTrAlt as any) : undefined}>
                                   <td style={styles.printTd as any}>
                                     <b>{r.label}</b>
                                   </td>
@@ -368,7 +368,7 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
                           </thead>
                           <tbody>
                             {plan.toc.division_of_roles_rows.map((r, idx) => (
-                              <tr key={idx}>
+                              <tr key={idx} style={idx % 2 === 1 ? (styles.printTrAlt as any) : undefined}>
                                 <td style={styles.printTd as any}>
                                   <b>{r.who}</b>
                                 </td>
@@ -406,7 +406,7 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
                           </thead>
                           <tbody>
                             {plan.toc.lesson_flow_phases.map((p, idx) => (
-                              <tr key={idx}>
+                              <tr key={idx} style={idx % 2 === 1 ? (styles.printTrAlt as any) : undefined}>
                                 <td style={styles.printTd as any}>
                                   <b>{p.time_text}</b>
                                 </td>
@@ -446,7 +446,7 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
                     ) : null}
 
                     {plan.toc.what_to_do_if_items?.length ? (
-                      <div style={styles.tocSection}>
+                      <div style={{ ...styles.tocSection, background: RCS.lightGold, borderColor: RCS.gold }}>
                         <div style={styles.tocSectionTitle}>What to Do If…</div>
 
                         <table style={styles.printTable as any}>
@@ -458,7 +458,7 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
                           </thead>
                           <tbody>
                             {plan.toc.what_to_do_if_items.map((w, idx) => (
-                              <tr key={idx}>
+                              <tr key={idx} style={idx % 2 === 1 ? (styles.printTrAlt as any) : undefined}>
                                 <td style={styles.printTd as any}>
                                   <b>{w.scenario_text}</b>
                                 </td>
@@ -620,6 +620,7 @@ const RCS = {
 const styles: Record<string, React.CSSProperties> = {
   printOnly: { display: 'none' },
   printTable: { width: '100%', borderCollapse: 'collapse' },
+  printTrAlt: { background: 'rgba(0,0,0,0.03)' },
   printTh: { background: RCS.blue, color: 'white', border: `1px solid ${RCS.midGrey}`, padding: '8px 8px', fontSize: 12, textAlign: 'left' },
   printTd: { border: `1px solid ${RCS.midGrey}`, padding: '8px 8px', fontSize: 12, verticalAlign: 'top' },
   backdrop: {
