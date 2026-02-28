@@ -340,17 +340,22 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
                         <div style={styles.tocSectionTitle}>Class Overview</div>
                         <table style={styles.printTable as any}>
                           <tbody>
-                            {plan.toc.class_overview_rows.map((r, idx) => {
-                              const v = resolveTokens(String(r.value ?? ''), b);
-                              return (
-                                <tr key={idx} style={idx % 2 === 1 ? (styles.printTrAlt as any) : undefined}>
-                                  <td style={styles.printTd as any}>
-                                    <b>{r.label}</b>
-                                  </td>
-                                  <td style={styles.printTd as any}>{v || ''}</td>
-                                </tr>
-                              );
-                            })}
+                            {plan.toc.class_overview_rows
+                              .filter((r) => {
+                                const k = String(r.label ?? '').trim().toLowerCase();
+                                return k !== 'class' && k !== 'room' && k !== 'time';
+                              })
+                              .map((r, idx) => {
+                                const v = resolveTokens(String(r.value ?? ''), b);
+                                return (
+                                  <tr key={idx} style={idx % 2 === 1 ? (styles.printTrAlt as any) : undefined}>
+                                    <td style={styles.printTd as any}>
+                                      <b>{r.label}</b>
+                                    </td>
+                                    <td style={styles.printTd as any}>{v || ''}</td>
+                                  </tr>
+                                );
+                              })}
                           </tbody>
                         </table>
                       </div>
