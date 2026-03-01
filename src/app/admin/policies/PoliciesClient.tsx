@@ -253,6 +253,9 @@ export default function PoliciesClient() {
         <a href="/admin/policies/core-competencies" style={styles.secondaryBtn}>
           Core Competencies…
         </a>
+        <a href="/admin/policies/toc-snippets" style={styles.secondaryBtn}>
+          TOC Snippets…
+        </a>
       </div>
 
       <section style={styles.card}>
