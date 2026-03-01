@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { ensureDefaultTemplateForClass } from '@/lib/appRules/templates';
 import { useDemo } from '@/app/admin/DemoContext';
@@ -67,6 +67,24 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
   const markUnsaved = () => setUnsaved(true);
 
   const [tocBlockPlanId, setTocBlockPlanId] = useState<string | null>(null);
+
+  // Autosave (debounced)
+  const autosaveTimerRef = useRef<any>(null);
+  useEffect(() => {
+    if (!unsaved) return;
+    if (isDemo) return;
+    if (!tocBlockPlanId) return;
+
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    autosaveTimerRef.current = setTimeout(() => {
+      void saveAll();
+    }, 800);
+
+    return () => {
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unsaved, tocBlockPlanId]);
   const [templateId, setTemplateId] = useState<string | null>(null);
 
   const [planMode, setPlanMode] = useState<PlanMode>('lesson_flow');
@@ -1054,17 +1072,8 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
 
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           {unsaved ? <div style={styles.unsavedPill}>Unsaved changes</div> : null}
-          <button
-            type="button"
-            onClick={() => void saveAll()}
-            style={unsaved ? styles.primaryBtn : styles.primaryBtnDisabled}
-            disabled={isDemo || status === 'saving' || !unsaved}
-            title={unsaved ? 'Save TOC plan changes' : 'No changes to save'}
-          >
-            {status === 'saving' ? 'Saving…' : 'Save TOC Plan'}
-          </button>
-          <div style={{ fontSize: 12, opacity: 0.8 }}>
-            {status === 'saving' ? '' : status === 'error' ? 'Not saved' : ''}
+          <div style={{ fontSize: 12, opacity: 0.85 }}>
+            {status === 'saving' ? 'Saving…' : status === 'error' ? 'Autosave error' : unsaved ? 'Autosave pending…' : 'Saved'}
           </div>
         </div>
       </div>

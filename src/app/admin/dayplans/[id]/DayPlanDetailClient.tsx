@@ -45,6 +45,8 @@ type BlockTimeDefaultRow = {
 
 type Status = 'loading' | 'idle' | 'publishing' | 'revoking' | 'saving' | 'generating' | 'error';
 
+type AutoStatus = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
+
 export default function DayPlanDetailClient({ id }: { id: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -54,6 +56,12 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
 
   const [status, setStatus] = useState<Status>('loading');
   const [error, setError] = useState<string | null>(null);
+
+  const [autoStatus, setAutoStatus] = useState<AutoStatus>('idle');
+  const [autoError, setAutoError] = useState<string | null>(null);
+  const [autoSavedAt, setAutoSavedAt] = useState<string | null>(null);
+  const autoTimerRef = useRef<any>(null);
+  const lastAutoSnapshotRef = useRef<string>('');
   const [plan, setPlan] = useState<DayPlanRow | null>(null);
 
   const [draftTitle, setDraftTitle] = useState('');
@@ -65,6 +73,26 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
 
   const [blocks, setBlocks] = useState<PlanBlockRow[]>([]);
   const [classes, setClasses] = useState<ClassRow[]>([]);
+
+  const autoSnapshot = useMemo(() => {
+    return JSON.stringify({
+      title: draftTitle,
+      notes: draftNotes,
+      learning_standard_id: draftLearningStandardId,
+      learning_standard_focus: draftLearningStandardFocus,
+      core_competency_focus: draftCoreCompetencyFocus,
+      friday_type: plan?.friday_type ?? null,
+      blocks: (blocks ?? []).map((b) => ({
+        id: b.id ?? null,
+        start_time: b.start_time,
+        end_time: b.end_time,
+        room: b.room,
+        class_name: b.class_name,
+        details: b.details ?? null,
+        class_id: b.class_id ?? null,
+      })),
+    });
+  }, [draftTitle, draftNotes, draftLearningStandardId, draftLearningStandardFocus, draftCoreCompetencyFocus, plan?.friday_type, blocks]);
 
   const publicUrl = useMemo(() => {
     if (typeof window === 'undefined') return null;
@@ -168,6 +196,9 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
       })) as ClassRow[]);
 
       setStatus('idle');
+      lastAutoSnapshotRef.current = autoSnapshot;
+      setAutoStatus('idle');
+      setAutoError(null);
     } catch (e: any) {
       setStatus('error');
       setError(e?.message ?? 'Failed to load dayplan');
@@ -178,6 +209,47 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  // Autosave: plan meta + blocks + TOC edits (debounced)
+  useEffect(() => {
+    if (status !== 'idle') return;
+    if (!plan) return;
+
+    if (autoSnapshot === lastAutoSnapshotRef.current) return;
+
+    setAutoStatus('dirty');
+    setAutoError(null);
+
+    if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
+    autoTimerRef.current = setTimeout(() => {
+      void (async () => {
+        try {
+          setAutoStatus('saving');
+          setAutoError(null);
+
+          await savePlanMeta({ reload: false, silent: true });
+          await saveBlocks({ reload: false, silent: true });
+
+          const ids = (blocks ?? []).map((b) => b.id).filter(Boolean) as string[];
+          for (const bid of ids) {
+            await requestTocSaveForBlock(bid);
+          }
+
+          lastAutoSnapshotRef.current = autoSnapshot;
+          setAutoSavedAt(new Date().toISOString());
+          setAutoStatus('saved');
+        } catch (e: any) {
+          setAutoStatus('error');
+          setAutoError(e?.message ?? 'Autosave failed');
+        }
+      })();
+    }, 900);
+
+    return () => {
+      if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoSnapshot, status, plan?.id]);
 
   // Allow pickers to return selected values via query params.
   useEffect(() => {
@@ -323,10 +395,15 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
     }
   }
 
-  async function savePlanMeta() {
+  async function savePlanMeta(opts?: { reload?: boolean; silent?: boolean }) {
     if (!plan) return;
-    setStatus('saving');
-    setError(null);
+    const reload = opts?.reload ?? true;
+    const silent = opts?.silent ?? false;
+
+    if (!silent) {
+      setStatus('saving');
+      setError(null);
+    }
 
     try {
       const supabase = getSupabaseClient();
@@ -358,11 +435,14 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
       }
 
       if (error) throw error;
-      await load();
-      setStatus('idle');
+      if (reload) await load();
+      if (!silent) setStatus('idle');
     } catch (e: any) {
-      setStatus('error');
-      setError(e?.message ?? 'Failed to save');
+      if (!silent) {
+        setStatus('error');
+        setError(e?.message ?? 'Failed to save');
+      }
+      throw e;
     }
   }
 
@@ -485,42 +565,82 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
     }
   }
 
-  async function saveBlocks() {
+  async function saveBlocks(opts?: { reload?: boolean; silent?: boolean }) {
     if (!plan) return;
-    setStatus('saving');
-    setError(null);
+    const reload = opts?.reload ?? true;
+    const silent = opts?.silent ?? false;
+
+    if (!silent) {
+      setStatus('saving');
+      setError(null);
+    }
 
     try {
       const supabase = getSupabaseClient();
-
-      // Replace all blocks (simple + predictable)
-      const { error: delErr } = await supabase.from('day_plan_blocks').delete().eq('day_plan_id', plan.id);
-      if (delErr) throw delErr;
 
       const classRoomById = new Map<string, string>();
       for (const c of classes) {
         if (c.id && c.room) classRoomById.set(c.id, c.room);
       }
 
-      const payload = blocks.map((b) => ({
-        day_plan_id: plan.id,
-        start_time: b.start_time,
-        end_time: b.end_time,
-        // Room is class-owned (template-as-source). Persist the canonical class room.
-        room: (b.class_id ? classRoomById.get(b.class_id) : null) ?? b.room ?? '—',
+      const normalized = blocks.map((b) => ({
+        ...b,
+        room: ((b.class_id ? classRoomById.get(b.class_id) : null) ?? b.room ?? '—') as string,
         class_name: b.class_name || '—',
         details: b.details?.trim() ? b.details.trim() : null,
-        class_id: b.class_id,
       }));
 
-      const { error: insErr } = await supabase.from('day_plan_blocks').insert(payload);
-      if (insErr) throw insErr;
+      // Delete rows that are no longer present
+      const keepIds = normalized.map((b) => b.id).filter(Boolean) as string[];
+      if (keepIds.length) {
+        const { error: delErr } = await supabase.from('day_plan_blocks').delete().eq('day_plan_id', plan.id).not('id', 'in', `(${keepIds.map((x) => `"${x}"`).join(',')})`);
+        if (delErr) throw delErr;
+      } else {
+        const { error: delAllErr } = await supabase.from('day_plan_blocks').delete().eq('day_plan_id', plan.id);
+        if (delAllErr) throw delAllErr;
+      }
 
-      await load();
-      setStatus('idle');
+      // Upsert existing rows (preserve IDs)
+      for (const b of normalized) {
+        const patch = {
+          start_time: b.start_time,
+          end_time: b.end_time,
+          room: b.room,
+          class_name: b.class_name,
+          details: b.details,
+          class_id: b.class_id,
+        };
+
+        if (b.id) {
+          const { error } = await supabase.from('day_plan_blocks').update(patch).eq('id', b.id);
+          if (error) throw error;
+        } else {
+          const { data, error } = await supabase
+            .from('day_plan_blocks')
+            .insert({ day_plan_id: plan.id, ...patch })
+            .select('id')
+            .maybeSingle();
+          if (error) throw error;
+          if (data?.id) {
+            setBlocks((prev) => {
+              const idx = prev.findIndex((x) => !x.id && x.start_time === b.start_time && x.end_time === b.end_time && x.class_name === b.class_name);
+              if (idx < 0) return prev;
+              const next = prev.slice();
+              next[idx] = { ...next[idx]!, id: data.id } as any;
+              return next;
+            });
+          }
+        }
+      }
+
+      if (reload) await load();
+      if (!silent) setStatus('idle');
     } catch (e: any) {
-      setStatus('error');
-      setError(e?.message ?? 'Failed to save blocks');
+      if (!silent) {
+        setStatus('error');
+        setError(e?.message ?? 'Failed to save blocks');
+      }
+      throw e;
     }
   }
 
@@ -709,6 +829,10 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                   ))}
                 </span>
               ) : null}
+              <span style={{ marginLeft: 12, fontSize: 12, opacity: 0.85 }}>
+                Autosave: <b>{autoStatus === 'dirty' ? 'Unsaved changes' : autoStatus === 'saving' ? 'Saving…' : autoStatus === 'saved' ? 'Saved' : autoStatus === 'error' ? 'Error' : '—'}</b>
+                {autoSavedAt ? <span style={{ marginLeft: 8 }}>({new Date(autoSavedAt).toLocaleTimeString()})</span> : null}
+              </span>
             </div>
           )}
         </div>
@@ -806,13 +930,8 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                 </label>
               )}
 
-              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                <button onClick={savePlanMeta} disabled={status !== 'idle'} style={styles.primaryBtn}>
-                  {status === 'saving' ? 'Saving…' : 'Save'}
-                </button>
-              </div>
-
-              {error && <div style={styles.errorBox}>{error}</div>}
+              {autoStatus === 'error' && autoError ? <div style={styles.errorBox}>Autosave failed: {autoError}</div> : null}
+              {error ? <div style={styles.errorBox}>{error}</div> : null}
             </div>
           </section>
 
@@ -889,12 +1008,6 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                 ))}
 
                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                  <button onClick={saveBlocks} disabled={status !== 'idle'} style={styles.primaryBtn}>
-                    {status === 'saving' ? 'Saving…' : 'Save blocks'}
-                  </button>
-                  <button onClick={saveAll} disabled={status !== 'idle'} style={styles.secondaryBtn}>
-                    Save all
-                  </button>
                   <button onClick={recalcTimesFromDefaults} disabled={status !== 'idle'} style={styles.secondaryBtn}>
                     Fix times from defaults
                   </button>
