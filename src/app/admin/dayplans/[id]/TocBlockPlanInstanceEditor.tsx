@@ -219,27 +219,37 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
       setTocBlockPlanId(plan.id);
       setTemplateId(plan.template_id ?? null);
 
-      // 2) Ensure we have an active template (create default if none)
-      let tpl: TemplateRow | null = null;
-      if (plan.template_id) {
-        const { data: row, error: tplErr } = await supabase
-          .from('class_toc_templates')
-          .select('id,plan_mode,note_to_toc')
-          .eq('id', plan.template_id)
-          .maybeSingle();
-        if (tplErr) throw tplErr;
-        tpl = (row ?? null) as any;
-      } else {
+      // 2) Ensure we point at the latest active template for this class.
+      // If a newer template exists, we should use it as the source immediately
+      // (day overrides are stored separately and remain intact).
+      const { data: latestTpl, error: latestErr } = await supabase
+        .from('class_toc_templates')
+        .select('id,plan_mode,note_to_toc')
+        .eq('class_id', classId)
+        .eq('is_active', true)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (latestErr) throw latestErr;
+
+      if (latestTpl?.id && latestTpl.id !== plan.template_id) {
+        await supabase.from('toc_block_plans').update({ template_id: latestTpl.id }).eq('id', plan.id);
+        plan.template_id = latestTpl.id;
+        setTemplateId(latestTpl.id);
+      }
+
+      // If no template exists yet, create a default.
+      if (!plan.template_id) {
         const created = await ensureDefaultTemplateForClass(supabase, classId);
         if (created?.id) {
           await supabase.from('toc_block_plans').update({ template_id: created.id }).eq('id', plan.id);
-          tpl = { id: created.id, plan_mode: (created.plan_mode as any) ?? 'lesson_flow', note_to_toc: (created.note_to_toc as any) ?? null };
+          plan.template_id = created.id;
           setTemplateId(created.id);
         }
       }
 
       // 3) Load template previews + instance overrides
-      await loadAll(supabase, plan.id, tpl?.id ?? null);
+      await loadAll(supabase, plan.id, plan.template_id ?? null);
       setStatus('idle');
     } catch (e: any) {
       setStatus('error');
@@ -251,12 +261,32 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
     const { data: plan, error: pErr } = await supabase.from('toc_block_plans').select('template_id,plan_mode,override_note_to_toc').eq('id', tocPlanId).single();
     if (pErr) throw pErr;
 
-    setTemplateId(plan.template_id ?? null);
+    // Always prefer the latest active template for this class (in case it changed since plan creation).
+    let effectiveTplId = tplId ?? plan.template_id ?? null;
+    try {
+      const { data: latestTpl, error: latestErr } = await supabase
+        .from('class_toc_templates')
+        .select('id')
+        .eq('class_id', classId)
+        .eq('is_active', true)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!latestErr && latestTpl?.id) effectiveTplId = latestTpl.id;
+    } catch {
+      // ignore
+    }
+
+    if (effectiveTplId && effectiveTplId !== plan.template_id) {
+      await supabase.from('toc_block_plans').update({ template_id: effectiveTplId }).eq('id', tocPlanId);
+    }
+
+    setTemplateId(effectiveTplId);
     setPlanMode(plan.plan_mode as PlanMode);
 
     let tplNote = '';
-    if (tplId) {
-      const { data: tplRow, error: tErr } = await supabase.from('class_toc_templates').select('note_to_toc').eq('id', tplId).maybeSingle();
+    if (effectiveTplId) {
+      const { data: tplRow, error: tErr } = await supabase.from('class_toc_templates').select('note_to_toc').eq('id', effectiveTplId).maybeSingle();
       if (tErr) throw tErr;
       tplNote = (tplRow?.note_to_toc ?? '').toString();
     }
@@ -265,13 +295,13 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
     setNoteTOC(override || tplNote);
 
     // template previews
-    if (tplId) {
+    if (effectiveTplId) {
       const [orRes, wiRes, lfRes, optRes, roleRes] = await Promise.all([
-        supabase.from('class_opening_routine_steps').select('sort_order,step_text').eq('template_id', tplId).order('sort_order', { ascending: true }),
-        supabase.from('class_what_to_do_if_items').select('sort_order,scenario_text,response_text').eq('template_id', tplId).order('sort_order', { ascending: true }),
-        supabase.from('class_lesson_flow_phases').select('sort_order,time_text,phase_text,activity_text,purpose_text').eq('template_id', tplId).order('sort_order', { ascending: true }),
-        supabase.from('class_activity_options').select('id,sort_order,title,description,details_text,toc_role_text').eq('template_id', tplId).order('sort_order', { ascending: true }),
-        supabase.from('class_role_rows').select('sort_order,who,responsibility').eq('template_id', tplId).order('sort_order', { ascending: true }),
+        supabase.from('class_opening_routine_steps').select('sort_order,step_text').eq('template_id', effectiveTplId).order('sort_order', { ascending: true }),
+        supabase.from('class_what_to_do_if_items').select('sort_order,scenario_text,response_text').eq('template_id', effectiveTplId).order('sort_order', { ascending: true }),
+        supabase.from('class_lesson_flow_phases').select('sort_order,time_text,phase_text,activity_text,purpose_text').eq('template_id', effectiveTplId).order('sort_order', { ascending: true }),
+        supabase.from('class_activity_options').select('id,sort_order,title,description,details_text,toc_role_text').eq('template_id', effectiveTplId).order('sort_order', { ascending: true }),
+        supabase.from('class_role_rows').select('sort_order,who,responsibility').eq('template_id', effectiveTplId).order('sort_order', { ascending: true }),
       ]);
       if (orRes.error) throw orRes.error;
       if (wiRes.error) throw wiRes.error;

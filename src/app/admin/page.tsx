@@ -24,6 +24,11 @@ export default function AdminHome() {
             <div style={styles.tileText}>See all published plans and revoke links.</div>
           </Link>
 
+          <Link href="/admin/policies" style={styles.tile}>
+            <div style={styles.tileTitle}>Policies</div>
+            <div style={styles.tileText}>Learning standards (ADST/FA/Bible) + rubric levels.</div>
+          </Link>
+
           <Link href="/toc" style={styles.tile}>
             <div style={styles.tileTitle}>View schedule</div>
             <div style={styles.tileText}>Open the TOC week view (public schedule page).</div>
