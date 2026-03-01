@@ -342,6 +342,9 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
               {debugOk && debugPayload?.plan ? (
                 <div style={{ display: 'grid', gap: 8 }}>
                   <div style={{ fontSize: 12, opacity: 0.9 }}>
+                    <b>version</b>: {process.env.NEXT_PUBLIC_APP_VERSION || '—'}
+                  </div>
+                  <div style={{ fontSize: 12, opacity: 0.9 }}>
                     <b>plan_id</b>: {String(debugPayload.plan.id)}
                   </div>
                   <div style={{ fontSize: 12, opacity: 0.9 }}>

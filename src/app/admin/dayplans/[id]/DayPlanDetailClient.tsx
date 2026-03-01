@@ -970,6 +970,9 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                         : saveAllStatus === 'error'
                           ? 'Save failed'
                           : ' '}
+                    <span style={{ marginLeft: 10, opacity: 0.7 }}>
+                      v{process.env.NEXT_PUBLIC_APP_VERSION || '—'}
+                    </span>
                   </div>
                   <button
                     type="button"
