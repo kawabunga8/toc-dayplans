@@ -49,6 +49,7 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const didAutoRef = useRef(false);
+  const receivedFocusFromQueryRef = useRef(false);
 
   const [status, setStatus] = useState<Status>('loading');
   const [error, setError] = useState<string | null>(null);
@@ -135,9 +136,14 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
       setPlan(p);
       setDraftTitle(p.title ?? '');
       setDraftNotes(p.notes ?? '');
-      setDraftLearningStandardId((p as any).learning_standard_id ?? null);
-      setDraftLearningStandardFocus((p as any).learning_standard_focus ?? '');
-      setDraftCoreCompetencyFocus((p as any).core_competency_focus ?? '');
+
+      // If the user just returned from a picker (query params), don't overwrite those draft fields
+      // with the (possibly empty) DB values.
+      if (!receivedFocusFromQueryRef.current) {
+        setDraftLearningStandardId((p as any).learning_standard_id ?? null);
+        setDraftLearningStandardFocus((p as any).learning_standard_focus ?? '');
+        setDraftCoreCompetencyFocus((p as any).core_competency_focus ?? '');
+      }
 
       setBlocks((blockData ?? []).map((b: any) => ({
         id: b.id,
@@ -175,11 +181,13 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
     const lsId = (searchParams.get('learning_standard_id') ?? '').trim();
     const lsFocus = (searchParams.get('learning_standard_focus') ?? '').trim();
 
+    if (!cc && !lsId && !lsFocus) return;
+
+    receivedFocusFromQueryRef.current = true;
+
     if (cc) setDraftCoreCompetencyFocus(cc);
     if (lsId) setDraftLearningStandardId(lsId);
     if (lsFocus) setDraftLearningStandardFocus(lsFocus);
-
-    if (!cc && !lsId && !lsFocus) return;
 
     // Clean the URL (remove the params) but keep date/friday_type context.
     const qs = new URLSearchParams(searchParams.toString());
