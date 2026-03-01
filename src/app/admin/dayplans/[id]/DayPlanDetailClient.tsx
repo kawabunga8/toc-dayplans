@@ -589,9 +589,11 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
     setSaveAllError(null);
 
     try {
-      // Always save local edits first.
-      await savePlanMeta();
-      await saveBlocks();
+      // Always save local edits first (WITHOUT reload).
+      // Reloading here can remount TOC editors and reset their "touched" flags,
+      // which would cause republish-time pruning to delete fresh overrides.
+      await savePlanMeta({ reload: false, silent: true });
+      await saveBlocks({ reload: false, silent: true });
 
       // IMPORTANT: don't rely on local React state for block IDs here.
       // saveBlocks may insert new rows and setBlocks() is async, so ids can be stale.
