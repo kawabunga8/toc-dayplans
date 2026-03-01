@@ -23,7 +23,10 @@ export default function ImportClient() {
         body: JSON.stringify({ subject, mode: 'replace', wipeEdited: true }),
       });
       const j = await res.json();
-      if (!res.ok) throw new Error(j?.error ?? 'Import failed');
+      if (!res.ok) {
+        setOut(JSON.stringify(j, null, 2));
+        throw new Error(j?.error ?? j?.message ?? 'Import failed');
+      }
       setOut(JSON.stringify(j, null, 2));
       setStatus('done');
     } catch (e: any) {

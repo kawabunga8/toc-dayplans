@@ -79,8 +79,9 @@ export async function POST(req: Request) {
   const report: any = { bucket: BUCKET, subjects: {}, wipeEdited };
 
   for (const subject of subjects) {
-    const csvText = await fetchPublicCsv(subject);
-    const rows = parseCsv(csvText);
+    try {
+      const csvText = await fetchPublicCsv(subject);
+      const rows = parseCsv(csvText);
 
     // validate header presence
     const requiredCols = ['standard_key', 'standard_title', 'grade', 'level', 'text'];
@@ -130,14 +131,15 @@ export async function POST(req: Request) {
       .from('learning_standards')
       .select('id')
       .eq('subject', subject);
-    if (exStdErr) throw exStdErr;
+    if (exStdErr) throw Object.assign(new Error(exStdErr.message), { cause: exStdErr });
     const stdIds = (existingStd ?? []).map((r: any) => r.id);
 
     if (stdIds.length) {
       // delete rubrics first
-      await supabase.from('learning_standard_rubrics').delete().in('learning_standard_id', stdIds);
-      // delete standards
-      await supabase.from('learning_standards').delete().in('id', stdIds);
+      const d1 = await supabase.from('learning_standard_rubrics').delete().in('learning_standard_id', stdIds);
+      if (d1.error) throw Object.assign(new Error(d1.error.message), { cause: d1.error });
+      const d2 = await supabase.from('learning_standards').delete().in('id', stdIds);
+      if (d2.error) throw Object.assign(new Error(d2.error.message), { cause: d2.error });
     }
 
     // insert standards
@@ -155,7 +157,7 @@ export async function POST(req: Request) {
       .from('learning_standards')
       .insert(stdRows)
       .select('id,standard_key');
-    if (insStdErr) throw insStdErr;
+    if (insStdErr) throw Object.assign(new Error(insStdErr.message), { cause: insStdErr });
 
     const idByKey = new Map<string, string>();
     for (const r of insertedStd ?? []) idByKey.set(String((r as any).standard_key), String((r as any).id));
@@ -171,12 +173,28 @@ export async function POST(req: Request) {
     })).filter((r) => !!r.learning_standard_id);
 
     const { error: insRubErr } = await supabase.from('learning_standard_rubrics').insert(rubricRows);
-    if (insRubErr) throw insRubErr;
+    if (insRubErr) throw Object.assign(new Error(insRubErr.message), { cause: insRubErr });
 
-    report.subjects[subject] = {
-      standards: stdRows.length,
-      rubric_cells: rubricRows.length,
-    };
+      report.subjects[subject] = {
+        standards: stdRows.length,
+        rubric_cells: rubricRows.length,
+      };
+    } catch (e: any) {
+      // Return detailed error info for debugging (Supabase errors often have code/details/hint)
+      const err = e?.cause ?? e;
+      return NextResponse.json(
+        {
+          error: `Import failed for ${subject}`,
+          subject,
+          message: String(e?.message ?? e),
+          code: err?.code ?? null,
+          details: err?.details ?? null,
+          hint: err?.hint ?? null,
+          reportSoFar: report,
+        },
+        { status: 400 }
+      );
+    }
   }
 
   return NextResponse.json({ ok: true, report });
