@@ -528,8 +528,8 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
                                 <td style={styles.printTd as any}>
                                   <b>{p.phase_text}</b>
                                 </td>
-                                <td style={styles.printTd as any}>{p.activity_text}</td>
-                                <td style={{ ...(styles.printTd as any), fontStyle: 'italic' } as any}>{p.purpose_text ?? ''}</td>
+                                <td style={{ ...(styles.printTd as any), whiteSpace: 'pre-wrap' } as any}>{p.activity_text}</td>
+                                <td style={{ ...(styles.printTd as any), fontStyle: 'italic', whiteSpace: 'pre-wrap' } as any}>{p.purpose_text ?? ''}</td>
                               </tr>
                             ))}
                           </tbody>
