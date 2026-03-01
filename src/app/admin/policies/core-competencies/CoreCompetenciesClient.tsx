@@ -132,7 +132,7 @@ export default function CoreCompetenciesClient() {
           Import CSV (replace)…
         </a>
         <a href="/admin/policies" style={styles.secondaryBtn}>
-          ← Back to Policies
+          ← To Learning Standards
         </a>
         {returnHref ? (
           <a href={returnHref} style={styles.secondaryBtn}>
