@@ -593,7 +593,12 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
       await savePlanMeta();
       await saveBlocks();
 
-      const ids = (blocks ?? []).map((b) => b.id).filter(Boolean) as string[];
+      // IMPORTANT: don't rely on local React state for block IDs here.
+      // saveBlocks may insert new rows and setBlocks() is async, so ids can be stale.
+      const supabase = getSupabaseClient();
+      const { data: bidRows, error: bidErr } = await supabase.from('day_plan_blocks').select('id').eq('day_plan_id', plan!.id);
+      if (bidErr) throw bidErr;
+      const ids = (bidRows ?? []).map((r: any) => String(r.id)).filter(Boolean);
 
       // Save TOC edits.
       for (const bid of ids) {
