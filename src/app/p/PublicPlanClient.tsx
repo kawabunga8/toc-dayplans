@@ -231,7 +231,9 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
         <header style={styles.header}>
           <div style={styles.titleBlock}>
             <div style={styles.titleLogoWrap}>
-              <img src="/LOGO_Full_Colour_RCS_Landscape.png" alt="RCS" style={styles.titleLogo as any} />
+              <a href="https://myrcs.ca" style={{ display: 'inline-block' }} aria-label="Open myrcs.ca">
+                <img src="/LOGO_Full_Colour_RCS_Landscape.png" alt="RCS" style={styles.titleLogo as any} />
+              </a>
             </div>
             <div style={styles.titleText}>
               <div style={styles.titleTeacher}>Mr. Kawamura</div>
