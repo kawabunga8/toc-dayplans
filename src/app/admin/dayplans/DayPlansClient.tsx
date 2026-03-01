@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 // supabase client calls are done via server routes on this page (to avoid RLS issues)
 import { useDemo } from '@/app/admin/DemoContext';
 import { asFridayType, buildDayplanDetailHref, isYyyyMmDd } from '@/lib/appRules/navigation';
-import { nextSchoolDayIso } from '@/lib/appRules/dates';
+import { nextSchoolDayIso, nextSchoolDayIsoFromIso, prevSchoolDayIsoFromIso } from '@/lib/appRules/dates';
 
 type ClassRow = {
   id: string;
@@ -185,15 +185,37 @@ export default function DayPlansClient() {
         <div style={styles.sectionHeader}>Dayplans</div>
 
         <div style={{ display: 'grid', gap: 10 }}>
-          <label style={{ display: 'grid', gap: 6, maxWidth: 320 }}>
+          <label style={{ display: 'grid', gap: 6, maxWidth: 420 }}>
             <span style={styles.label}>Date</span>
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              style={styles.input}
-              disabled={openingKey !== null}
-            />
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              <button
+                type="button"
+                aria-label="Previous teaching day"
+                title="Previous teaching day"
+                onClick={() => setSelectedDate((d) => prevSchoolDayIsoFromIso(d))}
+                style={styles.triBtn}
+                disabled={openingKey !== null}
+              >
+                ◀
+              </button>
+              <button
+                type="button"
+                aria-label="Next teaching day"
+                title="Next teaching day"
+                onClick={() => setSelectedDate((d) => nextSchoolDayIsoFromIso(d))}
+                style={styles.triBtn}
+                disabled={openingKey !== null}
+              >
+                ▶
+              </button>
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                style={{ ...styles.input, flex: 1 }}
+                disabled={openingKey !== null}
+              />
+            </div>
           </label>
 
           {isSelectedFriday ? (
@@ -296,6 +318,17 @@ const styles: Record<string, React.CSSProperties> = {
   label: { color: RCS.midBlue, fontWeight: 800, fontSize: 12 },
   input: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.deepNavy}`, background: RCS.white, color: RCS.textDark },
   primaryBtn: { padding: '8px 10px', borderRadius: 10, border: `1px solid ${RCS.gold}`, background: RCS.deepNavy, color: RCS.white, cursor: 'pointer', fontWeight: 900, whiteSpace: 'nowrap' },
+  triBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    border: `1px solid ${RCS.gold}`,
+    background: RCS.white,
+    color: RCS.deepNavy,
+    cursor: 'pointer',
+    fontWeight: 900,
+    lineHeight: '38px',
+  },
   table: { width: '100%', borderCollapse: 'collapse', marginTop: 6 },
   th: {
     textAlign: 'left',
