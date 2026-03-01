@@ -58,6 +58,7 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
   const [draftNotes, setDraftNotes] = useState('');
   const [draftLearningStandardId, setDraftLearningStandardId] = useState<string | null>(null);
   const [draftLearningStandardFocus, setDraftLearningStandardFocus] = useState('');
+  const [lsTitleById, setLsTitleById] = useState<Record<string, { subject: string; title: string }>>({});
   const [draftCoreCompetencyFocus, setDraftCoreCompetencyFocus] = useState('');
 
   const [blocks, setBlocks] = useState<PlanBlockRow[]>([]);
@@ -189,6 +190,38 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
     router.replace(`/admin/dayplans/${id}${suffix}`);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, id]);
+
+  // If we have a learning_standard_id but no focus label, derive it from the standards table.
+  useEffect(() => {
+    const lsId = draftLearningStandardId;
+    if (!lsId) return;
+    if (draftLearningStandardFocus.trim()) return;
+    const cached = lsTitleById[lsId];
+    if (cached) {
+      setDraftLearningStandardFocus(`${cached.subject} > ${cached.title}`);
+      return;
+    }
+
+    void (async () => {
+      try {
+        const supabase = getSupabaseClient();
+        const { data, error } = await supabase
+          .from('learning_standards')
+          .select('id,subject,standard_title')
+          .eq('id', lsId)
+          .maybeSingle();
+        if (error || !data) return;
+        const subject = String((data as any).subject ?? '').trim();
+        const title = String((data as any).standard_title ?? '').trim();
+        if (!subject || !title) return;
+        setLsTitleById((prev) => ({ ...prev, [lsId]: { subject, title } }));
+        setDraftLearningStandardFocus(`${subject} > ${title}`);
+      } catch {
+        // ignore
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftLearningStandardId, draftLearningStandardFocus]);
 
   useEffect(() => {
     const auto = searchParams.get('auto') === '1';
