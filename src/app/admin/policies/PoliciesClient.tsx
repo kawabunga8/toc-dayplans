@@ -256,6 +256,9 @@ export default function PoliciesClient() {
         <a href="/admin/policies/toc-snippets" style={styles.secondaryBtn}>
           TOC Snippets…
         </a>
+        <a href="/admin/policies/pro-dev-goals" style={styles.secondaryBtn}>
+          Pro Dev Goals…
+        </a>
       </div>
 
       <section style={styles.card}>
