@@ -971,6 +971,21 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                           ? 'Save failed'
                           : ' '}
                   </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const res = await fetch(`/api/public/plan?id=${encodeURIComponent(id)}`);
+                        const j = await res.json();
+                        alert(JSON.stringify(j, null, 2));
+                      } catch (e: any) {
+                        alert(e?.message ?? 'Debug failed');
+                      }
+                    }}
+                    style={styles.secondaryBtn}
+                  >
+                    Debug public JSON
+                  </button>
                   <button onClick={recalcTimesFromDefaults} disabled={status !== 'idle'} style={styles.secondaryBtn}>
                     Fix times from defaults
                   </button>
