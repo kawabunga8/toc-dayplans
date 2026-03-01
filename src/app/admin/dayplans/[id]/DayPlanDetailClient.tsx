@@ -45,7 +45,7 @@ type BlockTimeDefaultRow = {
 
 type Status = 'loading' | 'idle' | 'publishing' | 'revoking' | 'saving' | 'generating' | 'error';
 
-type AutoStatus = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
+type SaveAllStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 export default function DayPlanDetailClient({ id }: { id: string }) {
   const router = useRouter();
@@ -57,11 +57,9 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
   const [status, setStatus] = useState<Status>('loading');
   const [error, setError] = useState<string | null>(null);
 
-  const [autoStatus, setAutoStatus] = useState<AutoStatus>('idle');
-  const [autoError, setAutoError] = useState<string | null>(null);
-  const [autoSavedAt, setAutoSavedAt] = useState<string | null>(null);
-  const autoTimerRef = useRef<any>(null);
-  const lastAutoSnapshotRef = useRef<string>('');
+  const [saveAllStatus, setSaveAllStatus] = useState<SaveAllStatus>('idle');
+  const [saveAllError, setSaveAllError] = useState<string | null>(null);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
   const [plan, setPlan] = useState<DayPlanRow | null>(null);
 
   const [draftTitle, setDraftTitle] = useState('');
@@ -74,25 +72,7 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
   const [blocks, setBlocks] = useState<PlanBlockRow[]>([]);
   const [classes, setClasses] = useState<ClassRow[]>([]);
 
-  const autoSnapshot = useMemo(() => {
-    return JSON.stringify({
-      title: draftTitle,
-      notes: draftNotes,
-      learning_standard_id: draftLearningStandardId,
-      learning_standard_focus: draftLearningStandardFocus,
-      core_competency_focus: draftCoreCompetencyFocus,
-      friday_type: plan?.friday_type ?? null,
-      blocks: (blocks ?? []).map((b) => ({
-        id: b.id ?? null,
-        start_time: b.start_time,
-        end_time: b.end_time,
-        room: b.room,
-        class_name: b.class_name,
-        details: b.details ?? null,
-        class_id: b.class_id ?? null,
-      })),
-    });
-  }, [draftTitle, draftNotes, draftLearningStandardId, draftLearningStandardFocus, draftCoreCompetencyFocus, plan?.friday_type, blocks]);
+  // Autosave disabled (use Save all)
 
   const publicUrl = useMemo(() => {
     if (typeof window === 'undefined') return null;
@@ -196,9 +176,6 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
       })) as ClassRow[]);
 
       setStatus('idle');
-      lastAutoSnapshotRef.current = autoSnapshot;
-      setAutoStatus('idle');
-      setAutoError(null);
     } catch (e: any) {
       setStatus('error');
       setError(e?.message ?? 'Failed to load dayplan');
@@ -210,46 +187,7 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  // Autosave: plan meta + blocks + TOC edits (debounced)
-  useEffect(() => {
-    if (status !== 'idle') return;
-    if (!plan) return;
-
-    if (autoSnapshot === lastAutoSnapshotRef.current) return;
-
-    setAutoStatus('dirty');
-    setAutoError(null);
-
-    if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
-    autoTimerRef.current = setTimeout(() => {
-      void (async () => {
-        try {
-          setAutoStatus('saving');
-          setAutoError(null);
-
-          await savePlanMeta({ reload: false, silent: true });
-          await saveBlocks({ reload: false, silent: true });
-
-          const ids = (blocks ?? []).map((b) => b.id).filter(Boolean) as string[];
-          for (const bid of ids) {
-            await requestTocSaveForBlock(bid);
-          }
-
-          lastAutoSnapshotRef.current = autoSnapshot;
-          setAutoSavedAt(new Date().toISOString());
-          setAutoStatus('saved');
-        } catch (e: any) {
-          setAutoStatus('error');
-          setAutoError(e?.message ?? 'Autosave failed');
-        }
-      })();
-    }, 900);
-
-    return () => {
-      if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoSnapshot, status, plan?.id]);
+  // Autosave disabled (use Save all)
 
   // Allow pickers to return selected values via query params.
   useEffect(() => {
@@ -647,6 +585,8 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
   async function saveAll() {
     setStatus('saving');
     setError(null);
+    setSaveAllStatus('saving');
+    setSaveAllError(null);
 
     try {
       // Always save local edits first.
@@ -672,8 +612,12 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
       }
 
       await load();
+      setSavedAt(new Date().toISOString());
+      setSaveAllStatus('saved');
       setStatus('idle');
     } catch (e: any) {
+      setSaveAllStatus('error');
+      setSaveAllError(e?.message ?? 'Failed to save');
       setStatus('error');
       setError(e?.message ?? 'Failed to save');
     }
@@ -830,8 +774,8 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                 </span>
               ) : null}
               <span style={{ marginLeft: 12, fontSize: 12, opacity: 0.85 }}>
-                Autosave: <b>{autoStatus === 'dirty' ? 'Unsaved changes' : autoStatus === 'saving' ? 'Saving…' : autoStatus === 'saved' ? 'Saved' : autoStatus === 'error' ? 'Error' : '—'}</b>
-                {autoSavedAt ? <span style={{ marginLeft: 8 }}>({new Date(autoSavedAt).toLocaleTimeString()})</span> : null}
+                Status: <b>{saveAllStatus === 'saving' ? 'Saving…' : saveAllStatus === 'saved' ? 'Saved' : saveAllStatus === 'error' ? 'Error' : '—'}</b>
+                {savedAt ? <span style={{ marginLeft: 8 }}>({new Date(savedAt).toLocaleTimeString()})</span> : null}
               </span>
             </div>
           )}
@@ -930,7 +874,7 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                 </label>
               )}
 
-              {autoStatus === 'error' && autoError ? <div style={styles.errorBox}>Autosave failed: {autoError}</div> : null}
+              {saveAllStatus === 'error' && saveAllError ? <div style={styles.errorBox}>Save failed: {saveAllError}</div> : null}
               {error ? <div style={styles.errorBox}>{error}</div> : null}
             </div>
           </section>
@@ -1007,7 +951,19 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                   </div>
                 ))}
 
-                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <button onClick={saveAll} disabled={status !== 'idle'} style={styles.primaryBtn}>
+                    {status === 'saving' ? 'Saving…' : 'Save all'}
+                  </button>
+                  <div style={{ fontSize: 12, opacity: 0.85 }}>
+                    {saveAllStatus === 'saving'
+                      ? 'Saving…'
+                      : saveAllStatus === 'saved'
+                        ? 'Saved'
+                        : saveAllStatus === 'error'
+                          ? 'Save failed'
+                          : ' '}
+                  </div>
                   <button onClick={recalcTimesFromDefaults} disabled={status !== 'idle'} style={styles.secondaryBtn}>
                     Fix times from defaults
                   </button>

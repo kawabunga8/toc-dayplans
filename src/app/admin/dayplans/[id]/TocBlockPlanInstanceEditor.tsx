@@ -68,23 +68,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
 
   const [tocBlockPlanId, setTocBlockPlanId] = useState<string | null>(null);
 
-  // Autosave (debounced)
-  const autosaveTimerRef = useRef<any>(null);
-  useEffect(() => {
-    if (!unsaved) return;
-    if (isDemo) return;
-    if (!tocBlockPlanId) return;
-
-    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
-    autosaveTimerRef.current = setTimeout(() => {
-      void saveAll({ reload: false, silent: true });
-    }, 800);
-
-    return () => {
-      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [unsaved, tocBlockPlanId]);
+  // Autosave disabled (use Save all / Publish)
   const [templateId, setTemplateId] = useState<string | null>(null);
 
   const [planMode, setPlanMode] = useState<PlanMode>('lesson_flow');
@@ -1081,7 +1065,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           {unsaved ? <div style={styles.unsavedPill}>Unsaved changes</div> : null}
           <div style={{ fontSize: 12, opacity: 0.85 }}>
-            {status === 'saving' ? 'Saving…' : status === 'error' ? 'Autosave error' : unsaved ? 'Autosave pending…' : 'Saved'}
+            {status === 'saving' ? 'Saving…' : status === 'error' ? 'Not saved' : unsaved ? 'Unsaved changes (use Save all)' : 'Saved'}
           </div>
         </div>
       </div>
