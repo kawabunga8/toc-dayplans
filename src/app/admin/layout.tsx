@@ -108,6 +108,10 @@ export default function AdminLayout({ children }: PropsWithChildren) {
             <span style={disabledNav()}>Policies</span>
           </div>
 
+          <a href="https://myrcs.ca" aria-label="Open myrcs.ca" style={{ display: 'inline-flex', alignItems: 'center' }}>
+            <img src="/rcs-wordmark.png" alt="RCS" style={{ height: 28, width: 'auto', display: 'block' }} />
+          </a>
+
           <button onClick={logout} style={btnOutline()}>
             Sign out
           </button>
@@ -194,6 +198,10 @@ export default function AdminLayout({ children }: PropsWithChildren) {
                 DEMO MODE — changes are disabled
               </div>
             ) : null}
+            <a href="https://myrcs.ca" aria-label="Open myrcs.ca" style={{ display: 'inline-flex', alignItems: 'center' }}>
+              <img src="/rcs-wordmark.png" alt="RCS" style={{ height: 28, width: 'auto', display: 'block' }} />
+            </a>
+
             <button onClick={logout} style={btnOutline()}>
               Sign out
             </button>
