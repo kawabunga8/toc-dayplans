@@ -148,62 +148,15 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [blockId, tocBlockPlanId]);
 
-  // Allow parent to request a publish-time cleanup+save.
-  // This deletes legacy overrides that were never intentionally touched in this session,
-  // so published /p reflects the template-first model.
+  // Allow parent to request publish-time save.
+  // NOTE: We no longer prune overrides here, because pruning based on in-session
+  // "touched" flags can accidentally delete intentional day overrides.
   useEffect(() => {
     const type = `toc-publish-request:${blockId}`;
     const handler = async (e: Event) => {
       const evt = e as CustomEvent<{ resolve?: (x: any) => void; reject?: (err: any) => void }>;
       try {
-        const supabase = getSupabaseClient();
-        if (tocBlockPlanId) {
-          // Lesson flow: if legacy override exists but user didn't touch, revert to template.
-          if (!lessonTouched) {
-            await supabase.from('toc_lesson_flow_phases').delete().eq('toc_block_plan_id', tocBlockPlanId);
-            setLessonOverride(false);
-            setPhases([]);
-          }
-
-          if (openingOverride && !openingTouched) {
-            await supabase.from('toc_opening_routine_steps').delete().eq('toc_block_plan_id', tocBlockPlanId);
-            setOpeningOverride(false);
-            setOpeningSteps([]);
-            setShowOpeningEditor(false);
-          }
-
-          if (whatIfOverride && !whatIfTouched) {
-            await supabase.from('toc_what_to_do_if_items').delete().eq('toc_block_plan_id', tocBlockPlanId);
-            setWhatIfOverride(false);
-            setWhatIfItems([]);
-            setShowWhatIfEditor(false);
-          }
-
-          if (rolesOverride && !rolesTouched) {
-            await supabase.from('toc_role_rows').delete().eq('toc_block_plan_id', tocBlockPlanId);
-            setRolesOverride(false);
-            setRoles([]);
-            setShowRolesEditor(false);
-          }
-
-          if (activityOverride && !activityTouched) {
-            // Delete steps first, then options
-            const { data: existing, error: exErr } = await supabase.from('toc_activity_options').select('id').eq('toc_block_plan_id', tocBlockPlanId);
-            if (!exErr) {
-              const ids = (existing ?? []).map((r: any) => r.id);
-              if (ids.length) await supabase.from('toc_activity_option_steps').delete().in('toc_activity_option_id', ids);
-            }
-            await supabase.from('toc_activity_options').delete().eq('toc_block_plan_id', tocBlockPlanId);
-            setActivityOverride(false);
-            setActivityOptions([]);
-            setShowActivityEditor(false);
-          }
-
-          // Refresh from DB after pruning.
-          await loadAll(supabase, tocBlockPlanId, templateId);
-        }
-
-        await saveAll({ reload: true, silent: false });
+        await saveAll({ reload: false, silent: true });
         evt.detail?.resolve?.(true);
       } catch (err) {
         evt.detail?.reject?.(err);
@@ -213,7 +166,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
     window.addEventListener(type, handler as any);
     return () => window.removeEventListener(type, handler as any);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [blockId, tocBlockPlanId, templateId, lessonTouched, openingTouched, whatIfTouched, rolesTouched, activityTouched, openingOverride, whatIfOverride, rolesOverride, activityOverride]);
+  }, [blockId, tocBlockPlanId]);
 
   async function ensureAndLoad() {
     setStatus('loading');
