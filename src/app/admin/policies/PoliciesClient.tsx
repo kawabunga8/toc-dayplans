@@ -336,7 +336,8 @@ export default function PoliciesClient() {
                         const qs = new URLSearchParams();
                         qs.set('learning_standard_id', selectedStandard.id);
                         qs.set('learning_standard_focus', label);
-                        window.location.href = `${returnHref}?${qs.toString()}`;
+                        const glue = returnHref.includes('?') ? '&' : '?';
+                        window.location.href = `${returnHref}${glue}${qs.toString()}`;
                       }}
                     >
                       Use as focus

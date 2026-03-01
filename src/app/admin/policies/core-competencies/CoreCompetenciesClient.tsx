@@ -147,7 +147,8 @@ export default function CoreCompetenciesClient() {
               onClick={() => {
                 const qs = new URLSearchParams();
                 qs.set('core_competency_focus', picked.join('; '));
-                window.location.href = `${returnHref}?${qs.toString()}`;
+                const glue = returnHref.includes('?') ? '&' : '?';
+                window.location.href = `${returnHref}${glue}${qs.toString()}`;
               }}
               disabled={picked.length === 0}
               title={picked.length ? `Use ${picked.length} facet(s)` : 'Pick at least one facet'}
