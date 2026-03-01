@@ -1248,15 +1248,16 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                 disabled={isDemo}
                 placeholder="Phase"
               />
-              <input
+              <textarea
                 value={String(p.activity_text ?? '')}
                 onChange={(e) => {
                   const next = ensureLessonOverrideForEdit();
                   setPhases(next.map((x, i) => (i === idx ? { ...x, activity_text: e.target.value } : x)));
                 }}
-                style={styles.input}
+                style={{ ...styles.textarea, resize: 'vertical' }}
                 disabled={isDemo}
                 placeholder="Activity"
+                rows={2}
               />
               <input
                 value={String(p.purpose_text ?? '')}
@@ -1650,7 +1651,7 @@ const styles: Record<string, React.CSSProperties> = {
   section: { marginTop: 14, border: `1px solid ${RCS.deepNavy}`, borderRadius: 12, padding: 12, background: RCS.lightBlue },
   sectionHeader: { fontWeight: 900, color: RCS.deepNavy, borderLeft: `6px solid ${RCS.gold}`, paddingLeft: 10, marginBottom: 10 },
   row3: { display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'center' },
-  phaseRow: { display: 'grid', gridTemplateColumns: '28px 110px 1fr 1fr 1fr auto', gap: 10, alignItems: 'center', border: `1px solid rgba(31,78,121,0.35)`, borderRadius: 12, padding: 8, background: 'rgba(255,255,255,0.9)' },
+  phaseRow: { display: 'grid', gridTemplateColumns: '28px 110px 1fr 1fr 1fr auto', gap: 10, alignItems: 'start', border: `1px solid rgba(31,78,121,0.35)`, borderRadius: 12, padding: 8, background: 'rgba(255,255,255,0.9)' },
   dragHandle: { cursor: 'grab', userSelect: 'none', fontWeight: 900, opacity: 0.75, textAlign: 'center' },
 
   previewCard: { marginTop: 14, border: `1px solid ${RCS.deepNavy}`, borderRadius: 12, padding: 12, background: RCS.white },
