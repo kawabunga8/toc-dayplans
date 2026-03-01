@@ -145,17 +145,30 @@ export default function ProDevGoalsClient() {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  page: { padding: 18 },
-  h1: { margin: 0, fontSize: 34, letterSpacing: -0.5, color: RCS.deepNavy },
-  muted: { marginTop: 6, marginBottom: 0, opacity: 0.75 },
-  card: { marginTop: 14, border: `1px solid rgba(31,78,121,0.25)`, borderRadius: 14, background: 'rgba(255,255,255,0.85)', overflow: 'hidden' },
-  sectionHeader: { padding: '10px 14px', fontWeight: 900, color: RCS.white, background: RCS.deepNavy },
-  label: { fontSize: 12, fontWeight: 900, opacity: 0.9 },
-  smallLabel: { fontSize: 11, fontWeight: 900, opacity: 0.8, marginBottom: 2 },
-  input: { padding: 10, borderRadius: 10, border: '1px solid rgba(0,0,0,0.22)' },
+  page: { padding: 24, maxWidth: 1100, margin: '0 auto', fontFamily: 'system-ui', background: RCS.white, color: RCS.textDark },
+  h1: { margin: 0, color: RCS.deepNavy },
+  muted: { opacity: 0.85, marginTop: 6, marginBottom: 16 },
+
+  card: { border: `1px solid ${RCS.deepNavy}`, borderRadius: 12, padding: 16, background: RCS.white },
+  sectionHeader: {
+    background: RCS.deepNavy,
+    color: RCS.white,
+    padding: '8px 10px',
+    borderRadius: 10,
+    borderBottom: `3px solid ${RCS.gold}`,
+    fontWeight: 900,
+    marginBottom: 12,
+  },
+
+  label: { color: RCS.deepNavy, fontWeight: 900, fontSize: 12, marginBottom: 6 },
+  smallLabel: { color: RCS.deepNavy, fontSize: 11, fontWeight: 900, opacity: 0.85, marginBottom: 2 },
+  input: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.deepNavy}`, background: RCS.white, color: RCS.textDark },
+
   primaryBtn: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.gold}`, background: RCS.deepNavy, color: RCS.white, cursor: 'pointer', fontWeight: 900 },
   secondaryBtn: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.gold}`, background: 'transparent', color: RCS.deepNavy, cursor: 'pointer', fontWeight: 900, textDecoration: 'none', display: 'inline-block' },
-  goalCard: { border: `1px solid rgba(31,78,121,0.25)`, borderRadius: 14, padding: 12, background: RCS.white },
+
+  goalCard: { border: `1px solid ${RCS.deepNavy}`, borderRadius: 12, padding: 12, background: RCS.lightBlue },
   pill: { padding: '4px 10px', borderRadius: 999, border: `1px solid ${RCS.gold}`, background: RCS.paleGold, color: RCS.deepNavy, fontWeight: 900, fontSize: 12 },
-  errorBox: { marginTop: 10, padding: 10, borderRadius: 10, background: '#FEE2E2', border: '1px solid #991b1b', color: '#7F1D1D', whiteSpace: 'pre-wrap' },
+
+  errorBox: { marginTop: 10, padding: 12, borderRadius: 10, border: '1px solid #991b1b', background: '#FEE2E2', color: '#7F1D1D', whiteSpace: 'pre-wrap' },
 };
