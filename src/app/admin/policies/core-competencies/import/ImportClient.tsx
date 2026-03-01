@@ -19,8 +19,19 @@ export default function ImportClient() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mode: 'replace' }),
       });
-      const j = await res.json();
-      setOut(JSON.stringify(j, null, 2));
+
+      let bodyText = '';
+      let j: any = null;
+      try {
+        bodyText = await res.text();
+        j = bodyText ? JSON.parse(bodyText) : null;
+      } catch {
+        // non-JSON response (e.g. Next.js error page)
+      }
+
+      if (j) setOut(JSON.stringify(j, null, 2));
+      else setOut(bodyText || `${res.status} ${res.statusText}`);
+
       if (!res.ok) throw new Error(j?.error ?? j?.message ?? 'Import failed');
       setStatus('done');
     } catch (e: any) {

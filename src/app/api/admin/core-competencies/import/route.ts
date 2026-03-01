@@ -37,8 +37,9 @@ async function fetchFirstAvailableCsv(): Promise<{ filename: string; text: strin
 // POST /api/admin/core-competencies/import
 // body: { mode: 'replace' }
 export async function POST(req: Request) {
-  const url = requireEnv('NEXT_PUBLIC_SUPABASE_URL');
-  const anon = requireEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY');
+  try {
+    const url = requireEnv('NEXT_PUBLIC_SUPABASE_URL');
+    const anon = requireEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY');
 
   const cookieStore = await cookies();
   const supabase = createServerClient(url, anon, {
@@ -207,5 +208,15 @@ export async function POST(req: Request) {
       { status: 400 }
     );
 
-  return NextResponse.json({ ok: true, filename, counts: { domains: domains.length, subcompetencies: subsKeyed.length, facets: facetRows.length } });
+    return NextResponse.json({ ok: true, filename, counts: { domains: domains.length, subcompetencies: subsKeyed.length, facets: facetRows.length } });
+  } catch (e: any) {
+    return NextResponse.json(
+      {
+        error: 'Unhandled import error',
+        message: String(e?.message ?? e),
+        hint: 'If this is your first run, make sure you ran the SQL to create the core_competency_* tables in Supabase.',
+      },
+      { status: 500 }
+    );
+  }
 }
