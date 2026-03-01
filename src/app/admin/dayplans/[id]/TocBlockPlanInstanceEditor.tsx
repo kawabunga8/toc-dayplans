@@ -77,7 +77,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
 
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     autosaveTimerRef.current = setTimeout(() => {
-      void saveAll();
+      void saveAll({ reload: false, silent: true });
     }, 800);
 
     return () => {
@@ -152,7 +152,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
     const handler = async (e: Event) => {
       const evt = e as CustomEvent<{ resolve?: (x: any) => void; reject?: (err: any) => void }>;
       try {
-        await saveAll();
+        await saveAll({ reload: false, silent: true });
         evt.detail?.resolve?.(true);
       } catch (err) {
         evt.detail?.reject?.(err);
@@ -219,7 +219,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
           await loadAll(supabase, tocBlockPlanId, templateId);
         }
 
-        await saveAll();
+        await saveAll({ reload: true, silent: false });
         evt.detail?.resolve?.(true);
       } catch (err) {
         evt.detail?.reject?.(err);
@@ -894,12 +894,17 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
     return seeded;
   }
 
-  async function saveAll() {
+  async function saveAll(opts?: { reload?: boolean; silent?: boolean }) {
     if (!tocBlockPlanId) return;
     if (isDemo) return;
 
-    setStatus('saving');
-    setError(null);
+    const reload = opts?.reload ?? true;
+    const silent = opts?.silent ?? false;
+
+    if (!silent) {
+      setStatus('saving');
+      setError(null);
+    }
 
     try {
       const supabase = getSupabaseClient();
@@ -1048,13 +1053,16 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         }
       }
 
-      // Reload state
-      await loadAll(supabase, tocBlockPlanId, templateId);
+      // Reload state (optional)
+      if (reload) await loadAll(supabase, tocBlockPlanId, templateId);
       setUnsaved(false);
-      setStatus('idle');
+      if (!silent) setStatus('idle');
     } catch (e: any) {
-      setStatus('error');
-      setError(e?.message ?? 'Failed to save');
+      if (!silent) {
+        setStatus('error');
+        setError(e?.message ?? 'Failed to save');
+      }
+      throw e;
     }
   }
 
