@@ -647,10 +647,11 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
               <label style={{ display: 'grid', gap: 6 }}>
                 <span style={styles.label}>Learning Standard Focus (optional)</span>
                 <div style={{ display: 'flex', gap: 10, alignItems: 'stretch', flexWrap: 'wrap' }}>
-                  <input
+                  <textarea
                     value={draftLearningStandardFocus}
                     onChange={(e) => setDraftLearningStandardFocus(e.target.value)}
-                    style={{ ...styles.input, flex: 1, minWidth: 260 }}
+                    rows={2}
+                    style={{ ...styles.textarea, flex: 1, minWidth: 260 }}
                     placeholder="(empty)"
                   />
                   <button
