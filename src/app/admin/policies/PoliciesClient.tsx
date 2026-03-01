@@ -246,6 +246,11 @@ export default function PoliciesClient() {
     <main style={styles.page}>
       <h1 style={styles.h1}>Policies</h1>
       <p style={styles.muted}>Learning standards lookup (Subject → Standard → Grade). Editable overrides with Reset to original.</p>
+      <div style={{ marginTop: -8, marginBottom: 14 }}>
+        <a href="/admin/policies/import" style={styles.secondaryBtn}>
+          Import CSV (replace)…
+        </a>
+      </div>
 
       <section style={styles.card}>
         <div style={styles.sectionHeader}>Learning Standards</div>
