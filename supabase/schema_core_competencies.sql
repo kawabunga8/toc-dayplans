@@ -38,7 +38,14 @@ alter table public.core_competency_subcompetencies enable row level security;
 alter table public.core_competency_facets enable row level security;
 
 -- Policies (requires is_staff() + can_write())
+-- Note: Supabase doesn't support CREATE POLICY IF NOT EXISTS, so we drop first for re-runs.
+
 -- domains
+drop policy if exists "core_competency_domains_staff_select" on public.core_competency_domains;
+drop policy if exists "core_competency_domains_staff_insert" on public.core_competency_domains;
+drop policy if exists "core_competency_domains_staff_update" on public.core_competency_domains;
+drop policy if exists "core_competency_domains_staff_delete" on public.core_competency_domains;
+
 create policy "core_competency_domains_staff_select" on public.core_competency_domains
 for select using (is_staff());
 create policy "core_competency_domains_staff_insert" on public.core_competency_domains
@@ -49,6 +56,11 @@ create policy "core_competency_domains_staff_delete" on public.core_competency_d
 for delete using (can_write());
 
 -- subcompetencies
+drop policy if exists "core_competency_subcompetencies_staff_select" on public.core_competency_subcompetencies;
+drop policy if exists "core_competency_subcompetencies_staff_insert" on public.core_competency_subcompetencies;
+drop policy if exists "core_competency_subcompetencies_staff_update" on public.core_competency_subcompetencies;
+drop policy if exists "core_competency_subcompetencies_staff_delete" on public.core_competency_subcompetencies;
+
 create policy "core_competency_subcompetencies_staff_select" on public.core_competency_subcompetencies
 for select using (is_staff());
 create policy "core_competency_subcompetencies_staff_insert" on public.core_competency_subcompetencies
@@ -59,6 +71,11 @@ create policy "core_competency_subcompetencies_staff_delete" on public.core_comp
 for delete using (can_write());
 
 -- facets
+drop policy if exists "core_competency_facets_staff_select" on public.core_competency_facets;
+drop policy if exists "core_competency_facets_staff_insert" on public.core_competency_facets;
+drop policy if exists "core_competency_facets_staff_update" on public.core_competency_facets;
+drop policy if exists "core_competency_facets_staff_delete" on public.core_competency_facets;
+
 create policy "core_competency_facets_staff_select" on public.core_competency_facets
 for select using (is_staff());
 create policy "core_competency_facets_staff_insert" on public.core_competency_facets
