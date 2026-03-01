@@ -49,7 +49,8 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const didAutoRef = useRef(false);
-  const receivedFocusFromQueryRef = useRef(false);
+  const receivedLsFromQueryRef = useRef(false);
+  const receivedCcFromQueryRef = useRef(false);
 
   const [status, setStatus] = useState<Status>('loading');
   const [error, setError] = useState<string | null>(null);
@@ -137,11 +138,13 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
       setDraftTitle(p.title ?? '');
       setDraftNotes(p.notes ?? '');
 
-      // If the user just returned from a picker (query params), don't overwrite those draft fields
-      // with the (possibly empty) DB values.
-      if (!receivedFocusFromQueryRef.current) {
+      // If the user just returned from a picker (query params), don't overwrite the specific
+      // draft fields that were provided via query.
+      if (!receivedLsFromQueryRef.current) {
         setDraftLearningStandardId((p as any).learning_standard_id ?? null);
         setDraftLearningStandardFocus((p as any).learning_standard_focus ?? '');
+      }
+      if (!receivedCcFromQueryRef.current) {
         setDraftCoreCompetencyFocus((p as any).core_competency_focus ?? '');
       }
 
@@ -183,11 +186,15 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
 
     if (!cc && !lsId && !lsFocus) return;
 
-    receivedFocusFromQueryRef.current = true;
-
-    if (cc) setDraftCoreCompetencyFocus(cc);
-    if (lsId) setDraftLearningStandardId(lsId);
-    if (lsFocus) setDraftLearningStandardFocus(lsFocus);
+    if (cc) {
+      receivedCcFromQueryRef.current = true;
+      setDraftCoreCompetencyFocus(cc);
+    }
+    if (lsId || lsFocus) {
+      receivedLsFromQueryRef.current = true;
+      if (lsId) setDraftLearningStandardId(lsId);
+      if (lsFocus) setDraftLearningStandardFocus(lsFocus);
+    }
 
     // Clean the URL (remove the params) but keep date/friday_type context.
     const qs = new URLSearchParams(searchParams.toString());
