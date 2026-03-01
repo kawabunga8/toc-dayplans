@@ -100,7 +100,7 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
             'id,plan_date,slot,friday_type,title,notes,learning_standard_focus,core_competency_focus,learning_standard_id,tags,visibility,share_expires_at,trashed_at'
           )
           .eq('id', id)
-          .single();
+          .maybeSingle();
         if (!full.error) return full;
 
         const msg = String((full.error as any)?.message ?? '');
@@ -112,7 +112,7 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
           .from('day_plans')
           .select('id,plan_date,slot,friday_type,title,notes,visibility,share_expires_at,trashed_at')
           .eq('id', id)
-          .single();
+          .maybeSingle();
       })();
 
       const [{ data: planData, error: planErr }, { data: blockData, error: blockErr }, { data: classData, error: classErr }] =
@@ -132,6 +132,7 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
       if (planErr) throw planErr;
       if (blockErr) throw blockErr;
       if (classErr) throw classErr;
+      if (!planData) throw new Error('Dayplan not found');
 
       const p = planData as DayPlanRow;
       setPlan(p);
