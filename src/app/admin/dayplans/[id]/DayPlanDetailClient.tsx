@@ -528,12 +528,26 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
     setError(null);
 
     try {
+      // Always save local edits first.
       await savePlanMeta();
       await saveBlocks();
 
       const ids = (blocks ?? []).map((b) => b.id).filter(Boolean) as string[];
+
+      // Save TOC edits.
       for (const bid of ids) {
         await requestTocSaveForBlock(bid);
+      }
+
+      // If already published, republish automatically so /p reflects latest changes.
+      if ((plan as any)?.visibility === 'link') {
+        for (const bid of ids) {
+          await requestTocPublishForBlock(bid);
+        }
+
+        const res = await fetch(`/api/admin/dayplans/${id}/publish`, { method: 'POST' });
+        const j = await res.json();
+        if (!res.ok) throw new Error(j?.error ?? 'Failed to republish');
       }
 
       await load();
