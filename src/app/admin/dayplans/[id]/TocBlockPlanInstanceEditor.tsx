@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { ensureDefaultTemplateForClass } from '@/lib/appRules/templates';
 import { useDemo } from '@/app/admin/DemoContext';
+import type { TocSnippetRow } from '@/lib/tocSnippetTypes';
 
 type Status = 'loading' | 'idle' | 'saving' | 'error';
 
@@ -93,6 +94,12 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
   const [showOpeningEditor, setShowOpeningEditor] = useState(false);
   const [showWhatIfEditor, setShowWhatIfEditor] = useState(false);
   const [showActivityEditor, setShowActivityEditor] = useState(false);
+
+  // Snippet Library
+  const [snippetOpen, setSnippetOpen] = useState(false);
+  const [snippets, setSnippets] = useState<TocSnippetRow[]>([]);
+  const [snippetStatus, setSnippetStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [snippetError, setSnippetError] = useState<string | null>(null);
 
   const modeLabel = useMemo(() => (planMode === 'lesson_flow' ? 'Lesson Flow' : 'Activity Options'), [planMode]);
 
@@ -254,6 +261,173 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
     } catch (e: any) {
       setStatus('error');
       setError(e?.message ?? 'Failed to load TOC plan');
+    }
+  }
+
+  async function loadSnippets() {
+    setSnippetStatus('loading');
+    setSnippetError(null);
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('toc_snippets')
+        .select('id,title,description,tags,payload,updated_at')
+        .order('title', { ascending: true });
+      if (error) throw error;
+      setSnippets((data ?? []) as any);
+      setSnippetStatus('idle');
+    } catch (e: any) {
+      setSnippetStatus('error');
+      setSnippetError(e?.message ?? 'Failed to load snippet library');
+      setSnippets([]);
+    }
+  }
+
+  async function applySnippet(snippet: TocSnippetRow) {
+    if (!tocBlockPlanId) return;
+    if (isDemo) return;
+
+    const payload = snippet.payload ?? ({} as any);
+
+    const ok = window.confirm(
+      `Insert “${snippet.title}” into this day plan override? This will replace any existing day overrides in the affected sections.`
+    );
+    if (!ok) return;
+
+    setStatus('saving');
+    setError(null);
+
+    try {
+      const supabase = getSupabaseClient();
+      const pid = tocBlockPlanId;
+
+      // Opening steps
+      if (Array.isArray(payload.opening_steps) && payload.opening_steps.length > 0) {
+        await supabase.from('toc_opening_routine_steps').delete().eq('toc_block_plan_id', pid);
+        const rows = payload.opening_steps.map((step_text, idx) => ({
+          toc_block_plan_id: pid,
+          sort_order: idx + 1,
+          step_text,
+          source_template_step_id: null,
+        }));
+        const { error } = await supabase.from('toc_opening_routine_steps').insert(rows);
+        if (error) throw error;
+        setOpeningOverride(true);
+        setOpeningTouched(true);
+        setShowOpeningEditor(true);
+      }
+
+      // Lesson flow phases
+      if (Array.isArray(payload.lesson_flow_phases) && payload.lesson_flow_phases.length > 0) {
+        await supabase.from('toc_lesson_flow_phases').delete().eq('toc_block_plan_id', pid);
+        const rows = payload.lesson_flow_phases.map((p, idx) => ({
+          toc_block_plan_id: pid,
+          sort_order: idx + 1,
+          time_text: String(p.time_text ?? ''),
+          phase_text: String(p.phase_text ?? ''),
+          activity_text: String(p.activity_text ?? ''),
+          purpose_text: p.purpose_text ? String(p.purpose_text) : null,
+          source_template_phase_id: null,
+        }));
+        const { error } = await supabase.from('toc_lesson_flow_phases').insert(rows);
+        if (error) throw error;
+        setLessonOverride(true);
+        setLessonTouched(true);
+      }
+
+      // What-if
+      if (Array.isArray(payload.what_if_items) && payload.what_if_items.length > 0) {
+        await supabase.from('toc_what_to_do_if_items').delete().eq('toc_block_plan_id', pid);
+        const rows = payload.what_if_items.map((w, idx) => ({
+          toc_block_plan_id: pid,
+          sort_order: idx + 1,
+          scenario_text: String(w.scenario_text ?? ''),
+          response_text: String(w.response_text ?? ''),
+          source_template_item_id: null,
+        }));
+        const { error } = await supabase.from('toc_what_to_do_if_items').insert(rows);
+        if (error) throw error;
+        setWhatIfOverride(true);
+        setWhatIfTouched(true);
+        setShowWhatIfEditor(true);
+      }
+
+      // Roles
+      if (Array.isArray(payload.roles) && payload.roles.length > 0) {
+        await supabase.from('toc_role_rows').delete().eq('toc_block_plan_id', pid);
+        const rows = payload.roles.map((r, idx) => ({
+          toc_block_plan_id: pid,
+          sort_order: idx + 1,
+          who: String(r.who ?? ''),
+          responsibility: String(r.responsibility ?? ''),
+        }));
+        const { error } = await supabase.from('toc_role_rows').insert(rows);
+        if (error) throw error;
+        setRolesOverride(true);
+        setRolesTouched(true);
+        setShowRolesEditor(true);
+      }
+
+      // Activity options
+      if (Array.isArray(payload.activity_options) && payload.activity_options.length > 0) {
+        // delete steps first, then options
+        const { data: existing, error: exErr } = await supabase.from('toc_activity_options').select('id').eq('toc_block_plan_id', pid);
+        if (exErr) throw exErr;
+        const ids = (existing ?? []).map((r: any) => r.id);
+        if (ids.length) {
+          const { error } = await supabase.from('toc_activity_option_steps').delete().in('toc_activity_option_id', ids);
+          if (error) throw error;
+        }
+        await supabase.from('toc_activity_options').delete().eq('toc_block_plan_id', pid);
+
+        const optRows = payload.activity_options.map((o, idx) => ({
+          toc_block_plan_id: pid,
+          sort_order: idx + 1,
+          title: String(o.title ?? ''),
+          description: String(o.description ?? ''),
+          details_text: String(o.details_text ?? ''),
+          toc_role_text: o.toc_role_text ? String(o.toc_role_text) : null,
+          source_template_option_id: null,
+        }));
+
+        const { data: inserted, error: insErr } = await supabase.from('toc_activity_options').insert(optRows).select('id,sort_order');
+        if (insErr) throw insErr;
+
+        const bySort = new Map<number, string>();
+        for (const r of inserted ?? []) bySort.set((r as any).sort_order, (r as any).id);
+
+        const stepRows: any[] = [];
+        for (let i = 0; i < payload.activity_options.length; i++) {
+          const o = payload.activity_options[i]!;
+          const optId = bySort.get(i + 1);
+          if (!optId) continue;
+          const steps = Array.isArray(o.steps) ? o.steps : [];
+          for (let j = 0; j < steps.length; j++) {
+            const st = steps[j]!;
+            stepRows.push({
+              toc_activity_option_id: optId,
+              sort_order: j + 1,
+              step_text: String((st as any).step_text ?? ''),
+              source_template_option_step_id: null,
+            });
+          }
+        }
+        if (stepRows.length) {
+          const { error } = await supabase.from('toc_activity_option_steps').insert(stepRows);
+          if (error) throw error;
+        }
+
+        setActivityOverride(true);
+        setActivityTouched(true);
+        setShowActivityEditor(true);
+      }
+
+      await loadAll(supabase, pid, templateId);
+      setSnippetOpen(false);
+      setStatus('idle');
+    } catch (e: any) {
+      setStatus('error');
+      setError(e?.message ?? 'Failed to apply snippet');
     }
   }
 
@@ -817,12 +991,69 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
       <div style={styles.templateHint}>
         <div style={{ fontWeight: 900, color: '#1F4E79' }}>Most content comes from the Class Template.</div>
         <div style={{ fontSize: 12, opacity: 0.85 }}>Change defaults once in the template. Day overrides are optional.</div>
-        <a href={`/admin/courses/${classId}/toc-template`} style={styles.templateLink}>
-          Edit class template →
-        </a>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <a href={`/admin/courses/${classId}/toc-template`} style={styles.templateLink}>
+            Edit class template →
+          </a>
+          <button
+            type="button"
+            style={styles.secondaryBtn}
+            disabled={isDemo}
+            onClick={() => {
+              setSnippetOpen(true);
+              if (snippets.length === 0 && snippetStatus !== 'loading') void loadSnippets();
+            }}
+          >
+            Insert from Library…
+          </button>
+        </div>
       </div>
 
       {error ? <div style={styles.errorBox}>{error}</div> : null}
+
+      {snippetOpen ? (
+        <div style={styles.snippetBackdrop} onClick={(e) => {
+          if (e.target === e.currentTarget) setSnippetOpen(false);
+        }}>
+          <div style={styles.snippetModal}>
+            <div style={styles.snippetHeader}>
+              <div>
+                <div style={{ fontWeight: 900, color: RCS.deepNavy }}>Snippet Library</div>
+                <div style={{ fontSize: 12, opacity: 0.85 }}>Insert structured routines into this day override.</div>
+              </div>
+              <button type="button" style={styles.secondaryBtn} onClick={() => setSnippetOpen(false)}>
+                Close
+              </button>
+            </div>
+
+            {snippetStatus === 'loading' ? <div style={{ opacity: 0.8 }}>Loading…</div> : null}
+            {snippetStatus === 'error' && snippetError ? <div style={styles.errorBox}>{snippetError}</div> : null}
+
+            <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
+              {snippets.length ? (
+                snippets.map((s) => (
+                  <div key={s.id} style={styles.snippetRow}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 900 }}>{s.title}</div>
+                      {s.description ? <div style={{ fontSize: 12, opacity: 0.85 }}>{s.description}</div> : null}
+                      {Array.isArray(s.tags) && s.tags.length ? (
+                        <div style={{ marginTop: 6, fontSize: 12, opacity: 0.85 }}>
+                          {s.tags.map((t) => `#${t}`).join(' ')}
+                        </div>
+                      ) : null}
+                    </div>
+                    <button type="button" style={styles.primaryBtn} onClick={() => void applySnippet(s)} disabled={isDemo || status === 'saving'}>
+                      Insert
+                    </button>
+                  </div>
+                ))
+              ) : (
+                <div style={{ opacity: 0.8 }}>No snippets found. (Run supabase/schema_toc_snippets.sql)</div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div style={styles.grid2}>
         <label style={styles.field}>
@@ -1347,4 +1578,26 @@ const styles: Record<string, React.CSSProperties> = {
 
   optionCard: { border: `1px solid ${RCS.deepNavy}`, borderRadius: 12, padding: 12, background: RCS.white },
   whatIfRow: { display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 10, alignItems: 'center' },
+
+  snippetBackdrop: {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0,0,0,0.35)',
+    display: 'flex',
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    padding: 24,
+    zIndex: 50,
+  },
+  snippetModal: {
+    width: '100%',
+    maxWidth: 900,
+    background: RCS.white,
+    borderRadius: 14,
+    border: `1px solid ${RCS.deepNavy}`,
+    padding: 14,
+    boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
+  },
+  snippetHeader: { display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' },
+  snippetRow: { display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', border: `1px solid ${RCS.deepNavy}`, borderRadius: 12, padding: 12, background: RCS.lightBlue },
 };
