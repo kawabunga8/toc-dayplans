@@ -262,6 +262,23 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, status, plan, blocks.length, id]);
 
+  function requestTocSaveForBlock(dayPlanBlockId: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      try {
+        window.dispatchEvent(
+          new CustomEvent(`toc-save-request:${dayPlanBlockId}`, {
+            detail: {
+              resolve: () => resolve(),
+              reject: (err: any) => reject(err),
+            },
+          })
+        );
+      } catch (e) {
+        reject(e);
+      }
+    });
+  }
+
   function requestTocPublishForBlock(dayPlanBlockId: string): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
@@ -284,6 +301,10 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
     setError(null);
 
     try {
+      // Save-all first so /p always reflects what you just edited.
+      await savePlanMeta();
+      await saveBlocks();
+
       // Publish should prune legacy TOC overrides (template-first) and save intended day overrides.
       const ids = (blocks ?? []).map((b) => b.id).filter(Boolean) as string[];
       for (const bid of ids) {
@@ -499,6 +520,27 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
     } catch (e: any) {
       setStatus('error');
       setError(e?.message ?? 'Failed to save blocks');
+    }
+  }
+
+  async function saveAll() {
+    setStatus('saving');
+    setError(null);
+
+    try {
+      await savePlanMeta();
+      await saveBlocks();
+
+      const ids = (blocks ?? []).map((b) => b.id).filter(Boolean) as string[];
+      for (const bid of ids) {
+        await requestTocSaveForBlock(bid);
+      }
+
+      await load();
+      setStatus('idle');
+    } catch (e: any) {
+      setStatus('error');
+      setError(e?.message ?? 'Failed to save');
     }
   }
 
@@ -834,6 +876,9 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                   <button onClick={saveBlocks} disabled={status !== 'idle'} style={styles.primaryBtn}>
                     {status === 'saving' ? 'Saving…' : 'Save blocks'}
+                  </button>
+                  <button onClick={saveAll} disabled={status !== 'idle'} style={styles.secondaryBtn}>
+                    Save all
                   </button>
                   <button onClick={recalcTimesFromDefaults} disabled={status !== 'idle'} style={styles.secondaryBtn}>
                     Fix times from defaults
