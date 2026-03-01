@@ -7,6 +7,8 @@ export const runtime = 'nodejs';
 
 const BUCKET = 'core-competencies-data';
 const CANDIDATE_FILES = [
+  // Prefer the richer file when present
+  'BC_Core_Competencies_Framework_Examples.csv',
   'BC_Core_Competencies_Framework.csv',
   'core_competencies.csv',
   'core-competencies.csv',
@@ -67,20 +69,28 @@ export async function POST(req: Request) {
 
   const errors: string[] = [];
 
-  type InRow = { domain: string; sub: string; facet: string };
+  type InRow = { domain: string; sub: string; facet: string; example_context: string[] };
   const inRows: InRow[] = [];
+
+  const parseExampleContext = (raw: string): string[] => {
+    return String(raw ?? '')
+      .split(/[,/]/g)
+      .map((s) => s.trim())
+      .filter(Boolean);
+  };
 
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i]!;
     const domain = String((r['Core Competency'] ?? r.core_competency ?? r.coreCompetency ?? '')).trim();
     const sub = String((r['Sub-Competency'] ?? r.sub_competency ?? r.subCompetency ?? '')).trim();
     const facet = String((r['Facet Name'] ?? r.facet_name ?? r.facetName ?? '')).trim();
+    const example_context = parseExampleContext(String((r['Example Context'] ?? r.example_context ?? r.exampleContext ?? '')).trim());
 
     if (!domain) errors.push(`row ${i + 2}: missing Core Competency`);
     if (!sub) errors.push(`row ${i + 2}: missing Sub-Competency`);
     if (!facet) errors.push(`row ${i + 2}: missing Facet Name`);
 
-    if (domain && sub && facet) inRows.push({ domain, sub, facet });
+    if (domain && sub && facet) inRows.push({ domain, sub, facet, example_context });
   }
 
   if (errors.length) {
@@ -192,15 +202,18 @@ export async function POST(req: Request) {
   }
 
   // Insert facets
-  const facetRows = inRows.map((r) => {
-    const domId = domIdByName.get(r.domain);
-    const subId = domId ? subIdByKey.get(`${domId}::${r.sub}`) : null;
-    return {
-      subcompetency_id: subId,
-      name: r.facet,
-      updated_at: new Date().toISOString(),
-    };
-  }).filter((r) => !!r.subcompetency_id);
+  const facetRows = inRows
+    .map((r) => {
+      const domId = domIdByName.get(r.domain);
+      const subId = domId ? subIdByKey.get(`${domId}::${r.sub}`) : null;
+      return {
+        subcompetency_id: subId,
+        name: r.facet,
+        example_context: r.example_context ?? [],
+        updated_at: new Date().toISOString(),
+      };
+    })
+    .filter((r) => !!r.subcompetency_id);
 
   const { error: facErr } = await supabase.from('core_competency_facets').insert(facetRows);
   if (facErr)
