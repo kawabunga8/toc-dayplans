@@ -26,7 +26,7 @@ const styles: Record<string, React.CSSProperties> = {
   schoolName: { color: RCS.gold, fontWeight: 900, letterSpacing: 0.2, marginBottom: 4 },
   appName: { color: RCS.white, fontWeight: 900, fontSize: 22 },
   body: { padding: 24 },
-  card: { maxWidth: 520, margin: '0 auto', border: `1px solid ${RCS.deepNavy}`, borderRadius: 14, background: RCS.white },
+  card: { maxWidth: 560, margin: '0 auto', border: `1px solid ${RCS.deepNavy}`, borderRadius: 14, background: RCS.white },
   cardHeader: {
     background: RCS.deepNavy,
     color: RCS.white,
@@ -37,9 +37,18 @@ const styles: Record<string, React.CSSProperties> = {
     borderBottom: `3px solid ${RCS.gold}`,
     fontWeight: 900,
   },
-  muted: { margin: 0, padding: 12, opacity: 0.85 },
+  cardBody: { padding: 14 },
+  muted: { margin: 0, opacity: 0.85 },
   label: { color: RCS.midBlue, fontWeight: 800, fontSize: 12 },
-  input: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.deepNavy}`, background: RCS.white, color: RCS.textDark },
+  input: {
+    width: '100%',
+    boxSizing: 'border-box',
+    padding: '10px 12px',
+    borderRadius: 10,
+    border: `1px solid ${RCS.deepNavy}`,
+    background: RCS.white,
+    color: RCS.textDark,
+  },
   primaryBtn: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.gold}`, background: RCS.deepNavy, color: RCS.white, cursor: 'pointer', fontWeight: 900 },
   secondaryBtn: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.gold}`, background: 'transparent', color: RCS.deepNavy, cursor: 'pointer', fontWeight: 900 },
   successBox: { padding: 12, borderRadius: 10, border: '1px solid #86efac', background: '#dcfce7', marginTop: 6 },
@@ -109,9 +118,11 @@ export default function LoginClient() {
       <section style={styles.body}>
         <div style={styles.card}>
           <div style={styles.cardHeader}>Admin Login</div>
-          <p style={styles.muted}>Sign in with your admin email and password.</p>
 
-          <form onSubmit={onSubmit} style={{ display: 'grid', gap: 10 }}>
+          <div style={styles.cardBody}>
+            <p style={styles.muted}>Sign in with your admin email and password.</p>
+
+            <form onSubmit={onSubmit} style={{ display: 'grid', gap: 10, marginTop: 10 }}>
             <label style={{ display: 'grid', gap: 6 }}>
               <span style={styles.label}>Email</span>
               <input
@@ -152,10 +163,11 @@ export default function LoginClient() {
             {status === 'error' && <div style={styles.errorBox}>{error}</div>}
           </form>
 
-          <div style={{ marginTop: 16 }}>
-            <Link href="/" style={styles.backLink}>
-              ← Back to home
-            </Link>
+            <div style={{ marginTop: 16 }}>
+              <Link href="/" style={styles.backLink}>
+                ← Back to home
+              </Link>
+            </div>
           </div>
         </div>
       </section>
