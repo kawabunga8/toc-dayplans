@@ -16,6 +16,14 @@ type ClassRow = {
   block_label: string | null;
 };
 
+type AssessmentTouchPoint = {
+  timing_in_lesson: string;
+  learning_standard_focus: string;
+  evidence_to_collect: string;
+  differentiation_strategy: string;
+  cyclical_loop_type: string;
+};
+
 type TemplateRow = {
   id: string;
   class_id: string;
@@ -27,6 +35,7 @@ type TemplateRow = {
   note_to_toc: string;
   plan_mode: PlanMode;
   default_tags: string[] | null;
+  assessment_touch_point?: AssessmentTouchPoint | null;
 };
 
 type RoutineStep = { id?: string; text: string };
@@ -77,6 +86,13 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
 
   // ordered content
   const [openingRoutine, setOpeningRoutine] = useState<RoutineStep[]>([]);
+
+  // Standards-based assessment touch point (template-level)
+  const [touchTiming, setTouchTiming] = useState('');
+  const [touchStandard, setTouchStandard] = useState('');
+  const [touchEvidence, setTouchEvidence] = useState('');
+  const [touchDiff, setTouchDiff] = useState('');
+  const [touchCycle, setTouchCycle] = useState('');
 
   const [planMode, setPlanMode] = useState<PlanMode>('lesson_flow');
   const [lessonFlow, setLessonFlow] = useState<PhaseRow[]>([]);
@@ -191,6 +207,12 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
             { who: 'Students', responsibility: 'Follow the plan and stay on task.' },
           ]);
 
+          setTouchTiming('');
+          setTouchStandard('');
+          setTouchEvidence('');
+          setTouchDiff('');
+          setTouchCycle('');
+
           setStatus('idle');
           return;
         }
@@ -205,6 +227,13 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
         setNoteToToc(tplRow.note_to_toc ?? '');
         setDefaultTags(Array.isArray((tplRow as any).default_tags) ? (tplRow as any).default_tags.join(', ') : '');
         setPlanMode(tplRow.plan_mode);
+
+        const tp = ((tplRow as any).assessment_touch_point ?? null) as any;
+        setTouchTiming(String(tp?.timing_in_lesson ?? ''));
+        setTouchStandard(String(tp?.learning_standard_focus ?? ''));
+        setTouchEvidence(String(tp?.evidence_to_collect ?? ''));
+        setTouchDiff(String(tp?.differentiation_strategy ?? ''));
+        setTouchCycle(String(tp?.cyclical_loop_type ?? ''));
 
         const templateId = tplRow.id;
 
@@ -358,6 +387,13 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
         note_to_toc: noteToToc.trim() ? noteToToc.trim() : '',
         plan_mode: planMode,
         default_tags: tagsArr.length ? tagsArr : null,
+        assessment_touch_point: {
+          timing_in_lesson: touchTiming.trim(),
+          learning_standard_focus: touchStandard.trim(),
+          evidence_to_collect: touchEvidence.trim(),
+          differentiation_strategy: touchDiff.trim(),
+          cyclical_loop_type: touchCycle.trim(),
+        },
         updated_at: new Date().toISOString(),
       };
 
@@ -600,6 +636,36 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
               <div style={styles.label}>Note to the TOC (plain text)</div>
               <textarea value={noteToToc} onChange={(e) => setNoteToToc(e.target.value)} rows={6} style={styles.textarea} />
             </label>
+          </section>
+
+          {/* 3.5) Standards-Based Assessment Touch Point */}
+          <section style={styles.card}>
+            <div style={styles.sectionHeader}>3.5 Standards-Based Assessment Touch Point</div>
+            <div style={styles.mutedSmall}>
+              A lightweight check-in you can reuse each lesson: what you’ll look/listen for, and how you’ll differentiate.
+            </div>
+            <div style={{ ...styles.grid2, marginTop: 10 }}>
+              <label style={styles.field}>
+                <div style={styles.label}>Timing in lesson</div>
+                <input value={touchTiming} onChange={(e) => setTouchTiming(e.target.value)} style={styles.input} placeholder="e.g., 15 minutes into flow" />
+              </label>
+              <label style={styles.field}>
+                <div style={styles.label}>Cyclical loop type</div>
+                <input value={touchCycle} onChange={(e) => setTouchCycle(e.target.value)} style={styles.input} placeholder="design / rehearsal / refinement" />
+              </label>
+              <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                <div style={styles.label}>Learning Standard focus (reference)</div>
+                <input value={touchStandard} onChange={(e) => setTouchStandard(e.target.value)} style={styles.input} placeholder="e.g., ADST > Define and Ideate" />
+              </label>
+              <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                <div style={styles.label}>Evidence to collect</div>
+                <input value={touchEvidence} onChange={(e) => setTouchEvidence(e.target.value)} style={styles.input} placeholder="e.g., verbal articulation of…" />
+              </label>
+              <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                <div style={styles.label}>Differentiation strategy (UDL / IEP)</div>
+                <input value={touchDiff} onChange={(e) => setTouchDiff(e.target.value)} style={styles.input} placeholder="e.g., chunking, sentence starters, extended time…" />
+              </label>
+            </div>
           </section>
 
           {/* 4) Opening routine */}

@@ -472,6 +472,7 @@ create table if not exists class_toc_templates (
   attendance_note text,
   plan_mode text not null,
   default_tags text[],
+  assessment_touch_point jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint class_toc_templates_plan_mode_check check (plan_mode in ('lesson_flow','activity_options'))
@@ -571,6 +572,7 @@ create table if not exists toc_block_plans (
   override_phone_policy text,
   override_note_to_toc text,
   override_attendance_note text,
+  override_assessment_touch_point jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint toc_block_plans_plan_mode_check check (plan_mode in ('lesson_flow','activity_options'))

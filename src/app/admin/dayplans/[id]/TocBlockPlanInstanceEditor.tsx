@@ -10,10 +10,19 @@ type Status = 'loading' | 'idle' | 'saving' | 'error';
 
 type PlanMode = 'lesson_flow' | 'activity_options';
 
+type AssessmentTouchPoint = {
+  timing_in_lesson: string;
+  learning_standard_focus: string;
+  evidence_to_collect: string;
+  differentiation_strategy: string;
+  cyclical_loop_type: string;
+};
+
 type TemplateRow = {
   id: string;
   plan_mode: PlanMode;
   note_to_toc: string | null;
+  assessment_touch_point?: AssessmentTouchPoint | null;
 };
 
 type OpeningStep = { step_text: string; source_template_step_id: string | null };
@@ -60,6 +69,14 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
   const [planMode, setPlanMode] = useState<PlanMode>('lesson_flow');
   const [noteTOC, setNoteTOC] = useState('');
   const [templateNoteTOC, setTemplateNoteTOC] = useState('');
+
+  // Assessment touch point (template preview + day override)
+  const [templateTouchPoint, setTemplateTouchPoint] = useState<AssessmentTouchPoint | null>(null);
+  const [touchTiming, setTouchTiming] = useState('');
+  const [touchStandard, setTouchStandard] = useState('');
+  const [touchEvidence, setTouchEvidence] = useState('');
+  const [touchDiff, setTouchDiff] = useState('');
+  const [touchCycle, setTouchCycle] = useState('');
 
   // Template previews
   const [tplOpeningSteps, setTplOpeningSteps] = useState<Array<{ step_text: string }>>([]);
@@ -432,7 +449,11 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
   }
 
   async function loadAll(supabase: ReturnType<typeof getSupabaseClient>, tocPlanId: string, tplId: string | null) {
-    const { data: plan, error: pErr } = await supabase.from('toc_block_plans').select('template_id,plan_mode,override_note_to_toc').eq('id', tocPlanId).single();
+    const { data: plan, error: pErr } = await supabase
+      .from('toc_block_plans')
+      .select('template_id,plan_mode,override_note_to_toc,override_assessment_touch_point')
+      .eq('id', tocPlanId)
+      .single();
     if (pErr) throw pErr;
 
     // Always prefer the latest active template for this class (in case it changed since plan creation).
@@ -459,14 +480,30 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
     setPlanMode(plan.plan_mode as PlanMode);
 
     let tplNote = '';
+    let tplTouch: any = null;
     if (effectiveTplId) {
-      const { data: tplRow, error: tErr } = await supabase.from('class_toc_templates').select('note_to_toc').eq('id', effectiveTplId).maybeSingle();
+      const { data: tplRow, error: tErr } = await supabase
+        .from('class_toc_templates')
+        .select('note_to_toc,assessment_touch_point')
+        .eq('id', effectiveTplId)
+        .maybeSingle();
       if (tErr) throw tErr;
       tplNote = (tplRow?.note_to_toc ?? '').toString();
+      tplTouch = (tplRow as any)?.assessment_touch_point ?? null;
     }
     setTemplateNoteTOC(tplNote);
+    setTemplateTouchPoint(tplTouch);
     const override = (plan.override_note_to_toc ?? '').toString();
     setNoteTOC(override || tplNote);
+
+    const tp = ((plan as any).override_assessment_touch_point ?? null) as any;
+    const baseTp = tplTouch ?? null;
+    const effectiveTp = tp && Object.keys(tp).length ? tp : baseTp;
+    setTouchTiming(String(effectiveTp?.timing_in_lesson ?? ''));
+    setTouchStandard(String(effectiveTp?.learning_standard_focus ?? ''));
+    setTouchEvidence(String(effectiveTp?.evidence_to_collect ?? ''));
+    setTouchDiff(String(effectiveTp?.differentiation_strategy ?? ''));
+    setTouchCycle(String(effectiveTp?.cyclical_loop_type ?? ''));
 
     // template previews
     if (effectiveTplId) {
@@ -836,6 +873,13 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
             if (v && base && v === base) return null;
             return v;
           })(),
+          override_assessment_touch_point: {
+            timing_in_lesson: touchTiming.trim(),
+            learning_standard_focus: touchStandard.trim(),
+            evidence_to_collect: touchEvidence.trim(),
+            differentiation_strategy: touchDiff.trim(),
+            cyclical_loop_type: touchCycle.trim(),
+          },
           updated_at: new Date().toISOString(),
         })
         .eq('id', tocBlockPlanId);
@@ -1075,6 +1119,42 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
             disabled={isDemo}
           />
         </label>
+
+        <div style={{ gridColumn: '1 / -1', ...styles.touchCard }}>
+          <div style={{ ...styles.sectionHeader, marginBottom: 8 }}>Standards-Based Assessment Touch Point</div>
+          <div style={{ fontSize: 12, opacity: 0.85, marginBottom: 10 }}>
+            A quick check-in embedded in your lesson (evidence + differentiation). Saved as a day override.
+          </div>
+
+          <div style={styles.grid2}>
+            <label style={styles.field}>
+              <span style={styles.label}>Timing in lesson</span>
+              <input value={touchTiming} onChange={(e) => setTouchTiming(e.target.value)} style={styles.input} placeholder="e.g., 15 minutes into flow" />
+            </label>
+            <label style={styles.field}>
+              <span style={styles.label}>Cyclical loop type</span>
+              <input value={touchCycle} onChange={(e) => setTouchCycle(e.target.value)} style={styles.input} placeholder="design / rehearsal / refinement" />
+            </label>
+            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+              <span style={styles.label}>Learning Standard focus (reference)</span>
+              <input value={touchStandard} onChange={(e) => setTouchStandard(e.target.value)} style={styles.input} placeholder="e.g., ADST > Define and Ideate" />
+            </label>
+            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+              <span style={styles.label}>Evidence to collect</span>
+              <input value={touchEvidence} onChange={(e) => setTouchEvidence(e.target.value)} style={styles.input} placeholder="e.g., verbal articulation of…" />
+            </label>
+            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+              <span style={styles.label}>Differentiation strategy (UDL / IEP)</span>
+              <input value={touchDiff} onChange={(e) => setTouchDiff(e.target.value)} style={styles.input} placeholder="e.g., chunking, sentence starters, extended time…" />
+            </label>
+          </div>
+
+          {templateTouchPoint ? (
+            <div style={{ marginTop: 10, fontSize: 12, opacity: 0.8 }}>
+              Template baseline: {String((templateTouchPoint as any)?.timing_in_lesson ?? '').trim() ? 'set' : '—'}
+            </div>
+          ) : null}
+        </div>
       </div>
 
       {/* Lesson flow: template-first; first edit creates a day override */}
@@ -1575,6 +1655,8 @@ const styles: Record<string, React.CSSProperties> = {
 
   previewCard: { marginTop: 14, border: `1px solid ${RCS.deepNavy}`, borderRadius: 12, padding: 12, background: RCS.white },
   previewHeader: { display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 },
+
+  touchCard: { border: `1px solid ${RCS.deepNavy}`, borderRadius: 12, padding: 12, background: RCS.white },
 
   optionCard: { border: `1px solid ${RCS.deepNavy}`, borderRadius: 12, padding: 12, background: RCS.white },
   whatIfRow: { display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 10, alignItems: 'center' },
