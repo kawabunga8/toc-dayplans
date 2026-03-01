@@ -63,6 +63,9 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
   const [status, setStatus] = useState<Status>('loading');
   const [error, setError] = useState<string | null>(null);
 
+  const [unsaved, setUnsaved] = useState(false);
+  const markUnsaved = () => setUnsaved(true);
+
   const [tocBlockPlanId, setTocBlockPlanId] = useState<string | null>(null);
   const [templateId, setTemplateId] = useState<string | null>(null);
 
@@ -274,6 +277,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
 
       // 3) Load template previews + instance overrides
       await loadAll(supabase, plan.id, plan.template_id ?? null);
+      setUnsaved(false);
       setStatus('idle');
     } catch (e: any) {
       setStatus('error');
@@ -440,6 +444,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
       }
 
       await loadAll(supabase, pid, templateId);
+      setUnsaved(false);
       setSnippetOpen(false);
       setStatus('idle');
     } catch (e: any) {
@@ -478,6 +483,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
 
     setTemplateId(effectiveTplId);
     setPlanMode(plan.plan_mode as PlanMode);
+    setUnsaved(false);
 
     let tplNote = '';
     let tplTouch: any = null;
@@ -1008,6 +1014,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
 
       // Reload state
       await loadAll(supabase, tocBlockPlanId, templateId);
+      setUnsaved(false);
       setStatus('idle');
     } catch (e: any) {
       setStatus('error');
@@ -1027,8 +1034,20 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
           </div>
         </div>
 
-        <div style={{ fontSize: 12, opacity: 0.8 }}>
-          {status === 'saving' ? 'Saving…' : status === 'error' ? 'Not saved' : ' '}
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {unsaved ? <div style={styles.unsavedPill}>Unsaved changes</div> : null}
+          <button
+            type="button"
+            onClick={() => void saveAll()}
+            style={unsaved ? styles.primaryBtn : styles.primaryBtnDisabled}
+            disabled={isDemo || status === 'saving' || !unsaved}
+            title={unsaved ? 'Save TOC plan changes' : 'No changes to save'}
+          >
+            {status === 'saving' ? 'Saving…' : 'Save TOC Plan'}
+          </button>
+          <div style={{ fontSize: 12, opacity: 0.8 }}>
+            {status === 'saving' ? '' : status === 'error' ? 'Not saved' : ''}
+          </div>
         </div>
       </div>
 
@@ -1102,7 +1121,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
       <div style={styles.grid2}>
         <label style={styles.field}>
           <span style={styles.label}>Plan Mode</span>
-          <select value={planMode} onChange={(e) => setPlanMode(e.target.value as any)} style={styles.input} disabled={isDemo}>
+          <select value={planMode} onChange={(e) => { setPlanMode(e.target.value as any); markUnsaved(); }} style={styles.input} disabled={isDemo}>
             <option value="lesson_flow">Lesson Flow</option>
             <option value="activity_options">Activity Options</option>
           </select>
@@ -1113,7 +1132,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
           <textarea
             value={noteTOC}
             placeholder={templateNoteTOC || ''}
-            onChange={(e) => setNoteTOC(e.target.value)}
+            onChange={(e) => { setNoteTOC(e.target.value); markUnsaved(); }}
             rows={3}
             style={styles.textarea}
             disabled={isDemo}
@@ -1129,23 +1148,23 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
           <div style={styles.grid2}>
             <label style={styles.field}>
               <span style={styles.label}>Timing in lesson</span>
-              <input value={touchTiming} onChange={(e) => setTouchTiming(e.target.value)} style={styles.input} placeholder="e.g., 15 minutes into flow" />
+              <input value={touchTiming} onChange={(e) => { setTouchTiming(e.target.value); markUnsaved(); }} style={styles.input} placeholder="e.g., 15 minutes into flow" />
             </label>
             <label style={styles.field}>
               <span style={styles.label}>Cyclical loop type</span>
-              <input value={touchCycle} onChange={(e) => setTouchCycle(e.target.value)} style={styles.input} placeholder="design / rehearsal / refinement" />
+              <input value={touchCycle} onChange={(e) => { setTouchCycle(e.target.value); markUnsaved(); }} style={styles.input} placeholder="design / rehearsal / refinement" />
             </label>
             <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
               <span style={styles.label}>Learning Standard focus (reference)</span>
-              <input value={touchStandard} onChange={(e) => setTouchStandard(e.target.value)} style={styles.input} placeholder="e.g., ADST > Define and Ideate" />
+              <input value={touchStandard} onChange={(e) => { setTouchStandard(e.target.value); markUnsaved(); }} style={styles.input} placeholder="e.g., ADST > Define and Ideate" />
             </label>
             <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
               <span style={styles.label}>Evidence to collect</span>
-              <input value={touchEvidence} onChange={(e) => setTouchEvidence(e.target.value)} style={styles.input} placeholder="e.g., verbal articulation of…" />
+              <input value={touchEvidence} onChange={(e) => { setTouchEvidence(e.target.value); markUnsaved(); }} style={styles.input} placeholder="e.g., verbal articulation of…" />
             </label>
             <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
               <span style={styles.label}>Differentiation strategy (UDL / IEP)</span>
-              <input value={touchDiff} onChange={(e) => setTouchDiff(e.target.value)} style={styles.input} placeholder="e.g., chunking, sentence starters, extended time…" />
+              <input value={touchDiff} onChange={(e) => { setTouchDiff(e.target.value); markUnsaved(); }} style={styles.input} placeholder="e.g., chunking, sentence starters, extended time…" />
             </label>
           </div>
 
@@ -1231,6 +1250,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
               <input
                 value={String(p.time_text ?? '')}
                 onChange={(e) => {
+                  markUnsaved();
                   const next = ensureLessonOverrideForEdit();
                   setPhases(next.map((x, i) => (i === idx ? { ...x, time_text: e.target.value } : x)));
                 }}
@@ -1241,6 +1261,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
               <input
                 value={String(p.phase_text ?? '')}
                 onChange={(e) => {
+                  markUnsaved();
                   const next = ensureLessonOverrideForEdit();
                   setPhases(next.map((x, i) => (i === idx ? { ...x, phase_text: e.target.value } : x)));
                 }}
@@ -1251,6 +1272,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
               <textarea
                 value={String(p.activity_text ?? '')}
                 onChange={(e) => {
+                  markUnsaved();
                   const next = ensureLessonOverrideForEdit();
                   setPhases(next.map((x, i) => (i === idx ? { ...x, activity_text: e.target.value } : x)));
                 }}
@@ -1262,6 +1284,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
               <input
                 value={String(p.purpose_text ?? '')}
                 onChange={(e) => {
+                  markUnsaved();
                   const next = ensureLessonOverrideForEdit();
                   setPhases(next.map((x, i) => (i === idx ? { ...x, purpose_text: e.target.value } : x)));
                 }}
@@ -1271,6 +1294,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
               />
               <button
                 onClick={() => {
+                  markUnsaved();
                   const next = ensureLessonOverrideForEdit();
                   setPhases(next.filter((_, i) => i !== idx));
                 }}
@@ -1284,6 +1308,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
 
           <button
             onClick={() => {
+              markUnsaved();
               const next = ensureLessonOverrideForEdit();
               setPhases((p) => [...(lessonOverride ? p : next), { time_text: '', phase_text: '', activity_text: '', purpose_text: '', source_template_phase_id: null }]);
             }}
@@ -1606,6 +1631,7 @@ const RCS = {
   midBlue: '#2E75B6',
   lightBlue: '#D6E4F0',
   gold: '#C9A84C',
+  paleGold: '#FDF3DC',
   white: '#FFFFFF',
   textDark: '#1A1A1A',
 } as const;
@@ -1644,7 +1670,9 @@ const styles: Record<string, React.CSSProperties> = {
   textarea: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.deepNavy}`, background: RCS.white, color: RCS.textDark, fontFamily: 'inherit' },
 
   primaryBtn: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.gold}`, background: RCS.deepNavy, color: RCS.white, cursor: 'pointer', fontWeight: 900 },
+  primaryBtnDisabled: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.gold}`, background: 'rgba(31,78,121,0.35)', color: RCS.white, cursor: 'not-allowed', fontWeight: 900 },
   secondaryBtn: { padding: '8px 10px', borderRadius: 10, border: `1px solid ${RCS.gold}`, background: 'transparent', color: RCS.deepNavy, cursor: 'pointer', fontWeight: 900 },
+  unsavedPill: { padding: '4px 10px', borderRadius: 999, border: `1px solid ${RCS.gold}`, background: RCS.paleGold, color: RCS.deepNavy, fontWeight: 900, fontSize: 12 },
   dangerBtn: { padding: '8px 10px', borderRadius: 10, border: '1px solid #991b1b', background: '#FEE2E2', color: '#7F1D1D', cursor: 'pointer', fontWeight: 900, whiteSpace: 'nowrap' },
   errorBox: { marginTop: 10, padding: 10, borderRadius: 10, background: '#FEE2E2', border: '1px solid #991b1b', color: '#7F1D1D', whiteSpace: 'pre-wrap' },
 
