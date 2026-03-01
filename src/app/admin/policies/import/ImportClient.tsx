@@ -30,7 +30,8 @@ export default function ImportClient() {
       setOut(JSON.stringify(j, null, 2));
       setStatus('done');
     } catch (e: any) {
-      setOut(String(e?.message ?? e));
+      // If we already captured a JSON response body above, don't overwrite it.
+      setOut((prev) => prev || String(e?.message ?? e));
       setStatus('error');
     }
   }
