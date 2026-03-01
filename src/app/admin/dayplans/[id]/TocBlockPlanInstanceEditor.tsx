@@ -131,11 +131,16 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
   }, [blockId, classId]);
 
   // Allow parent to request a save (no pruning).
+  // Important: the parent may request a save before this editor finished loading.
+  // In that case, ensure the plan exists/loaded before saving.
   useEffect(() => {
     const type = `toc-save-request:${blockId}`;
     const handler = async (e: Event) => {
       const evt = e as CustomEvent<{ resolve?: (x: any) => void; reject?: (err: any) => void }>;
       try {
+        if (!tocBlockPlanId) {
+          await ensureAndLoad();
+        }
         await saveAll({ reload: false, silent: true });
         evt.detail?.resolve?.(true);
       } catch (err) {
@@ -146,7 +151,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
     window.addEventListener(type, handler as any);
     return () => window.removeEventListener(type, handler as any);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [blockId, tocBlockPlanId]);
+  }, [blockId, tocBlockPlanId, classId]);
 
   // Allow parent to request publish-time save.
   // NOTE: We no longer prune overrides here, because pruning based on in-session
