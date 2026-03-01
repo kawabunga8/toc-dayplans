@@ -7,6 +7,7 @@ export const runtime = 'nodejs';
 
 const BUCKET = 'core-competencies-data';
 const CANDIDATE_FILES = [
+  'BC_Core_Competencies_Framework.csv',
   'core_competencies.csv',
   'core-competencies.csv',
   'Core Competencies.csv',
