@@ -11,7 +11,7 @@ type DomainRow = { id: string; name: string; sort_order: number | null };
 
 type SubRow = { id: string; domain_id: string; name: string; sort_order: number | null };
 
-type FacetRow = { id: string; subcompetency_id: string; name: string; sort_order: number | null };
+type FacetRow = { id: string; subcompetency_id: string; name: string; sort_order: number | null; example_context?: string[] | null };
 
 export default function CoreCompetenciesClient() {
   const { isDemo } = useDemo();
@@ -105,15 +105,44 @@ export default function CoreCompetenciesClient() {
     setError(null);
     try {
       const supabase = getSupabaseClient();
-      const { data, error } = await supabase
+
+      // Back-compat: older DBs may not have example_context yet.
+      const full = await supabase
         .from('core_competency_facets')
-        .select('id,subcompetency_id,name,sort_order')
+        .select('id,subcompetency_id,name,sort_order,example_context')
         .eq('subcompetency_id', subId)
         .order('sort_order', { ascending: true, nullsFirst: false })
         .order('name', { ascending: true });
-      if (error) throw error;
-      const rows = (data ?? []) as any[];
-      setFacets(rows.map((r) => ({ id: r.id, subcompetency_id: r.subcompetency_id, name: r.name, sort_order: r.sort_order ?? null })));
+
+      let data: any[] | null = null;
+      if (!full.error) {
+        data = (full.data ?? []) as any[];
+      } else {
+        const msg = String((full.error as any)?.message ?? '');
+        const code = String((full.error as any)?.code ?? '');
+        const isMissingCol = code === '42703' || /column .* does not exist/i.test(msg) || /Could not find the '.*' column/i.test(msg);
+        if (!isMissingCol) throw full.error;
+
+        const fallback = await supabase
+          .from('core_competency_facets')
+          .select('id,subcompetency_id,name,sort_order')
+          .eq('subcompetency_id', subId)
+          .order('sort_order', { ascending: true, nullsFirst: false })
+          .order('name', { ascending: true });
+        if (fallback.error) throw fallback.error;
+        data = (fallback.data ?? []) as any[];
+      }
+
+      const rows = data ?? [];
+      setFacets(
+        rows.map((r) => ({
+          id: r.id,
+          subcompetency_id: r.subcompetency_id,
+          name: r.name,
+          sort_order: r.sort_order ?? null,
+          example_context: Array.isArray(r.example_context) ? r.example_context : null,
+        }))
+      );
       setStatus('idle');
     } catch (e: any) {
       setStatus('error');
@@ -203,12 +232,18 @@ export default function CoreCompetenciesClient() {
           {facets.length ? (
             facets.map((f) => {
               const label = selectedDomain && selectedSub ? `${selectedDomain.name} > ${selectedSub.name} > ${f.name}` : f.name;
+              const tags = (f.example_context ?? []).map((t) => String(t).trim()).filter(Boolean);
               const canPick = !!returnHref;
               return (
                 <div key={f.id} style={styles.facetRow}>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 800 }}>{f.name}</div>
                     {canPick ? <div style={{ fontSize: 12, opacity: 0.8 }}>{label}</div> : null}
+                    {tags.length ? (
+                      <div style={{ marginTop: 4, fontSize: 12, opacity: 0.9 }}>
+                        {tags.map((t) => `#${t}`).join(' ')}
+                      </div>
+                    ) : null}
                   </div>
                   {canPick ? (
                     <button
