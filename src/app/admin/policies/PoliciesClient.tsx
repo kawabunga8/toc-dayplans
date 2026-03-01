@@ -319,10 +319,34 @@ export default function PoliciesClient() {
 
             {selectedStandard ? (
               <div style={styles.callout}>
-                <div style={{ fontWeight: 900, color: RCS.deepNavy }}>
-                  {selectedStandard.subject} Grade {selectedGrade} — {selectedStandard.standard_title}
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontWeight: 900, color: RCS.deepNavy }}>
+                      {selectedStandard.subject} — {selectedStandard.standard_title}
+                    </div>
+                    <div style={{ fontSize: 12, opacity: 0.85 }}>Key: {selectedStandard.standard_key}</div>
+                  </div>
+
+                  {returnHref ? (
+                    <button
+                      type="button"
+                      style={styles.primaryBtn}
+                      onClick={() => {
+                        const label = `${selectedStandard.subject} > ${selectedStandard.standard_title}`;
+                        const qs = new URLSearchParams();
+                        qs.set('learning_standard_id', selectedStandard.id);
+                        qs.set('learning_standard_focus', label);
+                        window.location.href = `${returnHref}?${qs.toString()}`;
+                      }}
+                    >
+                      Use as focus
+                    </button>
+                  ) : null}
                 </div>
-                <div style={{ fontSize: 12, opacity: 0.85 }}>Key: {selectedStandard.standard_key}</div>
+
+                <div style={{ marginTop: 6, fontSize: 12, opacity: 0.85 }}>
+                  Rubric text below is shown for Grade {selectedGrade}.
+                </div>
               </div>
             ) : null}
 

@@ -33,6 +33,8 @@ export default function CoreCompetenciesClient() {
 
   const [facets, setFacets] = useState<FacetRow[]>([]);
 
+  const [picked, setPicked] = useState<string[]>([]);
+
   useEffect(() => {
     void loadDomains();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -127,7 +129,7 @@ export default function CoreCompetenciesClient() {
       <h1 style={styles.h1}>Core Competencies</h1>
       <p style={styles.muted}>Domain → Sub-competency → Facet. Import is replace-only (wipe all).</p>
 
-      <div style={{ marginTop: -8, marginBottom: 14, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+      <div style={{ marginTop: -8, marginBottom: 14, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
         <a href="/admin/policies/core-competencies/import" style={styles.secondaryBtn}>
           Import CSV (replace)…
         </a>
@@ -135,9 +137,27 @@ export default function CoreCompetenciesClient() {
           ← To Learning Standards
         </a>
         {returnHref ? (
-          <a href={returnHref} style={styles.secondaryBtn}>
-            ← Back
-          </a>
+          <>
+            <a href={returnHref} style={styles.secondaryBtn}>
+              ← Back
+            </a>
+            <button
+              type="button"
+              style={styles.primaryBtn}
+              onClick={() => {
+                const qs = new URLSearchParams();
+                qs.set('core_competency_focus', picked.join('; '));
+                window.location.href = `${returnHref}?${qs.toString()}`;
+              }}
+              disabled={picked.length === 0}
+              title={picked.length ? `Use ${picked.length} facet(s)` : 'Pick at least one facet'}
+            >
+              Use selected ({picked.length})
+            </button>
+            <button type="button" style={styles.secondaryBtn} onClick={() => setPicked([])} disabled={picked.length === 0}>
+              Clear
+            </button>
+          </>
         ) : null}
       </div>
 
@@ -185,18 +205,19 @@ export default function CoreCompetenciesClient() {
               const canPick = !!returnHref;
               return (
                 <div key={f.id} style={styles.facetRow}>
-                  <div style={{ flex: 1 }}>{f.name}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 800 }}>{f.name}</div>
+                    {canPick ? <div style={{ fontSize: 12, opacity: 0.8 }}>{label}</div> : null}
+                  </div>
                   {canPick ? (
                     <button
                       type="button"
-                      style={styles.pickBtn}
+                      style={picked.includes(label) ? styles.pickBtnActive : styles.pickBtn}
                       onClick={() => {
-                        const qs = new URLSearchParams();
-                        qs.set('core_competency_focus', label);
-                        window.location.href = `${returnHref}?${qs.toString()}`;
+                        setPicked((prev) => (prev.includes(label) ? prev.filter((x) => x !== label) : [...prev, label]));
                       }}
                     >
-                      Use
+                      {picked.includes(label) ? 'Selected' : 'Select'}
                     </button>
                   ) : null}
                 </div>
@@ -244,5 +265,7 @@ const styles: Record<string, React.CSSProperties> = {
   errorBox: { marginTop: 10, padding: 12, borderRadius: 10, border: '1px solid #991b1b', background: '#FEE2E2', color: '#7F1D1D' },
   callout: { marginTop: 12, padding: 12, borderRadius: 12, background: RCS.paleGold, border: `1px solid ${RCS.gold}` },
   facetRow: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.deepNavy}`, background: RCS.lightBlue, display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center' },
+  primaryBtn: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.gold}`, background: RCS.deepNavy, color: RCS.white, cursor: 'pointer', fontWeight: 900 },
   pickBtn: { padding: '8px 10px', borderRadius: 10, border: `1px solid ${RCS.gold}`, background: RCS.white, color: RCS.deepNavy, cursor: 'pointer', fontWeight: 900 },
+  pickBtnActive: { padding: '8px 10px', borderRadius: 10, border: `1px solid ${RCS.gold}`, background: RCS.deepNavy, color: RCS.white, cursor: 'pointer', fontWeight: 900 },
 };

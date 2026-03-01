@@ -15,6 +15,7 @@ type DayPlanRow = {
   friday_type: 'day1' | 'day2' | null;
   title: string;
   notes: string | null;
+  learning_standard_id?: string | null;
   learning_standard_focus: string | null;
   core_competency_focus: string | null;
   visibility: 'private' | 'link';
@@ -55,6 +56,7 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
 
   const [draftTitle, setDraftTitle] = useState('');
   const [draftNotes, setDraftNotes] = useState('');
+  const [draftLearningStandardId, setDraftLearningStandardId] = useState<string | null>(null);
   const [draftLearningStandardFocus, setDraftLearningStandardFocus] = useState('');
   const [draftCoreCompetencyFocus, setDraftCoreCompetencyFocus] = useState('');
 
@@ -132,6 +134,7 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
       setPlan(p);
       setDraftTitle(p.title ?? '');
       setDraftNotes(p.notes ?? '');
+      setDraftLearningStandardId((p as any).learning_standard_id ?? null);
       setDraftLearningStandardFocus((p as any).learning_standard_focus ?? '');
       setDraftCoreCompetencyFocus((p as any).core_competency_focus ?? '');
 
@@ -165,15 +168,23 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  // Allow Core Competency picker to return a selected value via query param.
+  // Allow pickers to return selected values via query params.
   useEffect(() => {
-    const v = (searchParams.get('core_competency_focus') ?? '').trim();
-    if (!v) return;
-    setDraftCoreCompetencyFocus(v);
+    const cc = (searchParams.get('core_competency_focus') ?? '').trim();
+    const lsId = (searchParams.get('learning_standard_id') ?? '').trim();
+    const lsFocus = (searchParams.get('learning_standard_focus') ?? '').trim();
 
-    // Clean the URL (remove the param) but keep date/friday_type context.
+    if (cc) setDraftCoreCompetencyFocus(cc);
+    if (lsId) setDraftLearningStandardId(lsId);
+    if (lsFocus) setDraftLearningStandardFocus(lsFocus);
+
+    if (!cc && !lsId && !lsFocus) return;
+
+    // Clean the URL (remove the params) but keep date/friday_type context.
     const qs = new URLSearchParams(searchParams.toString());
     qs.delete('core_competency_focus');
+    qs.delete('learning_standard_id');
+    qs.delete('learning_standard_focus');
     const suffix = qs.toString() ? `?${qs.toString()}` : '';
     router.replace(`/admin/dayplans/${id}${suffix}`);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -254,6 +265,7 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
         .update({
           title: draftTitle.trim(),
           notes: draftNotes.trim() ? draftNotes.trim() : null,
+          learning_standard_id: draftLearningStandardId,
           learning_standard_focus: draftLearningStandardFocus.trim() ? draftLearningStandardFocus.trim() : null,
           core_competency_focus: draftCoreCompetencyFocus.trim() ? draftCoreCompetencyFocus.trim() : null,
           updated_at: new Date().toISOString(),
@@ -636,10 +648,11 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
               <label style={{ display: 'grid', gap: 6 }}>
                 <span style={styles.label}>Core Competency Focus (optional)</span>
                 <div style={{ display: 'flex', gap: 10, alignItems: 'stretch', flexWrap: 'wrap' }}>
-                  <input
+                  <textarea
                     value={draftCoreCompetencyFocus}
                     onChange={(e) => setDraftCoreCompetencyFocus(e.target.value)}
-                    style={{ ...styles.input, flex: 1, minWidth: 260 }}
+                    rows={2}
+                    style={{ ...styles.textarea, flex: 1, minWidth: 260 }}
                     placeholder="(empty)"
                   />
                   <button
