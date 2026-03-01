@@ -180,11 +180,28 @@ export default function CoreCompetenciesClient() {
 
         <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>
           {facets.length ? (
-            facets.map((f) => (
-              <div key={f.id} style={styles.facetRow}>
-                {f.name}
-              </div>
-            ))
+            facets.map((f) => {
+              const label = selectedDomain && selectedSub ? `${selectedDomain.name} > ${selectedSub.name} > ${f.name}` : f.name;
+              const canPick = !!returnHref;
+              return (
+                <div key={f.id} style={styles.facetRow}>
+                  <div style={{ flex: 1 }}>{f.name}</div>
+                  {canPick ? (
+                    <button
+                      type="button"
+                      style={styles.pickBtn}
+                      onClick={() => {
+                        const qs = new URLSearchParams();
+                        qs.set('core_competency_focus', label);
+                        window.location.href = `${returnHref}?${qs.toString()}`;
+                      }}
+                    >
+                      Use
+                    </button>
+                  ) : null}
+                </div>
+              );
+            })
           ) : (
             <div style={{ opacity: 0.8 }}>—</div>
           )}
@@ -226,5 +243,6 @@ const styles: Record<string, React.CSSProperties> = {
   secondaryBtn: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.gold}`, background: 'transparent', color: RCS.deepNavy, cursor: 'pointer', fontWeight: 900, textDecoration: 'none', display: 'inline-block' },
   errorBox: { marginTop: 10, padding: 12, borderRadius: 10, border: '1px solid #991b1b', background: '#FEE2E2', color: '#7F1D1D' },
   callout: { marginTop: 12, padding: 12, borderRadius: 12, background: RCS.paleGold, border: `1px solid ${RCS.gold}` },
-  facetRow: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.deepNavy}`, background: RCS.lightBlue },
+  facetRow: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.deepNavy}`, background: RCS.lightBlue, display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center' },
+  pickBtn: { padding: '8px 10px', borderRadius: 10, border: `1px solid ${RCS.gold}`, background: RCS.white, color: RCS.deepNavy, cursor: 'pointer', fontWeight: 900 },
 };

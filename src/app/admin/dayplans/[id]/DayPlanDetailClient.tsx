@@ -165,6 +165,20 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  // Allow Core Competency picker to return a selected value via query param.
+  useEffect(() => {
+    const v = (searchParams.get('core_competency_focus') ?? '').trim();
+    if (!v) return;
+    setDraftCoreCompetencyFocus(v);
+
+    // Clean the URL (remove the param) but keep date/friday_type context.
+    const qs = new URLSearchParams(searchParams.toString());
+    qs.delete('core_competency_focus');
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    router.replace(`/admin/dayplans/${id}${suffix}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, id]);
+
   useEffect(() => {
     const auto = searchParams.get('auto') === '1';
     if (!auto) return;
@@ -633,7 +647,7 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                     onClick={() => {
                       const qs = new URLSearchParams();
                       qs.set('return', `/admin/dayplans/${id}`);
-                      window.location.href = `/admin/policies?${qs.toString()}`;
+                      window.location.href = `/admin/policies/core-competencies?${qs.toString()}`;
                     }}
                     style={styles.secondaryBtn}
                   >
