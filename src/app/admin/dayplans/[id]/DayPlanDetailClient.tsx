@@ -293,17 +293,33 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
 
     try {
       const supabase = getSupabaseClient();
-      const { error } = await supabase
-        .from('day_plans')
-        .update({
-          title: draftTitle.trim(),
-          notes: draftNotes.trim() ? draftNotes.trim() : null,
-          learning_standard_id: draftLearningStandardId,
-          learning_standard_focus: draftLearningStandardFocus.trim() ? draftLearningStandardFocus.trim() : null,
-          core_competency_focus: draftCoreCompetencyFocus.trim() ? draftCoreCompetencyFocus.trim() : null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', plan.id);
+
+      const fullPatch: any = {
+        title: draftTitle.trim(),
+        notes: draftNotes.trim() ? draftNotes.trim() : null,
+        learning_standard_id: draftLearningStandardId,
+        learning_standard_focus: draftLearningStandardFocus.trim() ? draftLearningStandardFocus.trim() : null,
+        core_competency_focus: draftCoreCompetencyFocus.trim() ? draftCoreCompetencyFocus.trim() : null,
+        updated_at: new Date().toISOString(),
+      };
+
+      let { error } = await supabase.from('day_plans').update(fullPatch).eq('id', plan.id);
+
+      // Back-compat: if some columns don't exist yet in Supabase, retry with a smaller patch.
+      const msg = String((error as any)?.message ?? '');
+      const code = String((error as any)?.code ?? '');
+      const isMissingCol = code === '42703' || /Could not find the '.*' column/i.test(msg) || /column .* does not exist/i.test(msg);
+
+      if (error && isMissingCol) {
+        const fallbackPatch: any = {
+          title: fullPatch.title,
+          notes: fullPatch.notes,
+          updated_at: fullPatch.updated_at,
+        };
+        const retry = await supabase.from('day_plans').update(fallbackPatch).eq('id', plan.id);
+        error = retry.error;
+      }
+
       if (error) throw error;
       await load();
       setStatus('idle');
