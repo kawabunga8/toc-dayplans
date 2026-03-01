@@ -87,12 +87,58 @@ export async function POST(req: Request) {
 
   // Replace: wipe existing taxonomy
   // Facets -> subcompetencies -> domains
-  const d1 = await supabase.from('core_competency_facets').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-  if (d1.error) return NextResponse.json({ error: d1.error.message, filename, code: d1.error.code, details: d1.error.details }, { status: 400 });
-  const d2 = await supabase.from('core_competency_subcompetencies').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-  if (d2.error) return NextResponse.json({ error: d2.error.message, filename, code: d2.error.code, details: d2.error.details }, { status: 400 });
-  const d3 = await supabase.from('core_competency_domains').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-  if (d3.error) return NextResponse.json({ error: d3.error.message, filename, code: d3.error.code, details: d3.error.details }, { status: 400 });
+  const d1 = await supabase
+    .from('core_competency_facets')
+    .delete()
+    // avoid PostgREST requiring a filter by using a harmless always-true UUID predicate
+    .neq('id', '00000000-0000-0000-0000-000000000000');
+  if (d1.error)
+    return NextResponse.json(
+      {
+        error: d1.error.message,
+        step: 'delete_facets',
+        filename,
+        code: d1.error.code,
+        details: d1.error.details,
+        hint: (d1.error as any).hint ?? null,
+        note: 'If this says relation does not exist, run supabase/schema_core_competencies.sql in Supabase SQL Editor first.',
+      },
+      { status: 400 }
+    );
+
+  const d2 = await supabase
+    .from('core_competency_subcompetencies')
+    .delete()
+    .neq('id', '00000000-0000-0000-0000-000000000000');
+  if (d2.error)
+    return NextResponse.json(
+      {
+        error: d2.error.message,
+        step: 'delete_subcompetencies',
+        filename,
+        code: d2.error.code,
+        details: d2.error.details,
+        hint: (d2.error as any).hint ?? null,
+      },
+      { status: 400 }
+    );
+
+  const d3 = await supabase
+    .from('core_competency_domains')
+    .delete()
+    .neq('id', '00000000-0000-0000-0000-000000000000');
+  if (d3.error)
+    return NextResponse.json(
+      {
+        error: d3.error.message,
+        step: 'delete_domains',
+        filename,
+        code: d3.error.code,
+        details: d3.error.details,
+        hint: (d3.error as any).hint ?? null,
+      },
+      { status: 400 }
+    );
 
   // Insert domains
   const domains = Array.from(new Set(inRows.map((r) => r.domain)));
@@ -100,7 +146,11 @@ export async function POST(req: Request) {
     .from('core_competency_domains')
     .insert(domains.map((name, idx) => ({ name, sort_order: idx + 1, updated_at: new Date().toISOString() })))
     .select('id,name');
-  if (domErr) return NextResponse.json({ error: domErr.message, filename, code: domErr.code, details: domErr.details }, { status: 400 });
+  if (domErr)
+    return NextResponse.json(
+      { error: domErr.message, step: 'insert_domains', filename, code: domErr.code, details: domErr.details, hint: (domErr as any).hint ?? null },
+      { status: 400 }
+    );
 
   const domIdByName = new Map<string, string>();
   for (const r of domRows ?? []) domIdByName.set(String((r as any).name), String((r as any).id));
@@ -126,7 +176,11 @@ export async function POST(req: Request) {
       }))
     )
     .select('id,domain_id,name');
-  if (subErr) return NextResponse.json({ error: subErr.message, filename, code: subErr.code, details: subErr.details }, { status: 400 });
+  if (subErr)
+    return NextResponse.json(
+      { error: subErr.message, step: 'insert_subcompetencies', filename, code: subErr.code, details: subErr.details, hint: (subErr as any).hint ?? null },
+      { status: 400 }
+    );
 
   const subIdByKey = new Map<string, string>();
   for (const r of subRows ?? []) {
@@ -147,7 +201,11 @@ export async function POST(req: Request) {
   }).filter((r) => !!r.subcompetency_id);
 
   const { error: facErr } = await supabase.from('core_competency_facets').insert(facetRows);
-  if (facErr) return NextResponse.json({ error: facErr.message, filename, code: facErr.code, details: facErr.details }, { status: 400 });
+  if (facErr)
+    return NextResponse.json(
+      { error: facErr.message, step: 'insert_facets', filename, code: facErr.code, details: facErr.details, hint: (facErr as any).hint ?? null },
+      { status: 400 }
+    );
 
   return NextResponse.json({ ok: true, filename, counts: { domains: domains.length, subcompetencies: subsKeyed.length, facets: facetRows.length } });
 }
