@@ -1085,7 +1085,13 @@ begin
 
     -- Child tables: use instance if it exists, otherwise template.
     select exists(select 1 from toc_opening_routine_steps where toc_block_plan_id = tbp.id) into has_or;
-    select exists(select 1 from toc_lesson_flow_phases where toc_block_plan_id = tbp.id) into has_lf;
+
+    -- Lesson flow can be overridden via JSON payload (new architecture) OR via legacy toc_lesson_flow_phases rows.
+    if tbp.override_payload is not null and jsonb_typeof(tbp.override_payload->'lesson_flow_phases') = 'array' then
+      has_lf := true;
+    else
+      select exists(select 1 from toc_lesson_flow_phases where toc_block_plan_id = tbp.id) into has_lf;
+    end if;
     select exists(select 1 from toc_activity_options where toc_block_plan_id = tbp.id) into has_opt;
     select exists(select 1 from toc_what_to_do_if_items where toc_block_plan_id = tbp.id) into has_wi;
     select exists(select 1 from toc_overview_rows where toc_block_plan_id = tbp.id) into has_overview;
@@ -1105,21 +1111,25 @@ begin
     end if;
 
     if has_lf then
-      select coalesce(
-        jsonb_agg(
-          jsonb_build_object(
-            'time_text', p2.time_text,
-            'phase_text', p2.phase_text,
-            'activity_text', p2.activity_text,
-            'purpose_text', p2.purpose_text
-          )
-          order by p2.sort_order asc
-        ),
-        '[]'::jsonb
-      )
-      into toc_lesson_flow
-      from toc_lesson_flow_phases p2
-      where p2.toc_block_plan_id = tbp.id;
+      if tbp.override_payload is not null and jsonb_typeof(tbp.override_payload->'lesson_flow_phases') = 'array' then
+        toc_lesson_flow := tbp.override_payload->'lesson_flow_phases';
+      else
+        select coalesce(
+          jsonb_agg(
+            jsonb_build_object(
+              'time_text', p2.time_text,
+              'phase_text', p2.phase_text,
+              'activity_text', p2.activity_text,
+              'purpose_text', p2.purpose_text
+            )
+            order by p2.sort_order asc
+          ),
+          '[]'::jsonb
+        )
+        into toc_lesson_flow
+        from toc_lesson_flow_phases p2
+        where p2.toc_block_plan_id = tbp.id;
+      end if;
     else
       select coalesce(
         jsonb_agg(
