@@ -138,9 +138,14 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
     const handler = async (e: Event) => {
       const evt = e as CustomEvent<{ resolve?: (x: any) => void; reject?: (err: any) => void }>;
       try {
+        // Give React a moment to flush any last onChange() state updates
+        // before we read state for saving (important on mobile).
+        await new Promise((r) => setTimeout(r, 50));
+
         if (!tocBlockPlanId) {
           await ensureAndLoad();
         }
+
         await saveAll({ reload: false, silent: true });
         evt.detail?.resolve?.(true);
       } catch (err) {
@@ -161,6 +166,9 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
     const handler = async (e: Event) => {
       const evt = e as CustomEvent<{ resolve?: (x: any) => void; reject?: (err: any) => void }>;
       try {
+        // Give React a moment to flush any last onChange() state updates
+        await new Promise((r) => setTimeout(r, 50));
+
         await saveAll({ reload: false, silent: true });
         evt.detail?.resolve?.(true);
       } catch (err) {
