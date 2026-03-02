@@ -596,26 +596,26 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
     const payloadLfArr = Array.isArray(payloadLf) ? payloadLf : null;
 
     if (payloadLfArr && payloadLfArr.length) {
-      setPhases(
-        payloadLfArr.map((r: any) => ({
-          time_text: String(r?.time_text ?? ''),
-          phase_text: String(r?.phase_text ?? ''),
-          activity_text: String(r?.activity_text ?? ''),
-          purpose_text: String(r?.purpose_text ?? ''),
-          source_template_phase_id: null,
-        }))
-      );
+      const nextPhases: Phase[] = payloadLfArr.map((r: any) => ({
+        time_text: String(r?.time_text ?? ''),
+        phase_text: String(r?.phase_text ?? ''),
+        activity_text: String(r?.activity_text ?? ''),
+        purpose_text: String(r?.purpose_text ?? ''),
+        source_template_phase_id: null,
+      }));
+      phasesRef.current = nextPhases;
+      setPhases(nextPhases);
       setLessonOverride(true);
     } else {
-      setPhases(
-        (lf2.data ?? []).map((r: any) => ({
-          time_text: r.time_text,
-          phase_text: r.phase_text,
-          activity_text: r.activity_text,
-          purpose_text: r.purpose_text ?? '',
-          source_template_phase_id: r.source_template_phase_id ?? null,
-        }))
-      );
+      const nextPhases: Phase[] = (lf2.data ?? []).map((r: any) => ({
+        time_text: r.time_text,
+        phase_text: r.phase_text,
+        activity_text: r.activity_text,
+        purpose_text: r.purpose_text ?? '',
+        source_template_phase_id: r.source_template_phase_id ?? null,
+      }));
+      phasesRef.current = nextPhases;
+      setPhases(nextPhases);
       setLessonOverride((lf2.data ?? []).length > 0);
     }
 
@@ -859,6 +859,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
 
     setLessonOverride(true);
     setLessonTouched(true);
+    phasesRef.current = seeded;
     setPhases(seeded);
     return seeded;
   }
@@ -911,8 +912,8 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
 
         // If the user touched the lesson flow inputs, prefer the in-memory phases even if
         // lessonOverride state hasn't updated yet (React state timing on mobile).
-        if (phases.length && (lessonOverride || lessonTouched)) {
-          effective = phases;
+        if (phasesRef.current.length && (lessonOverride || lessonTouched)) {
+          effective = phasesRef.current;
         } else if (!lessonOverride && (tplLessonFlow ?? []).length) {
           effective = (tplLessonFlow ?? []).map((r: any) => ({
             time_text: String(r.time_text ?? ''),
