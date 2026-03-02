@@ -978,7 +978,7 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                     type="button"
                     onClick={async () => {
                       try {
-                        const res = await fetch(`/api/public/plan?id=${encodeURIComponent(id)}`);
+                        const res = await fetch(`/api/admin/debug/public-plan?id=${encodeURIComponent(id)}`);
                         const j = await res.json();
                         alert(JSON.stringify(j, null, 2));
                       } catch (e: any) {
