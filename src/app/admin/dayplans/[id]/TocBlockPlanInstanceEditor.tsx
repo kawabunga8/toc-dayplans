@@ -937,8 +937,10 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
 
             const q = (field: string) => {
               if (typeof document === 'undefined') return null;
-              // Prefer idx-based selector (most robust), then fallback to field-only NodeList index,
-              // then fallback to client_id selector.
+              // Prefer deterministic id-based lookup (most robust), then idx selector, then fallbacks.
+              const byId = document.getElementById(`lessonflow-${field}-${pIdx}`) as any;
+              if (byId && typeof byId.value !== 'undefined') return byId;
+
               const byIdx = document.querySelector<HTMLInputElement | HTMLTextAreaElement>(
                 `[data-phase-idx="${pIdx}"][data-phase-field="${field}"]`
               );
@@ -1385,6 +1387,8 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                 ⋮⋮
               </div>
               <input
+                id={`lessonflow-time-${idx}`}
+                name={`lessonflow-time-${idx}`}
                 data-phase-idx={idx}
                 data-phase-client-id={p.client_id}
                 data-phase-field="time"
@@ -1403,6 +1407,8 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                 placeholder="Time"
               />
               <input
+                id={`lessonflow-phase-${idx}`}
+                name={`lessonflow-phase-${idx}`}
                 data-phase-idx={idx}
                 data-phase-client-id={p.client_id}
                 data-phase-field="phase"
@@ -1421,6 +1427,8 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                 placeholder="Phase"
               />
               <textarea
+                id={`lessonflow-activity-${idx}`}
+                name={`lessonflow-activity-${idx}`}
                 data-phase-idx={idx}
                 data-phase-client-id={p.client_id}
                 data-phase-field="activity"
@@ -1440,6 +1448,8 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                 rows={2}
               />
               <input
+                id={`lessonflow-purpose-${idx}`}
+                name={`lessonflow-purpose-${idx}`}
                 data-phase-idx={idx}
                 data-phase-client-id={p.client_id}
                 data-phase-field="purpose"
