@@ -36,6 +36,9 @@ alter table day_plans add column if not exists visibility text not null default 
 alter table day_plans add column if not exists share_token_hash text;
 alter table day_plans add column if not exists share_expires_at timestamptz;
 alter table day_plans add column if not exists trashed_at timestamptz;
+-- Published snapshot for TOC (resolved at publish time; /toc reads only this)
+alter table day_plans add column if not exists published_payload jsonb;
+alter table day_plans add column if not exists published_at timestamptz;
 alter table day_plans add column if not exists learning_standard_focus text;
 alter table day_plans add column if not exists core_competency_focus text;
 alter table day_plans add column if not exists tags text[];
@@ -904,7 +907,7 @@ alter table learning_standard_rubrics enable row level security;
 -- SECURITY DEFINER so anon callers can access without opening table RLS.
 -- Public dayplan payload (by day_plans.id)
 -- Includes TOC content (template merged with per-day overrides).
-create or replace function get_public_day_plan_by_id(plan_id uuid)
+create or replace function resolve_day_plan_payload(plan_id uuid)
 returns jsonb
 language plpgsql
 security definer
@@ -943,6 +946,10 @@ declare
   eff_attendance_note text;
 
 begin
+  if not is_staff() then
+    return null;
+  end if;
+
   if plan_id is null then
     return null;
   end if;
@@ -950,7 +957,6 @@ begin
   select * into p
   from day_plans
   where id = plan_id
-    and visibility = 'link'
     and trashed_at is null
   limit 1;
 
@@ -1315,6 +1321,40 @@ begin
 end;
 $$;
 
+revoke all on function resolve_day_plan_payload(uuid) from public;
+grant execute on function resolve_day_plan_payload(uuid) to authenticated;
+
+-- Public dayplan payload (by day_plans.id)
+-- Reads the published snapshot only (no template access).
+create or replace function get_public_day_plan_by_id(plan_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  p record;
+begin
+  if plan_id is null then
+    return null;
+  end if;
+
+  select id, published_payload
+  into p
+  from day_plans
+  where id = plan_id
+    and visibility = 'link'
+    and trashed_at is null
+    and published_payload is not null
+  limit 1;
+
+  if not found then
+    return null;
+  end if;
+
+  return p.published_payload;
+end;
+$$;
 revoke all on function get_public_day_plan_by_id(uuid) from public;
 grant execute on function get_public_day_plan_by_id(uuid) to anon;
 
@@ -1378,6 +1418,7 @@ begin
   from day_plans p
   where p.visibility = 'link'
     and p.trashed_at is null
+    and p.published_payload is not null
     and p.plan_date between ws and we;
 
   return plans;
