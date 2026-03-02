@@ -83,6 +83,12 @@ export async function GET(req: Request) {
 
     return NextResponse.json({
       ok: true,
+      debug_build: {
+        vercel_git_commit_sha: process.env.VERCEL_GIT_COMMIT_SHA ?? null,
+        vercel_git_commit_message: process.env.VERCEL_GIT_COMMIT_MESSAGE ?? null,
+        vercel_url: process.env.VERCEL_URL ?? null,
+        node_env: process.env.NODE_ENV ?? null,
+      },
       plan: planRow,
       blocks,
       toc_block_plans: tbps,
