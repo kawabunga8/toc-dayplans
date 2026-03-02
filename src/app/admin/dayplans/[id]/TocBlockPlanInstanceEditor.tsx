@@ -936,14 +936,21 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
 
             const q = (field: string) => {
               if (typeof document === 'undefined') return null;
-              // Prefer idx-based selector (most robust).
-              return (
-                document.querySelector<HTMLInputElement | HTMLTextAreaElement>(
-                  `[data-phase-idx="${pIdx}"][data-phase-field="${field}"]`
-                ) ??
-                document.querySelector<HTMLInputElement | HTMLTextAreaElement>(
-                  `[data-phase-client-id="${p.client_id}"][data-phase-field="${field}"]`
-                )
+              // Prefer idx-based selector (most robust), then fallback to field-only NodeList index,
+              // then fallback to client_id selector.
+              const byIdx = document.querySelector<HTMLInputElement | HTMLTextAreaElement>(
+                `[data-phase-idx="${pIdx}"][data-phase-field="${field}"]`
+              );
+              if (byIdx) return byIdx;
+
+              const all = Array.from(
+                document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(`[data-phase-field="${field}"]`)
+              );
+              const byList = all[pIdx] ?? null;
+              if (byList) return byList;
+
+              return document.querySelector<HTMLInputElement | HTMLTextAreaElement>(
+                `[data-phase-client-id="${p.client_id}"][data-phase-field="${field}"]`
               );
             };
 
