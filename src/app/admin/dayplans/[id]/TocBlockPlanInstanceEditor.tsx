@@ -933,12 +933,25 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         const fromDom = (): Phase[] =>
           phases.map((p) => {
             const r = phaseFieldRefs.current[p.client_id] ?? {};
+
+            const q = (field: string) => {
+              if (typeof document === 'undefined') return null;
+              return document.querySelector<HTMLInputElement | HTMLTextAreaElement>(
+                `[data-phase-client-id="${p.client_id}"][data-phase-field="${field}"]`
+              );
+            };
+
+            const timeEl = q('time') ?? r.time;
+            const phaseEl = q('phase') ?? r.phase;
+            const actEl = q('activity') ?? r.activity;
+            const purpEl = q('purpose') ?? r.purpose;
+
             return {
               ...p,
-              time_text: (r.time?.value ?? p.time_text ?? '').toString(),
-              phase_text: (r.phase?.value ?? p.phase_text ?? '').toString(),
-              activity_text: (r.activity?.value ?? p.activity_text ?? '').toString(),
-              purpose_text: (r.purpose?.value ?? p.purpose_text ?? '').toString(),
+              time_text: (timeEl?.value ?? p.time_text ?? '').toString(),
+              phase_text: (phaseEl?.value ?? p.phase_text ?? '').toString(),
+              activity_text: (actEl?.value ?? p.activity_text ?? '').toString(),
+              purpose_text: (purpEl?.value ?? p.purpose_text ?? '').toString(),
             };
           });
 
@@ -1345,6 +1358,8 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                 ⋮⋮
               </div>
               <input
+                data-phase-client-id={p.client_id}
+                data-phase-field="time"
                 defaultValue={String(p.time_text ?? '')}
                 ref={(el) => {
                   const rec = phaseFieldRefs.current[p.client_id] ?? {};
@@ -1360,6 +1375,8 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                 placeholder="Time"
               />
               <input
+                data-phase-client-id={p.client_id}
+                data-phase-field="phase"
                 defaultValue={String(p.phase_text ?? '')}
                 ref={(el) => {
                   const rec = phaseFieldRefs.current[p.client_id] ?? {};
@@ -1375,6 +1392,8 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                 placeholder="Phase"
               />
               <textarea
+                data-phase-client-id={p.client_id}
+                data-phase-field="activity"
                 defaultValue={String(p.activity_text ?? '')}
                 ref={(el) => {
                   const rec = phaseFieldRefs.current[p.client_id] ?? {};
@@ -1391,6 +1410,8 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                 rows={2}
               />
               <input
+                data-phase-client-id={p.client_id}
+                data-phase-field="purpose"
                 defaultValue={String(p.purpose_text ?? '')}
                 ref={(el) => {
                   const rec = phaseFieldRefs.current[p.client_id] ?? {};
