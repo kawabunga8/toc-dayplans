@@ -908,7 +908,9 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         // If template preview isn't loaded yet (mobile timing), fetch it directly.
         let effective: Phase[] = [];
 
-        if (lessonOverride && phases.length) {
+        // If the user touched the lesson flow inputs, prefer the in-memory phases even if
+        // lessonOverride state hasn't updated yet (React state timing on mobile).
+        if (phases.length && (lessonOverride || lessonTouched)) {
           effective = phases;
         } else if (!lessonOverride && (tplLessonFlow ?? []).length) {
           effective = (tplLessonFlow ?? []).map((r: any) => ({
