@@ -1087,7 +1087,11 @@ begin
     select exists(select 1 from toc_opening_routine_steps where toc_block_plan_id = tbp.id) into has_or;
 
     -- Lesson flow can be overridden via JSON payload (new architecture) OR via legacy toc_lesson_flow_phases rows.
-    if tbp.override_payload is not null and jsonb_typeof(tbp.override_payload->'lesson_flow_phases') = 'array' then
+    -- Treat an empty JSON array as "no override" so we don't hide the template by accident.
+    if tbp.override_payload is not null
+      and jsonb_typeof(tbp.override_payload->'lesson_flow_phases') = 'array'
+      and jsonb_array_length(tbp.override_payload->'lesson_flow_phases') > 0
+    then
       has_lf := true;
     else
       select exists(select 1 from toc_lesson_flow_phases where toc_block_plan_id = tbp.id) into has_lf;
@@ -1111,7 +1115,10 @@ begin
     end if;
 
     if has_lf then
-      if tbp.override_payload is not null and jsonb_typeof(tbp.override_payload->'lesson_flow_phases') = 'array' then
+      if tbp.override_payload is not null
+        and jsonb_typeof(tbp.override_payload->'lesson_flow_phases') = 'array'
+        and jsonb_array_length(tbp.override_payload->'lesson_flow_phases') > 0
+      then
         toc_lesson_flow := tbp.override_payload->'lesson_flow_phases';
       else
         select coalesce(

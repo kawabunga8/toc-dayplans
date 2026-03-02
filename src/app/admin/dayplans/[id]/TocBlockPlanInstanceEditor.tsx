@@ -904,15 +904,35 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
       // We do this whenever the plan mode is lesson_flow so that /p never silently falls
       // back to the template due to missing rows.
       if (planMode === 'lesson_flow') {
-        const effective: Phase[] = lessonOverride
-          ? phases
-          : (tplLessonFlow ?? []).map((r: any) => ({
-              time_text: String(r.time_text ?? ''),
-              phase_text: String(r.phase_text ?? ''),
-              activity_text: String(r.activity_text ?? ''),
-              purpose_text: String(r.purpose_text ?? ''),
-              source_template_phase_id: null,
-            }));
+        // Use the day override rows when present; otherwise use template preview.
+        // If template preview isn't loaded yet (mobile timing), fetch it directly.
+        let effective: Phase[] = [];
+
+        if (lessonOverride && phases.length) {
+          effective = phases;
+        } else if (!lessonOverride && (tplLessonFlow ?? []).length) {
+          effective = (tplLessonFlow ?? []).map((r: any) => ({
+            time_text: String(r.time_text ?? ''),
+            phase_text: String(r.phase_text ?? ''),
+            activity_text: String(r.activity_text ?? ''),
+            purpose_text: String(r.purpose_text ?? ''),
+            source_template_phase_id: null,
+          }));
+        } else if (templateId) {
+          const { data: lfRes, error: lfErr } = await supabase
+            .from('class_lesson_flow_phases')
+            .select('sort_order,time_text,phase_text,activity_text,purpose_text')
+            .eq('template_id', templateId)
+            .order('sort_order', { ascending: true });
+          if (lfErr) throw lfErr;
+          effective = (lfRes ?? []).map((r: any) => ({
+            time_text: String(r.time_text ?? ''),
+            phase_text: String(r.phase_text ?? ''),
+            activity_text: String(r.activity_text ?? ''),
+            purpose_text: String(r.purpose_text ?? ''),
+            source_template_phase_id: null,
+          }));
+        }
 
         const nextPayload = {
           ...(overridePayload && typeof overridePayload === 'object' ? overridePayload : {}),
