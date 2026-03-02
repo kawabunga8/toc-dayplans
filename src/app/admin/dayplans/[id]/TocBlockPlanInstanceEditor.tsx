@@ -97,6 +97,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
   const [openingTouched, setOpeningTouched] = useState(false);
 
   const [phases, setPhases] = useState<Phase[]>([]);
+  const phasesRef = useRef<Phase[]>([]);
   const [lessonOverride, setLessonOverride] = useState(false);
   const [lessonTouched, setLessonTouched] = useState(false);
   const [dragPhaseIdx, setDragPhaseIdx] = useState<number | null>(null);
@@ -1302,7 +1303,9 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                   setLessonTouched(true);
                   markUnsaved();
                   const next = ensureLessonOverrideForEdit();
-                  setPhases(next.map((x, i) => (i === idx ? { ...x, time_text: e.target.value } : x)));
+                  const nextPhases = next.map((x, i) => (i === idx ? { ...x, time_text: e.target.value } : x));
+                  phasesRef.current = nextPhases;
+                  setPhases(nextPhases);
                 }}
                 style={styles.input}
                 disabled={isDemo}
@@ -1314,7 +1317,9 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                   setLessonTouched(true);
                   markUnsaved();
                   const next = ensureLessonOverrideForEdit();
-                  setPhases(next.map((x, i) => (i === idx ? { ...x, phase_text: e.target.value } : x)));
+                  const nextPhases = next.map((x, i) => (i === idx ? { ...x, phase_text: e.target.value } : x));
+                  phasesRef.current = nextPhases;
+                  setPhases(nextPhases);
                 }}
                 style={styles.input}
                 disabled={isDemo}
@@ -1326,7 +1331,9 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                   setLessonTouched(true);
                   markUnsaved();
                   const next = ensureLessonOverrideForEdit();
-                  setPhases(next.map((x, i) => (i === idx ? { ...x, activity_text: e.target.value } : x)));
+                  const nextPhases = next.map((x, i) => (i === idx ? { ...x, activity_text: e.target.value } : x));
+                  phasesRef.current = nextPhases;
+                  setPhases(nextPhases);
                 }}
                 style={{ ...styles.textarea, resize: 'vertical' }}
                 disabled={isDemo}
@@ -1339,7 +1346,9 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                   setLessonTouched(true);
                   markUnsaved();
                   const next = ensureLessonOverrideForEdit();
-                  setPhases(next.map((x, i) => (i === idx ? { ...x, purpose_text: e.target.value } : x)));
+                  const nextPhases = next.map((x, i) => (i === idx ? { ...x, purpose_text: e.target.value } : x));
+                  phasesRef.current = nextPhases;
+                  setPhases(nextPhases);
                 }}
                 style={styles.input}
                 disabled={isDemo}
@@ -1349,7 +1358,9 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                 onClick={() => {
                   markUnsaved();
                   const next = ensureLessonOverrideForEdit();
-                  setPhases(next.filter((_, i) => i !== idx));
+                  const nextPhases = next.filter((_, i) => i !== idx);
+                  phasesRef.current = nextPhases;
+                  setPhases(nextPhases);
                 }}
                 style={styles.dangerBtn}
                 disabled={isDemo}
@@ -1363,7 +1374,9 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
             onClick={() => {
               markUnsaved();
               const next = ensureLessonOverrideForEdit();
-              setPhases((p) => [...(lessonOverride ? p : next), { time_text: '', phase_text: '', activity_text: '', purpose_text: '', source_template_phase_id: null }]);
+              const nextPhases = [...(lessonOverride ? phasesRef.current : next), { time_text: '', phase_text: '', activity_text: '', purpose_text: '', source_template_phase_id: null }];
+              phasesRef.current = nextPhases;
+              setPhases(nextPhases);
             }}
             style={styles.secondaryBtn}
             disabled={isDemo}
