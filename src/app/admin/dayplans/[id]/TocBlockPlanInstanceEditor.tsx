@@ -876,6 +876,17 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
       setError(null);
     }
 
+    // Ensure the latest keystroke is committed before reading state/refs.
+    // Some browsers (notably iOS Safari) can delay textarea change events until blur.
+    try {
+      if (typeof window !== 'undefined') {
+        (document.activeElement as any)?.blur?.();
+        await new Promise((r) => setTimeout(r, 0));
+      }
+    } catch {
+      // ignore
+    }
+
     try {
       const supabase = getSupabaseClient();
 
