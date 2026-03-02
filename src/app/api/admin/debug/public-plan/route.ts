@@ -81,14 +81,40 @@ export async function GET(req: Request) {
     const { data: publicPlan, error: pubErr } = await supabase.rpc('get_public_day_plan_by_id', { plan_id: id });
     if (pubErr) throw pubErr;
 
+    const debug_build = {
+      vercel_git_commit_sha: process.env.VERCEL_GIT_COMMIT_SHA ?? null,
+      vercel_git_commit_message: process.env.VERCEL_GIT_COMMIT_MESSAGE ?? null,
+      vercel_url: process.env.VERCEL_URL ?? null,
+      node_env: process.env.NODE_ENV ?? null,
+    };
+
+    const only = (searchParams.get('only') ?? '').trim();
+
+    if (only === 'lesson_flow') {
+      const tbp0 = (tbps ?? [])[0] ?? null;
+      return NextResponse.json({
+        ok: true,
+        debug_build,
+        plan: planRow,
+        toc_block_plan: tbp0
+          ? {
+              id: (tbp0 as any).id,
+              day_plan_block_id: (tbp0 as any).day_plan_block_id,
+              template_id: (tbp0 as any).template_id,
+              plan_mode: (tbp0 as any).plan_mode,
+              updated_at: (tbp0 as any).updated_at,
+            }
+          : null,
+        override_lesson_flow_phases: Array.isArray((tbp0 as any)?.override_payload?.lesson_flow_phases)
+          ? (tbp0 as any).override_payload.lesson_flow_phases
+          : null,
+        public_lesson_flow_phases: (publicPlan as any)?.toc?.lesson_flow_phases ?? null,
+      });
+    }
+
     return NextResponse.json({
       ok: true,
-      debug_build: {
-        vercel_git_commit_sha: process.env.VERCEL_GIT_COMMIT_SHA ?? null,
-        vercel_git_commit_message: process.env.VERCEL_GIT_COMMIT_MESSAGE ?? null,
-        vercel_url: process.env.VERCEL_URL ?? null,
-        node_env: process.env.NODE_ENV ?? null,
-      },
+      debug_build,
       plan: planRow,
       blocks,
       toc_block_plans: tbps,

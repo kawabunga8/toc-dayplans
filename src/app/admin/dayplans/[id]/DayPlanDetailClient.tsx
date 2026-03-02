@@ -989,6 +989,21 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                   >
                     Debug public JSON
                   </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const res = await fetch(`/api/admin/debug/public-plan?id=${encodeURIComponent(id)}&only=lesson_flow`);
+                        const j = await res.json();
+                        alert(JSON.stringify(j, null, 2));
+                      } catch (e: any) {
+                        alert(e?.message ?? 'Debug failed');
+                      }
+                    }}
+                    style={styles.secondaryBtn}
+                  >
+                    Debug lesson flow
+                  </button>
                   <button onClick={recalcTimesFromDefaults} disabled={status !== 'idle'} style={styles.secondaryBtn}>
                     Fix times from defaults
                   </button>
