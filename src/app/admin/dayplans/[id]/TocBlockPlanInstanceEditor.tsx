@@ -72,6 +72,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
   const [templateId, setTemplateId] = useState<string | null>(null);
 
   const [planMode, setPlanMode] = useState<PlanMode>('lesson_flow');
+  const [overridePayload, setOverridePayload] = useState<any>(null);
   const [noteTOC, setNoteTOC] = useState('');
   const [templateNoteTOC, setTemplateNoteTOC] = useState('');
 
@@ -442,7 +443,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
   async function loadAll(supabase: ReturnType<typeof getSupabaseClient>, tocPlanId: string, tplId: string | null) {
     const { data: plan, error: pErr } = await supabase
       .from('toc_block_plans')
-      .select('template_id,plan_mode,override_note_to_toc,override_assessment_touch_point')
+      .select('template_id,plan_mode,override_note_to_toc,override_assessment_touch_point,override_payload')
       .eq('id', tocPlanId)
       .single();
     if (pErr) throw pErr;
@@ -469,6 +470,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
 
     setTemplateId(effectiveTplId);
     setPlanMode(plan.plan_mode as PlanMode);
+    setOverridePayload((plan as any).override_payload ?? null);
     setUnsaved(false);
 
     let tplNote = '';
@@ -589,16 +591,32 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
     setOpeningSteps((or2.data ?? []).map((r: any) => ({ step_text: r.step_text, source_template_step_id: r.source_template_step_id ?? null })));
     setOpeningOverride((or2.data ?? []).length > 0);
 
-    setPhases(
-      (lf2.data ?? []).map((r: any) => ({
-        time_text: r.time_text,
-        phase_text: r.phase_text,
-        activity_text: r.activity_text,
-        purpose_text: r.purpose_text ?? '',
-        source_template_phase_id: r.source_template_phase_id ?? null,
-      }))
-    );
-    setLessonOverride((lf2.data ?? []).length > 0);
+    const payloadLf = (plan as any)?.override_payload?.lesson_flow_phases;
+    const payloadLfArr = Array.isArray(payloadLf) ? payloadLf : null;
+
+    if (payloadLfArr && payloadLfArr.length) {
+      setPhases(
+        payloadLfArr.map((r: any) => ({
+          time_text: String(r?.time_text ?? ''),
+          phase_text: String(r?.phase_text ?? ''),
+          activity_text: String(r?.activity_text ?? ''),
+          purpose_text: String(r?.purpose_text ?? ''),
+          source_template_phase_id: null,
+        }))
+      );
+      setLessonOverride(true);
+    } else {
+      setPhases(
+        (lf2.data ?? []).map((r: any) => ({
+          time_text: r.time_text,
+          phase_text: r.phase_text,
+          activity_text: r.activity_text,
+          purpose_text: r.purpose_text ?? '',
+          source_template_phase_id: r.source_template_phase_id ?? null,
+        }))
+      );
+      setLessonOverride((lf2.data ?? []).length > 0);
+    }
 
     setWhatIfItems((wi2.data ?? []).map((r: any) => ({ scenario_text: r.scenario_text, response_text: r.response_text, source_template_item_id: r.source_template_item_id ?? null })));
     setWhatIfOverride((wi2.data ?? []).length > 0);
@@ -883,8 +901,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
       if (upErr) throw upErr;
 
       // Lesson flow: persist when edited.
-      // Use lessonTouched as the intent signal. If the override array isn't available yet,
-      // fall back to the template rows as the base (so we still write rows).
+      // New architecture: write into toc_block_plans.override_payload.lesson_flow_phases (atomic).
       if (lessonOverride || lessonTouched) {
         const effective: Phase[] = lessonOverride
           ? phases
@@ -896,20 +913,26 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
               source_template_phase_id: null,
             }));
 
-        await supabase.from('toc_lesson_flow_phases').delete().eq('toc_block_plan_id', tocBlockPlanId);
-        if (effective.length > 0) {
-          const rows = effective.map((p, i) => ({
-            toc_block_plan_id: tocBlockPlanId,
-            sort_order: i + 1,
+        const nextPayload = {
+          ...(overridePayload && typeof overridePayload === 'object' ? overridePayload : {}),
+          lesson_flow_phases: effective.map((p) => ({
             time_text: p.time_text,
             phase_text: p.phase_text,
             activity_text: p.activity_text,
             purpose_text: p.purpose_text ? p.purpose_text : null,
-            source_template_phase_id: p.source_template_phase_id,
-          }));
-          const { error } = await supabase.from('toc_lesson_flow_phases').insert(rows);
-          if (error) throw error;
-        }
+          })),
+        };
+
+        const { error } = await supabase
+          .from('toc_block_plans')
+          .update({ override_payload: nextPayload, updated_at: new Date().toISOString() })
+          .eq('id', tocBlockPlanId);
+        if (error) throw error;
+
+        setOverridePayload(nextPayload);
+
+        // Legacy table cleanup (optional): keep empty so public RPC uses JSON override.
+        await supabase.from('toc_lesson_flow_phases').delete().eq('toc_block_plan_id', tocBlockPlanId);
       }
 
       // Opening routine overrides only if created

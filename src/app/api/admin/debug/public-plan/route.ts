@@ -54,7 +54,7 @@ export async function GET(req: Request) {
 
     const { data: tbps, error: tbpErr } = await supabase
       .from('toc_block_plans')
-      .select('id,day_plan_block_id,template_id,plan_mode,updated_at')
+      .select('id,day_plan_block_id,template_id,plan_mode,updated_at,override_payload')
       .in('day_plan_block_id', blockIds.length ? blockIds : ['00000000-0000-0000-0000-000000000000']);
     if (tbpErr) throw tbpErr;
 
@@ -88,6 +88,12 @@ export async function GET(req: Request) {
       toc_block_plans: tbps,
       toc_block_plan_id_by_block_id: Object.fromEntries(Array.from(tbpIdByBlockId.entries())),
       lesson_flow_by_toc_block_plan_id: lfByTbp,
+      lesson_flow_from_override_payload: Object.fromEntries(
+        (tbps ?? []).map((t: any) => [
+          String(t.id),
+          Array.isArray(t.override_payload?.lesson_flow_phases) ? t.override_payload.lesson_flow_phases : null,
+        ])
+      ),
       public_payload: publicPlan,
     });
   } catch (e: any) {
