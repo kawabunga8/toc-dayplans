@@ -1276,6 +1276,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
               <input
                 value={String(p.time_text ?? '')}
                 onChange={(e) => {
+                  setLessonTouched(true);
                   markUnsaved();
                   const next = ensureLessonOverrideForEdit();
                   setPhases(next.map((x, i) => (i === idx ? { ...x, time_text: e.target.value } : x)));
@@ -1287,6 +1288,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
               <input
                 value={String(p.phase_text ?? '')}
                 onChange={(e) => {
+                  setLessonTouched(true);
                   markUnsaved();
                   const next = ensureLessonOverrideForEdit();
                   setPhases(next.map((x, i) => (i === idx ? { ...x, phase_text: e.target.value } : x)));
@@ -1298,6 +1300,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
               <textarea
                 value={String(p.activity_text ?? '')}
                 onChange={(e) => {
+                  setLessonTouched(true);
                   markUnsaved();
                   const next = ensureLessonOverrideForEdit();
                   setPhases(next.map((x, i) => (i === idx ? { ...x, activity_text: e.target.value } : x)));
@@ -1310,6 +1313,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
               <input
                 value={String(p.purpose_text ?? '')}
                 onChange={(e) => {
+                  setLessonTouched(true);
                   markUnsaved();
                   const next = ensureLessonOverrideForEdit();
                   setPhases(next.map((x, i) => (i === idx ? { ...x, purpose_text: e.target.value } : x)));
