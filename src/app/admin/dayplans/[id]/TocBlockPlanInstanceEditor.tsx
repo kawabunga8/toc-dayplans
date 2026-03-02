@@ -875,18 +875,28 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
       if (upErr) throw upErr;
 
       // Lesson flow: persist when edited.
-      // (We've seen cases where UI shows overrides but the save request happens before the
-      // override flag is reliably set; lessonTouched is the real signal.)
+      // Use lessonTouched as the intent signal. If the override array isn't available yet,
+      // fall back to the template rows as the base (so we still write rows).
       if (lessonOverride || lessonTouched) {
+        const effective: Phase[] = lessonOverride
+          ? phases
+          : (tplLessonFlow ?? []).map((r: any) => ({
+              time_text: String(r.time_text ?? ''),
+              phase_text: String(r.phase_text ?? ''),
+              activity_text: String(r.activity_text ?? ''),
+              purpose_text: String(r.purpose_text ?? ''),
+              source_template_phase_id: null,
+            }));
+
         await supabase.from('toc_lesson_flow_phases').delete().eq('toc_block_plan_id', tocBlockPlanId);
-        if (phases.length > 0) {
-          const rows = phases.map((p, i) => ({
+        if (effective.length > 0) {
+          const rows = effective.map((p, i) => ({
             toc_block_plan_id: tocBlockPlanId,
             sort_order: i + 1,
             time_text: p.time_text,
             phase_text: p.phase_text,
             activity_text: p.activity_text,
-            purpose_text: p.purpose_text || null,
+            purpose_text: p.purpose_text ? p.purpose_text : null,
             source_template_phase_id: p.source_template_phase_id,
           }));
           const { error } = await supabase.from('toc_lesson_flow_phases').insert(rows);
