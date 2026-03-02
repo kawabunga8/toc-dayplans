@@ -923,13 +923,19 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
           })),
         };
 
-        const { error } = await supabase
+        const { data: saved, error } = await supabase
           .from('toc_block_plans')
           .update({ override_payload: nextPayload, updated_at: new Date().toISOString() })
-          .eq('id', tocBlockPlanId);
+          .eq('id', tocBlockPlanId)
+          .select('override_payload')
+          .maybeSingle();
         if (error) throw error;
+        const persisted = (saved as any)?.override_payload ?? null;
+        if (!persisted || !Array.isArray((persisted as any)?.lesson_flow_phases)) {
+          throw new Error('override_payload did not persist (missing lesson_flow_phases). Check RLS / deployment version.');
+        }
 
-        setOverridePayload(nextPayload);
+        setOverridePayload(persisted);
 
         // Legacy table cleanup (optional): keep empty so public RPC uses JSON override.
         await supabase.from('toc_lesson_flow_phases').delete().eq('toc_block_plan_id', tocBlockPlanId);
