@@ -874,8 +874,10 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         .eq('id', tocBlockPlanId);
       if (upErr) throw upErr;
 
-      // Lesson flow: only persist an override if the user actually edited for this day.
-      if (lessonOverride) {
+      // Lesson flow: persist when edited.
+      // (We've seen cases where UI shows overrides but the save request happens before the
+      // override flag is reliably set; lessonTouched is the real signal.)
+      if (lessonOverride || lessonTouched) {
         await supabase.from('toc_lesson_flow_phases').delete().eq('toc_block_plan_id', tocBlockPlanId);
         if (phases.length > 0) {
           const rows = phases.map((p, i) => ({
