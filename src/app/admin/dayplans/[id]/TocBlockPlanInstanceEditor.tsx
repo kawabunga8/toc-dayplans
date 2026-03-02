@@ -931,13 +931,19 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         let effective: Phase[] = [];
 
         const fromDom = (): Phase[] =>
-          phases.map((p) => {
+          phases.map((p, pIdx) => {
             const r = phaseFieldRefs.current[p.client_id] ?? {};
 
             const q = (field: string) => {
               if (typeof document === 'undefined') return null;
-              return document.querySelector<HTMLInputElement | HTMLTextAreaElement>(
-                `[data-phase-client-id="${p.client_id}"][data-phase-field="${field}"]`
+              // Prefer idx-based selector (most robust).
+              return (
+                document.querySelector<HTMLInputElement | HTMLTextAreaElement>(
+                  `[data-phase-idx="${pIdx}"][data-phase-field="${field}"]`
+                ) ??
+                document.querySelector<HTMLInputElement | HTMLTextAreaElement>(
+                  `[data-phase-client-id="${p.client_id}"][data-phase-field="${field}"]`
+                )
               );
             };
 
@@ -1358,6 +1364,8 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                 ⋮⋮
               </div>
               <input
+                data-phase-idx={idx}
+                data-phase-idx={idx}
                 data-phase-client-id={p.client_id}
                 data-phase-field="time"
                 defaultValue={String(p.time_text ?? '')}
@@ -1375,6 +1383,8 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                 placeholder="Time"
               />
               <input
+                data-phase-idx={idx}
+                data-phase-idx={idx}
                 data-phase-client-id={p.client_id}
                 data-phase-field="phase"
                 defaultValue={String(p.phase_text ?? '')}
@@ -1392,6 +1402,8 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                 placeholder="Phase"
               />
               <textarea
+                data-phase-idx={idx}
+                data-phase-idx={idx}
                 data-phase-client-id={p.client_id}
                 data-phase-field="activity"
                 defaultValue={String(p.activity_text ?? '')}
@@ -1410,6 +1422,8 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                 rows={2}
               />
               <input
+                data-phase-idx={idx}
+                data-phase-idx={idx}
                 data-phase-client-id={p.client_id}
                 data-phase-field="purpose"
                 defaultValue={String(p.purpose_text ?? '')}
