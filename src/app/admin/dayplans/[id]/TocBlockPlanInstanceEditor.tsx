@@ -66,6 +66,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
 
   const [unsaved, setUnsaved] = useState(false);
   const markUnsaved = () => setUnsaved(true);
+  const [saveDebug, setSaveDebug] = useState<string | null>(null);
 
   const [tocBlockPlanId, setTocBlockPlanId] = useState<string | null>(null);
 
@@ -996,6 +997,14 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
           }));
         }
 
+        // DEBUG: show what we are about to persist (helps diagnose browser DOM-read issues)
+        try {
+          const core = (effective?.[1] as any)?.activity_text ?? '';
+          setSaveDebug(`LessonFlow[1].activity_text → ${String(core).slice(0, 120)}`);
+        } catch {
+          setSaveDebug(null);
+        }
+
         const nextPayload = {
           ...(overridePayload && typeof overridePayload === 'object' ? overridePayload : {}),
           lesson_flow_phases: effective.map((p) => ({
@@ -1157,6 +1166,11 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
           <div style={{ fontSize: 12, opacity: 0.85 }}>
             {status === 'saving' ? 'Saving…' : status === 'error' ? 'Not saved' : unsaved ? 'Unsaved changes (use Save all)' : 'Saved'}
           </div>
+          {saveDebug ? (
+            <div style={{ fontSize: 11, opacity: 0.75, maxWidth: 420 }} title={saveDebug}>
+              {saveDebug}
+            </div>
+          ) : null}
         </div>
       </div>
 
