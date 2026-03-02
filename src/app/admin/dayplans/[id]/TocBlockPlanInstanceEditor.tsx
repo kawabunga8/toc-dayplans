@@ -900,9 +900,10 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         .eq('id', tocBlockPlanId);
       if (upErr) throw upErr;
 
-      // Lesson flow: persist when edited.
-      // New architecture: write into toc_block_plans.override_payload.lesson_flow_phases (atomic).
-      if (lessonOverride || lessonTouched) {
+      // Lesson flow: write into toc_block_plans.override_payload.lesson_flow_phases (atomic).
+      // We do this whenever the plan mode is lesson_flow so that /p never silently falls
+      // back to the template due to missing rows.
+      if (planMode === 'lesson_flow') {
         const effective: Phase[] = lessonOverride
           ? phases
           : (tplLessonFlow ?? []).map((r: any) => ({
