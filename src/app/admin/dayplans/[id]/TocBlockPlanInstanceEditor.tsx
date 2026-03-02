@@ -28,6 +28,7 @@ type TemplateRow = {
 type OpeningStep = { step_text: string; source_template_step_id: string | null };
 
 type Phase = {
+  client_id: string;
   time_text: string;
   phase_text: string;
   activity_text: string;
@@ -96,8 +97,29 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
   const [openingOverride, setOpeningOverride] = useState(false);
   const [openingTouched, setOpeningTouched] = useState(false);
 
+  const newClientId = () => {
+    try {
+      // @ts-ignore
+      if (typeof crypto !== 'undefined' && crypto?.randomUUID) return crypto.randomUUID();
+    } catch {
+      // ignore
+    }
+    return `ph_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  };
+
   const [phases, setPhases] = useState<Phase[]>([]);
-  const phasesRef = useRef<Phase[]>([]);
+  const phaseFieldRefs = useRef<
+    Record<
+      string,
+      {
+        time?: HTMLInputElement | null;
+        phase?: HTMLInputElement | null;
+        activity?: HTMLTextAreaElement | null;
+        purpose?: HTMLInputElement | null;
+      }
+    >
+  >({});
+
   const [lessonOverride, setLessonOverride] = useState(false);
   const [lessonTouched, setLessonTouched] = useState(false);
   const [dragPhaseIdx, setDragPhaseIdx] = useState<number | null>(null);
@@ -597,26 +619,37 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
 
     if (payloadLfArr && payloadLfArr.length) {
       const nextPhases: Phase[] = payloadLfArr.map((r: any) => ({
+        client_id: newClientId(),
         time_text: String(r?.time_text ?? ''),
         phase_text: String(r?.phase_text ?? ''),
         activity_text: String(r?.activity_text ?? ''),
         purpose_text: String(r?.purpose_text ?? ''),
         source_template_phase_id: null,
       }));
-      phasesRef.current = nextPhases;
       setPhases(nextPhases);
       setLessonOverride(true);
     } else {
-      const nextPhases: Phase[] = (lf2.data ?? []).map((r: any) => ({
-        time_text: r.time_text,
-        phase_text: r.phase_text,
-        activity_text: r.activity_text,
-        purpose_text: r.purpose_text ?? '',
+      const legacyPhases: Phase[] = (lf2.data ?? []).map((r: any) => ({
+        client_id: newClientId(),
+        time_text: String(r.time_text ?? ''),
+        phase_text: String(r.phase_text ?? ''),
+        activity_text: String(r.activity_text ?? ''),
+        purpose_text: String(r.purpose_text ?? ''),
         source_template_phase_id: r.source_template_phase_id ?? null,
       }));
-      phasesRef.current = nextPhases;
+
+      const seededFromTemplate: Phase[] = (tplLessonFlow ?? []).map((r: any) => ({
+        client_id: newClientId(),
+        time_text: String(r.time_text ?? ''),
+        phase_text: String(r.phase_text ?? ''),
+        activity_text: String(r.activity_text ?? ''),
+        purpose_text: String(r.purpose_text ?? ''),
+        source_template_phase_id: null,
+      }));
+
+      const nextPhases = legacyPhases.length ? legacyPhases : seededFromTemplate;
       setPhases(nextPhases);
-      setLessonOverride((lf2.data ?? []).length > 0);
+      setLessonOverride(nextPhases.length > 0);
     }
 
     setWhatIfItems((wi2.data ?? []).map((r: any) => ({ scenario_text: r.scenario_text, response_text: r.response_text, source_template_item_id: r.source_template_item_id ?? null })));
@@ -846,23 +879,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
     }
   }
 
-  function ensureLessonOverrideForEdit(): Phase[] {
-    if (lessonOverride) return phases;
-
-    const seeded: Phase[] = (tplLessonFlow ?? []).map((r: any) => ({
-      time_text: String(r.time_text ?? ''),
-      phase_text: String(r.phase_text ?? ''),
-      activity_text: String(r.activity_text ?? ''),
-      purpose_text: String(r.purpose_text ?? ''),
-      source_template_phase_id: null,
-    }));
-
-    setLessonOverride(true);
-    setLessonTouched(true);
-    phasesRef.current = seeded;
-    setPhases(seeded);
-    return seeded;
-  }
+  // Lesson Flow is always day-owned; no need for a "seed on first edit" helper.
 
   async function saveAll(opts?: { reload?: boolean; silent?: boolean }) {
     if (!tocBlockPlanId) return;
@@ -876,16 +893,8 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
       setError(null);
     }
 
-    // Ensure the latest keystroke is committed before reading state/refs.
-    // Some browsers (notably iOS Safari) can delay textarea change events until blur.
-    try {
-      if (typeof window !== 'undefined') {
-        (document.activeElement as any)?.blur?.();
-        await new Promise((r) => setTimeout(r, 0));
-      }
-    } catch {
-      // ignore
-    }
+    // Refactor note: Lesson Flow inputs are now treated as the source of truth on save,
+    // so we no longer need blur/timing workarounds here.
 
     try {
       const supabase = getSupabaseClient();
@@ -917,16 +926,27 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
       // We do this whenever the plan mode is lesson_flow so that /p never silently falls
       // back to the template due to missing rows.
       if (planMode === 'lesson_flow') {
-        // Use the day override rows when present; otherwise use template preview.
-        // If template preview isn't loaded yet (mobile timing), fetch it directly.
+        // Source of truth: current input values (uncontrolled inputs + refs).
+        // This avoids browser timing issues with controlled textareas.
         let effective: Phase[] = [];
 
-        // If the user touched the lesson flow inputs, prefer the in-memory phases even if
-        // lessonOverride state hasn't updated yet (React state timing on mobile).
-        if (phasesRef.current.length && (lessonOverride || lessonTouched)) {
-          effective = phasesRef.current;
-        } else if (!lessonOverride && (tplLessonFlow ?? []).length) {
+        const fromDom = (): Phase[] =>
+          phases.map((p) => {
+            const r = phaseFieldRefs.current[p.client_id] ?? {};
+            return {
+              ...p,
+              time_text: (r.time?.value ?? p.time_text ?? '').toString(),
+              phase_text: (r.phase?.value ?? p.phase_text ?? '').toString(),
+              activity_text: (r.activity?.value ?? p.activity_text ?? '').toString(),
+              purpose_text: (r.purpose?.value ?? p.purpose_text ?? '').toString(),
+            };
+          });
+
+        if (phases.length) {
+          effective = fromDom();
+        } else if ((tplLessonFlow ?? []).length) {
           effective = (tplLessonFlow ?? []).map((r: any) => ({
+            client_id: newClientId(),
             time_text: String(r.time_text ?? ''),
             phase_text: String(r.phase_text ?? ''),
             activity_text: String(r.activity_text ?? ''),
@@ -941,6 +961,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
             .order('sort_order', { ascending: true });
           if (lfErr) throw lfErr;
           effective = (lfRes ?? []).map((r: any) => ({
+            client_id: newClientId(),
             time_text: String(r.time_text ?? ''),
             phase_text: String(r.phase_text ?? ''),
             activity_text: String(r.activity_text ?? ''),
@@ -1254,6 +1275,20 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                   setStatus('saving');
                   const supabase = getSupabaseClient();
                   await supabase.from('toc_lesson_flow_phases').delete().eq('toc_block_plan_id', tocBlockPlanId);
+
+                  const nextPayload = (() => {
+                    const base = overridePayload && typeof overridePayload === 'object' ? { ...overridePayload } : {};
+                    delete (base as any).lesson_flow_phases;
+                    return Object.keys(base).length ? base : null;
+                  })();
+
+                  const { error: clrErr } = await supabase
+                    .from('toc_block_plans')
+                    .update({ override_payload: nextPayload, updated_at: new Date().toISOString() })
+                    .eq('id', tocBlockPlanId);
+                  if (clrErr) throw clrErr;
+
+                  setOverridePayload(nextPayload);
                   setLessonOverride(false);
                   setLessonTouched(false);
                   setPhases([]);
@@ -1273,9 +1308,9 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         </div>
 
         <div style={{ display: 'grid', gap: 8 }}>
-          {(lessonOverride ? phases : (tplLessonFlow as any[])).map((p: any, idx: number) => (
+          {phases.map((p: Phase, idx: number) => (
             <div
-              key={idx}
+              key={p.client_id}
               style={{
                 ...styles.phaseRow,
                 opacity: dragPhaseIdx === idx ? 0.6 : 1,
@@ -1310,42 +1345,45 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                 ⋮⋮
               </div>
               <input
-                value={String(p.time_text ?? '')}
-                onChange={(e) => {
+                defaultValue={String(p.time_text ?? '')}
+                ref={(el) => {
+                  const rec = phaseFieldRefs.current[p.client_id] ?? {};
+                  rec.time = el;
+                  phaseFieldRefs.current[p.client_id] = rec;
+                }}
+                onChange={() => {
                   setLessonTouched(true);
                   markUnsaved();
-                  const next = ensureLessonOverrideForEdit();
-                  const nextPhases = next.map((x, i) => (i === idx ? { ...x, time_text: e.target.value } : x));
-                  phasesRef.current = nextPhases;
-                  setPhases(nextPhases);
                 }}
                 style={styles.input}
                 disabled={isDemo}
                 placeholder="Time"
               />
               <input
-                value={String(p.phase_text ?? '')}
-                onChange={(e) => {
+                defaultValue={String(p.phase_text ?? '')}
+                ref={(el) => {
+                  const rec = phaseFieldRefs.current[p.client_id] ?? {};
+                  rec.phase = el;
+                  phaseFieldRefs.current[p.client_id] = rec;
+                }}
+                onChange={() => {
                   setLessonTouched(true);
                   markUnsaved();
-                  const next = ensureLessonOverrideForEdit();
-                  const nextPhases = next.map((x, i) => (i === idx ? { ...x, phase_text: e.target.value } : x));
-                  phasesRef.current = nextPhases;
-                  setPhases(nextPhases);
                 }}
                 style={styles.input}
                 disabled={isDemo}
                 placeholder="Phase"
               />
               <textarea
-                value={String(p.activity_text ?? '')}
-                onChange={(e) => {
+                defaultValue={String(p.activity_text ?? '')}
+                ref={(el) => {
+                  const rec = phaseFieldRefs.current[p.client_id] ?? {};
+                  rec.activity = el;
+                  phaseFieldRefs.current[p.client_id] = rec;
+                }}
+                onChange={() => {
                   setLessonTouched(true);
                   markUnsaved();
-                  const next = ensureLessonOverrideForEdit();
-                  const nextPhases = next.map((x, i) => (i === idx ? { ...x, activity_text: e.target.value } : x));
-                  phasesRef.current = nextPhases;
-                  setPhases(nextPhases);
                 }}
                 style={{ ...styles.textarea, resize: 'vertical' }}
                 disabled={isDemo}
@@ -1353,14 +1391,15 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                 rows={2}
               />
               <input
-                value={String(p.purpose_text ?? '')}
-                onChange={(e) => {
+                defaultValue={String(p.purpose_text ?? '')}
+                ref={(el) => {
+                  const rec = phaseFieldRefs.current[p.client_id] ?? {};
+                  rec.purpose = el;
+                  phaseFieldRefs.current[p.client_id] = rec;
+                }}
+                onChange={() => {
                   setLessonTouched(true);
                   markUnsaved();
-                  const next = ensureLessonOverrideForEdit();
-                  const nextPhases = next.map((x, i) => (i === idx ? { ...x, purpose_text: e.target.value } : x));
-                  phasesRef.current = nextPhases;
-                  setPhases(nextPhases);
                 }}
                 style={styles.input}
                 disabled={isDemo}
@@ -1368,11 +1407,9 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
               />
               <button
                 onClick={() => {
+                  setLessonTouched(true);
                   markUnsaved();
-                  const next = ensureLessonOverrideForEdit();
-                  const nextPhases = next.filter((_, i) => i !== idx);
-                  phasesRef.current = nextPhases;
-                  setPhases(nextPhases);
+                  setPhases((prev) => prev.filter((_, i) => i !== idx));
                 }}
                 style={styles.dangerBtn}
                 disabled={isDemo}
@@ -1384,11 +1421,12 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
 
           <button
             onClick={() => {
+              setLessonTouched(true);
               markUnsaved();
-              const next = ensureLessonOverrideForEdit();
-              const nextPhases = [...(lessonOverride ? phasesRef.current : next), { time_text: '', phase_text: '', activity_text: '', purpose_text: '', source_template_phase_id: null }];
-              phasesRef.current = nextPhases;
-              setPhases(nextPhases);
+              setPhases((prev) => [
+                ...prev,
+                { client_id: newClientId(), time_text: '', phase_text: '', activity_text: '', purpose_text: '', source_template_phase_id: null },
+              ]);
             }}
             style={styles.secondaryBtn}
             disabled={isDemo}
