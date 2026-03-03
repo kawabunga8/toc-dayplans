@@ -512,7 +512,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
     // /p reads ONLY from toc_* instance tables, so we must seed before public use.
     try {
       if (!((plan as any).seeded_at) && effectiveTplId) {
-        await supabase.rpc('seed_toc_block_plan_from_template', { toc_block_plan_id: tocPlanId });
+        await supabase.rpc('seed_toc_block_plan_from_template', { p_toc_block_plan_id: tocPlanId });
         // Reload plan row after seeding so subsequent reads use instance tables.
         const { data: plan2, error: p2Err } = await supabase
           .from('toc_block_plans')
@@ -1278,7 +1278,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
       // Materialize the live render into toc_block_plans.public_payload for /p.
       // Do NOT swallow errors here; if this fails then /p will appear blank.
       {
-        const { error: pubErr } = await supabase.rpc('resolve_toc_block_plan_public_payload', { toc_block_plan_id: tocBlockPlanId });
+        const { error: pubErr } = await supabase.rpc('resolve_toc_block_plan_public_payload', { p_toc_block_plan_id: tocBlockPlanId });
         if (pubErr) throw pubErr;
       }
 

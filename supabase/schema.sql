@@ -1556,7 +1556,7 @@ revoke all on function resolve_day_plan_payload(uuid) from public;
 grant execute on function resolve_day_plan_payload(uuid) to authenticated;
 
 -- Seed a TOC instance from its template (copy-once, staff only).
-create or replace function public.seed_toc_block_plan_from_template(toc_block_plan_id uuid)
+create or replace function public.seed_toc_block_plan_from_template(p_toc_block_plan_id uuid)
 returns void
 language plpgsql
 security definer
@@ -1573,7 +1573,7 @@ begin
 
   select * into tbp
   from toc_block_plans
-  where id = toc_block_plan_id
+  where id = p_toc_block_plan_id
   limit 1;
 
   if not found then
@@ -1684,7 +1684,7 @@ grant execute on function public.seed_toc_block_plan_from_template(uuid) to auth
 
 -- Resolve + persist the public TOC payload for a given toc_block_plan.
 -- This is the materialized "live render" (template + overrides merged) that /p will read.
-create or replace function public.resolve_toc_block_plan_public_payload(toc_block_plan_id uuid)
+create or replace function public.resolve_toc_block_plan_public_payload(p_toc_block_plan_id uuid)
 returns jsonb
 language plpgsql
 security definer
@@ -1731,13 +1731,13 @@ begin
     return null;
   end if;
 
-  if toc_block_plan_id is null then
+  if p_toc_block_plan_id is null then
     return null;
   end if;
 
   select * into tbp
   from toc_block_plans
-  where id = toc_block_plan_id
+  where id = p_toc_block_plan_id
   limit 1;
 
   if not found then
