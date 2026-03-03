@@ -193,7 +193,7 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
         const pubAt = (p as any)?.published_at ?? null;
         setHasUnpublishedChanges(() => {
           if (!latestTocEdit) return false;
-          if (!pubAt) return true;
+          if (!pubAt) return false; // Never published — don't show "unpublished changes" banner
           // Allow 5s tolerance so publish+save timing jitter doesn't trigger false positives
           return new Date(latestTocEdit).getTime() > new Date(pubAt).getTime() + 5000;
         });
