@@ -24,6 +24,19 @@ type AssessmentTouchPoint = {
   cyclical_loop_type: string;
 };
 
+type AdvancedPayload = {
+  central_theme?: string;
+  deep_hope?: string;
+  big_idea?: string;
+  learning_target?: string;
+  collaborative_structure?: string;
+  context?: string;
+  materials_needed?: string[];
+  assessment_touch_points?: string[];
+  pd_goal_connections?: string[];
+  first_peoples_principles?: string[];
+};
+
 type TemplateRow = {
   id: string;
   class_id: string;
@@ -36,6 +49,7 @@ type TemplateRow = {
   plan_mode: PlanMode;
   default_tags: string[] | null;
   assessment_touch_point?: AssessmentTouchPoint | null;
+  advanced_payload?: AdvancedPayload | null;
 };
 
 type RoutineStep = { id?: string; text: string };
@@ -94,12 +108,30 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
   const [touchDiff, setTouchDiff] = useState('');
   const [touchCycle, setTouchCycle] = useState('');
 
+  // Advanced template areas (used when publishing Advanced plans)
+  const [advCentralTheme, setAdvCentralTheme] = useState('');
+  const [advDeepHope, setAdvDeepHope] = useState('');
+  const [advBigIdea, setAdvBigIdea] = useState('');
+  const [advLearningTarget, setAdvLearningTarget] = useState('');
+  const [advCollaborativeStructure, setAdvCollaborativeStructure] = useState('');
+  const [advContext, setAdvContext] = useState('');
+  const [advMaterialsNeeded, setAdvMaterialsNeeded] = useState(''); // one per line
+  const [advAssessmentTouchPoints, setAdvAssessmentTouchPoints] = useState(''); // one per line
+  const [advPdGoalConnections, setAdvPdGoalConnections] = useState(''); // one per line
+  const [advFirstPeoplesPrinciples, setAdvFirstPeoplesPrinciples] = useState(''); // one per line
+
   const [planMode, setPlanMode] = useState<PlanMode>('lesson_flow');
   const [lessonFlow, setLessonFlow] = useState<PhaseRow[]>([]);
   const [activityOptions, setActivityOptions] = useState<ActivityOption[]>([]);
 
   const [whatIfItems, setWhatIfItems] = useState<WhatIfItem[]>([]);
   const [roles, setRoles] = useState<RoleRow[]>([]);
+
+  const parseLines = (s: string) =>
+    (s ?? '')
+      .split('\n')
+      .map((x) => x.trim())
+      .filter(Boolean);
 
   const title = useMemo(() => {
     if (!klass) return 'TOC Template';
@@ -213,6 +245,18 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
           setTouchDiff('');
           setTouchCycle('');
 
+          // Advanced defaults (blank)
+          setAdvCentralTheme('');
+          setAdvDeepHope('');
+          setAdvBigIdea('');
+          setAdvLearningTarget('');
+          setAdvCollaborativeStructure('');
+          setAdvContext('');
+          setAdvMaterialsNeeded('');
+          setAdvAssessmentTouchPoints('');
+          setAdvPdGoalConnections('');
+          setAdvFirstPeoplesPrinciples('');
+
           setStatus('idle');
           return;
         }
@@ -234,6 +278,18 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
         setTouchEvidence(String(tp?.evidence_to_collect ?? ''));
         setTouchDiff(String(tp?.differentiation_strategy ?? ''));
         setTouchCycle(String(tp?.cyclical_loop_type ?? ''));
+
+        const adv = (tplRow.advanced_payload ?? (tplRow as any).advanced_payload ?? null) as any;
+        setAdvCentralTheme(String(adv?.central_theme ?? ''));
+        setAdvDeepHope(String(adv?.deep_hope ?? ''));
+        setAdvBigIdea(String(adv?.big_idea ?? ''));
+        setAdvLearningTarget(String(adv?.learning_target ?? ''));
+        setAdvCollaborativeStructure(String(adv?.collaborative_structure ?? ''));
+        setAdvContext(String(adv?.context ?? ''));
+        setAdvMaterialsNeeded(Array.isArray(adv?.materials_needed) ? adv.materials_needed.join('\n') : '');
+        setAdvAssessmentTouchPoints(Array.isArray(adv?.assessment_touch_points) ? adv.assessment_touch_points.join('\n') : '');
+        setAdvPdGoalConnections(Array.isArray(adv?.pd_goal_connections) ? adv.pd_goal_connections.join('\n') : '');
+        setAdvFirstPeoplesPrinciples(Array.isArray(adv?.first_peoples_principles) ? adv.first_peoples_principles.join('\n') : '');
 
         const templateId = tplRow.id;
 
@@ -393,6 +449,18 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
           evidence_to_collect: touchEvidence.trim(),
           differentiation_strategy: touchDiff.trim(),
           cyclical_loop_type: touchCycle.trim(),
+        },
+        advanced_payload: {
+          central_theme: advCentralTheme.trim(),
+          deep_hope: advDeepHope.trim(),
+          big_idea: advBigIdea.trim(),
+          learning_target: advLearningTarget.trim(),
+          collaborative_structure: advCollaborativeStructure.trim(),
+          context: advContext.trim(),
+          materials_needed: parseLines(advMaterialsNeeded),
+          assessment_touch_points: parseLines(advAssessmentTouchPoints),
+          pd_goal_connections: parseLines(advPdGoalConnections),
+          first_peoples_principles: parseLines(advFirstPeoplesPrinciples),
         },
         updated_at: new Date().toISOString(),
       };
@@ -664,6 +732,64 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
               <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
                 <div style={styles.label}>Differentiation strategy (UDL / IEP)</div>
                 <input value={touchDiff} onChange={(e) => setTouchDiff(e.target.value)} style={styles.input} placeholder="e.g., chunking, sentence starters, extended time…" />
+              </label>
+            </div>
+          </section>
+
+          {/* 3.6) Advanced Areas (template-level) */}
+          <section style={styles.card}>
+            <div style={styles.sectionHeader}>3.6 Advanced Areas (optional)</div>
+            <div style={styles.mutedSmall}>
+              These are used when a day plan is published in <b>Advanced</b> mode (and Materials Needed is also used in Standard mode).
+            </div>
+
+            <div style={{ ...styles.grid2, marginTop: 10 }}>
+              <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                <div style={styles.label}>Materials Needed (one per line)</div>
+                <textarea value={advMaterialsNeeded} onChange={(e) => setAdvMaterialsNeeded(e.target.value)} rows={4} style={styles.textarea} />
+              </label>
+
+              <label style={styles.field}>
+                <div style={styles.label}>Central Theme</div>
+                <input value={advCentralTheme} onChange={(e) => setAdvCentralTheme(e.target.value)} style={styles.input} />
+              </label>
+              <label style={styles.field}>
+                <div style={styles.label}>Deep Hope</div>
+                <input value={advDeepHope} onChange={(e) => setAdvDeepHope(e.target.value)} style={styles.input} />
+              </label>
+
+              <label style={styles.field}>
+                <div style={styles.label}>Big Idea</div>
+                <input value={advBigIdea} onChange={(e) => setAdvBigIdea(e.target.value)} style={styles.input} />
+              </label>
+              <label style={styles.field}>
+                <div style={styles.label}>Learning Target</div>
+                <input value={advLearningTarget} onChange={(e) => setAdvLearningTarget(e.target.value)} style={styles.input} />
+              </label>
+
+              <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                <div style={styles.label}>Collaborative Structure</div>
+                <input value={advCollaborativeStructure} onChange={(e) => setAdvCollaborativeStructure(e.target.value)} style={styles.input} />
+              </label>
+
+              <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                <div style={styles.label}>Context</div>
+                <textarea value={advContext} onChange={(e) => setAdvContext(e.target.value)} rows={3} style={styles.textarea} />
+              </label>
+
+              <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                <div style={styles.label}>Assessment Touch Points (one per line)</div>
+                <textarea value={advAssessmentTouchPoints} onChange={(e) => setAdvAssessmentTouchPoints(e.target.value)} rows={4} style={styles.textarea} />
+              </label>
+
+              <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                <div style={styles.label}>PD Goal Connections (one per line)</div>
+                <textarea value={advPdGoalConnections} onChange={(e) => setAdvPdGoalConnections(e.target.value)} rows={4} style={styles.textarea} />
+              </label>
+
+              <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                <div style={styles.label}>First Peoples Principles (one per line)</div>
+                <textarea value={advFirstPeoplesPrinciples} onChange={(e) => setAdvFirstPeoplesPrinciples(e.target.value)} rows={4} style={styles.textarea} />
               </label>
             </div>
           </section>
