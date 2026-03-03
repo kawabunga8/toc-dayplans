@@ -633,16 +633,14 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
         await requestTocSaveForBlock(bid);
       }
 
-      // If already published, republish automatically so /p reflects latest changes.
-      if ((plan as any)?.visibility === 'link') {
-        for (const bid of ids) {
-          await requestTocPublishForBlock(bid);
-        }
-
-        const res = await fetch(`/api/admin/dayplans/${id}/publish`, { method: 'POST' });
-        const j = await res.json();
-        if (!res.ok) throw new Error(j?.error ?? 'Failed to republish');
+      // Save = Publish: always publish after saving so /p reflects latest changes.
+      for (const bid of ids) {
+        await requestTocPublishForBlock(bid);
       }
+
+      const res = await fetch(`/api/admin/dayplans/${id}/publish`, { method: 'POST' });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j?.error ?? 'Failed to publish');
 
       await load();
       setSavedAt(new Date().toISOString());
@@ -1000,7 +998,7 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
 
                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
                   <button onClick={saveAll} disabled={status !== 'idle'} style={styles.primaryBtn}>
-                    {status === 'saving' ? 'Saving…' : 'Save all'}
+                    {status === 'saving' ? 'Saving…' : 'Save (publishes to /p)'}
                   </button>
                   <div style={{ fontSize: 12, opacity: 0.85 }}>
                     {saveAllStatus === 'saving'
