@@ -609,13 +609,28 @@ export default function TocClient({
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-              <a href={`/p/${openPlan.id}`} style={styles.primaryBtn}>
-                Open
-              </a>
-              <a href={`/p/${openPlan.id}?print=1`} target="_blank" rel="noopener noreferrer" style={styles.secondaryLink}>
-                Print
-              </a>
+            <div style={{ display: 'grid', gap: 8 }}>
+              <div style={{ fontSize: 12, opacity: 0.85 }}>
+                <b>Plan ID:</b> <code style={{ fontSize: 11 }}>{openPlan.id}</code>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await copyToClipboard(openPlan.id);
+                  }}
+                  style={{ ...styles.smallBtn, marginLeft: 8 }}
+                >
+                  Copy
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                <a href={`/p/${openPlan.id}`} style={styles.primaryBtn}>
+                  Open
+                </a>
+                <a href={`/p/${openPlan.id}?print=1`} target="_blank" rel="noopener noreferrer" style={styles.secondaryLink}>
+                  Print
+                </a>
+              </div>
             </div>
 
             {openPlan.toc?.note_to_toc?.trim() ? (
@@ -926,6 +941,17 @@ const styles: Record<string, React.CSSProperties> = {
     whiteSpace: 'nowrap',
     height: 'fit-content',
     alignSelf: 'flex-start',
+  },
+  smallBtn: {
+    padding: '4px 8px',
+    borderRadius: 10,
+    border: `1px solid ${RCS.gold}`,
+    background: RCS.white,
+    color: RCS.deepNavy,
+    fontWeight: 900,
+    cursor: 'pointer',
+    fontSize: 12,
+    lineHeight: 1,
   },
   dateInput: {
     padding: '8px 10px',
