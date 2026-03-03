@@ -1591,6 +1591,15 @@ begin
 
   update toc_block_plans
   set seeded_at = now(),
+      -- Copy template header fields into the TOC instance so /p never needs to read templates.
+      override_teacher_name = coalesce(override_teacher_name, tpl.teacher_name),
+      override_ta_name = coalesce(override_ta_name, tpl.ta_name),
+      override_ta_role = coalesce(override_ta_role, tpl.ta_role),
+      override_phone_policy = coalesce(override_phone_policy, tpl.phone_policy),
+      override_note_to_toc = coalesce(override_note_to_toc, tpl.note_to_toc),
+      override_attendance_note = coalesce(override_attendance_note, tpl.attendance_note),
+      override_assessment_touch_point = coalesce(override_assessment_touch_point, tpl.assessment_touch_point),
+      plan_mode = coalesce(nullif(plan_mode,''), tpl.plan_mode),
       override_payload = coalesce(override_payload, '{}'::jsonb)
         || jsonb_build_object('publish_mode', coalesce(nullif((override_payload->>'publish_mode'), ''), 'toc'))
         || jsonb_build_object('advanced', tpl_adv)
