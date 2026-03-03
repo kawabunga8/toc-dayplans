@@ -39,6 +39,11 @@ export default function AdminHome() {
             <div style={styles.tileText}>Set default bell schedule times.</div>
           </Link>
 
+          <Link href="/admin/public-layout" style={styles.tile}>
+            <div style={styles.tileTitle}>Public page layout</div>
+            <div style={styles.tileText}>Global layout template for /p (section order + titles).</div>
+          </Link>
+
           <Link href="/admin/class-lists" style={styles.tile}>
             <div style={styles.tileTitle}>Class lists</div>
             <div style={styles.tileText}>Rosters and student photos (coming).</div>

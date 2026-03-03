@@ -486,6 +486,77 @@ create unique index if not exists block_time_defaults_uq
   on block_time_defaults(template_key, effective_from, slot);
 
 -- =====================================================================
+-- PUBLIC PAGE LAYOUTS (global, admin-editable)
+-- =====================================================================
+
+create table if not exists public_page_layouts (
+  layout_id text primary key,
+  layout jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+
+alter table public_page_layouts enable row level security;
+
+drop policy if exists "public_page_layouts_staff_select" on public_page_layouts;
+create policy "public_page_layouts_staff_select" on public_page_layouts
+for select using (is_staff());
+
+drop policy if exists "public_page_layouts_staff_insert" on public_page_layouts;
+create policy "public_page_layouts_staff_insert" on public_page_layouts
+for insert with check (can_write());
+
+drop policy if exists "public_page_layouts_staff_update" on public_page_layouts;
+create policy "public_page_layouts_staff_update" on public_page_layouts
+for update using (can_write()) with check (can_write());
+
+drop policy if exists "public_page_layouts_staff_delete" on public_page_layouts;
+create policy "public_page_layouts_staff_delete" on public_page_layouts
+for delete using (can_write());
+
+-- Public read of layout (anon). SECURITY DEFINER so we don't have to open RLS.
+create or replace function public.get_public_page_layout(layout_id text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  out jsonb;
+begin
+  select l.layout into out
+  from public_page_layouts l
+  where l.layout_id = get_public_page_layout.layout_id
+  limit 1;
+
+  return coalesce(out, '{}'::jsonb);
+end;
+$$;
+revoke all on function public.get_public_page_layout(text) from public;
+grant execute on function public.get_public_page_layout(text) to anon;
+
+-- Default layout seed
+insert into public_page_layouts (layout_id, layout)
+select
+  'public_plan',
+  jsonb_build_object(
+    'sections', jsonb_build_array(
+      jsonb_build_object('key','class_overview','title','Class Overview','enabled',true),
+      jsonb_build_object('key','division_of_roles','title','Division of Roles','enabled',true),
+      jsonb_build_object('key','opening_routine','title','Opening routine','enabled',true),
+      jsonb_build_object('key','lesson_flow','title','Lesson flow','enabled',true),
+      jsonb_build_object('key','activity_options','title','Activity options','enabled',true),
+      jsonb_build_object('key','what_to_do_if','title','What to Do If…','enabled',true),
+      jsonb_build_object('key','end_of_class','title','End of Class — Room Cleanup','enabled',true),
+      jsonb_build_object('key','lesson_overview','title','Lesson Overview','enabled',true),
+      jsonb_build_object('key','materials_needed','title','Materials Needed','enabled',true),
+      jsonb_build_object('key','assessment_touch_points','title','★ Assessment Touch Points','enabled',true),
+      jsonb_build_object('key','pd_goal_connections','title','PD Goal Connections','enabled',true),
+      jsonb_build_object('key','first_peoples_principles','title','First Peoples Principles of Learning','enabled',true)
+    )
+  )
+where not exists (select 1 from public_page_layouts where layout_id = 'public_plan');
+
+-- =====================================================================
 -- TOC BLOCK PLAN CONTENT (standing templates + per-block instances)
 -- Added 2026-02-24
 -- =====================================================================
