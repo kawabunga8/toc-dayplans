@@ -201,42 +201,51 @@ $$;
 
 -- Staff profiles: allow users to read their own row
 -- (Do NOT depend on is_staff() here, or you can create a circular dependency.)
+drop policy if exists "staff_profiles_self_read" on staff_profiles;
 create policy "staff_profiles_self_read" on staff_profiles
 for select
 using (auth.uid() = user_id);
 
 -- day_plans: staff CRUD
+drop policy if exists "day_plans_staff_select" on day_plans;
 create policy "day_plans_staff_select" on day_plans
 for select
 using (is_staff());
 
+drop policy if exists "day_plans_staff_insert" on day_plans;
 create policy "day_plans_staff_insert" on day_plans
 for insert
 with check (can_write());
 
+drop policy if exists "day_plans_staff_update" on day_plans;
 create policy "day_plans_staff_update" on day_plans
 for update
 using (can_write())
 with check (can_write());
 
+drop policy if exists "day_plans_staff_delete" on day_plans;
 create policy "day_plans_staff_delete" on day_plans
 for delete
 using (can_write());
 
 -- day_plan_blocks: staff CRUD
+drop policy if exists "blocks_staff_select" on day_plan_blocks;
 create policy "blocks_staff_select" on day_plan_blocks
 for select
 using (is_staff());
 
+drop policy if exists "blocks_staff_insert" on day_plan_blocks;
 create policy "blocks_staff_insert" on day_plan_blocks
 for insert
 with check (can_write());
 
+drop policy if exists "blocks_staff_update" on day_plan_blocks;
 create policy "blocks_staff_update" on day_plan_blocks
 for update
 using (can_write())
 with check (can_write());
 
+drop policy if exists "blocks_staff_delete" on day_plan_blocks;
 create policy "blocks_staff_delete" on day_plan_blocks
 for delete
 using (can_write());
@@ -245,44 +254,55 @@ using (can_write());
 
 -- students
 drop policy if exists "students_staff_all" on students;
+drop policy if exists "students_staff_select" on students;
 create policy "students_staff_select" on students
 for select
 using (is_staff());
+drop policy if exists "students_staff_insert" on students;
 create policy "students_staff_insert" on students
 for insert
 with check (can_write());
+drop policy if exists "students_staff_update" on students;
 create policy "students_staff_update" on students
 for update
 using (can_write())
 with check (can_write());
+drop policy if exists "students_staff_delete" on students;
 create policy "students_staff_delete" on students
 for delete
 using (can_write());
 
 -- classes
 drop policy if exists "classes_staff_all" on classes;
+drop policy if exists "classes_staff_select" on classes;
 create policy "classes_staff_select" on classes
 for select
 using (is_staff());
+drop policy if exists "classes_staff_insert" on classes;
 create policy "classes_staff_insert" on classes
 for insert
 with check (can_write());
+drop policy if exists "classes_staff_update" on classes;
 create policy "classes_staff_update" on classes
 for update
 using (can_write())
 with check (can_write());
+drop policy if exists "classes_staff_delete" on classes;
 create policy "classes_staff_delete" on classes
 for delete
 using (can_write());
 
 -- enrollments
 drop policy if exists "enrollments_staff_all" on enrollments;
+drop policy if exists "enrollments_staff_select" on enrollments;
 create policy "enrollments_staff_select" on enrollments
 for select
 using (is_staff());
+drop policy if exists "enrollments_staff_insert" on enrollments;
 create policy "enrollments_staff_insert" on enrollments
 for insert
 with check (can_write());
+drop policy if exists "enrollments_staff_delete" on enrollments;
 create policy "enrollments_staff_delete" on enrollments
 for delete
 using (can_write());
@@ -316,12 +336,16 @@ create unique index if not exists rotation_defaults_unique_row_idx
 alter table rotation_defaults enable row level security;
 
 drop policy if exists "rotation_defaults_staff_all" on rotation_defaults;
+drop policy if exists "rotation_defaults_staff_select" on rotation_defaults;
 create policy "rotation_defaults_staff_select" on rotation_defaults
 for select using (is_staff());
+drop policy if exists "rotation_defaults_staff_insert" on rotation_defaults;
 create policy "rotation_defaults_staff_insert" on rotation_defaults
 for insert with check (can_write());
+drop policy if exists "rotation_defaults_staff_update" on rotation_defaults;
 create policy "rotation_defaults_staff_update" on rotation_defaults
 for update using (can_write()) with check (can_write());
+drop policy if exists "rotation_defaults_staff_delete" on rotation_defaults;
 create policy "rotation_defaults_staff_delete" on rotation_defaults
 for delete using (can_write());
 
@@ -440,16 +464,20 @@ create table if not exists block_time_defaults (
 alter table block_time_defaults enable row level security;
 
 drop policy if exists "block_time_defaults_staff_all" on block_time_defaults;
+drop policy if exists "block_time_defaults_staff_select" on block_time_defaults;
 create policy "block_time_defaults_staff_select" on block_time_defaults
 for select
 using (is_staff());
+drop policy if exists "block_time_defaults_staff_insert" on block_time_defaults;
 create policy "block_time_defaults_staff_insert" on block_time_defaults
 for insert
 with check (can_write());
+drop policy if exists "block_time_defaults_staff_update" on block_time_defaults;
 create policy "block_time_defaults_staff_update" on block_time_defaults
 for update
 using (can_write())
 with check (can_write());
+drop policy if exists "block_time_defaults_staff_delete" on block_time_defaults;
 create policy "block_time_defaults_staff_delete" on block_time_defaults
 for delete
 using (can_write());
@@ -705,199 +733,271 @@ alter table learning_standard_rubrics enable row level security;
 
 -- class_toc_templates
  drop policy if exists "class_toc_templates_staff_all" on class_toc_templates;
+drop policy if exists "class_toc_templates_staff_select" on class_toc_templates;
  create policy "class_toc_templates_staff_select" on class_toc_templates
  for select using (is_staff());
+drop policy if exists "class_toc_templates_staff_insert" on class_toc_templates;
  create policy "class_toc_templates_staff_insert" on class_toc_templates
  for insert with check (can_write());
+drop policy if exists "class_toc_templates_staff_update" on class_toc_templates;
  create policy "class_toc_templates_staff_update" on class_toc_templates
  for update using (can_write()) with check (can_write());
+drop policy if exists "class_toc_templates_staff_delete" on class_toc_templates;
  create policy "class_toc_templates_staff_delete" on class_toc_templates
  for delete using (can_write());
 
 -- class_opening_routine_steps
  drop policy if exists "class_opening_routine_steps_staff_all" on class_opening_routine_steps;
+drop policy if exists "class_opening_routine_steps_staff_select" on class_opening_routine_steps;
  create policy "class_opening_routine_steps_staff_select" on class_opening_routine_steps
  for select using (is_staff());
+drop policy if exists "class_opening_routine_steps_staff_insert" on class_opening_routine_steps;
  create policy "class_opening_routine_steps_staff_insert" on class_opening_routine_steps
  for insert with check (can_write());
+drop policy if exists "class_opening_routine_steps_staff_update" on class_opening_routine_steps;
  create policy "class_opening_routine_steps_staff_update" on class_opening_routine_steps
  for update using (can_write()) with check (can_write());
+drop policy if exists "class_opening_routine_steps_staff_delete" on class_opening_routine_steps;
  create policy "class_opening_routine_steps_staff_delete" on class_opening_routine_steps
  for delete using (can_write());
 
 -- class_lesson_flow_phases
  drop policy if exists "class_lesson_flow_phases_staff_all" on class_lesson_flow_phases;
+drop policy if exists "class_lesson_flow_phases_staff_select" on class_lesson_flow_phases;
  create policy "class_lesson_flow_phases_staff_select" on class_lesson_flow_phases
  for select using (is_staff());
+drop policy if exists "class_lesson_flow_phases_staff_insert" on class_lesson_flow_phases;
  create policy "class_lesson_flow_phases_staff_insert" on class_lesson_flow_phases
  for insert with check (can_write());
+drop policy if exists "class_lesson_flow_phases_staff_update" on class_lesson_flow_phases;
  create policy "class_lesson_flow_phases_staff_update" on class_lesson_flow_phases
  for update using (can_write()) with check (can_write());
+drop policy if exists "class_lesson_flow_phases_staff_delete" on class_lesson_flow_phases;
  create policy "class_lesson_flow_phases_staff_delete" on class_lesson_flow_phases
  for delete using (can_write());
 
 -- class_activity_options
  drop policy if exists "class_activity_options_staff_all" on class_activity_options;
+drop policy if exists "class_activity_options_staff_select" on class_activity_options;
  create policy "class_activity_options_staff_select" on class_activity_options
  for select using (is_staff());
+drop policy if exists "class_activity_options_staff_insert" on class_activity_options;
  create policy "class_activity_options_staff_insert" on class_activity_options
  for insert with check (can_write());
+drop policy if exists "class_activity_options_staff_update" on class_activity_options;
  create policy "class_activity_options_staff_update" on class_activity_options
  for update using (can_write()) with check (can_write());
+drop policy if exists "class_activity_options_staff_delete" on class_activity_options;
  create policy "class_activity_options_staff_delete" on class_activity_options
  for delete using (can_write());
 
 -- class_activity_option_steps
  drop policy if exists "class_activity_option_steps_staff_all" on class_activity_option_steps;
+drop policy if exists "class_activity_option_steps_staff_select" on class_activity_option_steps;
  create policy "class_activity_option_steps_staff_select" on class_activity_option_steps
  for select using (is_staff());
+drop policy if exists "class_activity_option_steps_staff_insert" on class_activity_option_steps;
  create policy "class_activity_option_steps_staff_insert" on class_activity_option_steps
  for insert with check (can_write());
+drop policy if exists "class_activity_option_steps_staff_update" on class_activity_option_steps;
  create policy "class_activity_option_steps_staff_update" on class_activity_option_steps
  for update using (can_write()) with check (can_write());
+drop policy if exists "class_activity_option_steps_staff_delete" on class_activity_option_steps;
  create policy "class_activity_option_steps_staff_delete" on class_activity_option_steps
  for delete using (can_write());
 
 -- class_what_to_do_if_items
  drop policy if exists "class_what_to_do_if_items_staff_all" on class_what_to_do_if_items;
+drop policy if exists "class_what_to_do_if_items_staff_select" on class_what_to_do_if_items;
  create policy "class_what_to_do_if_items_staff_select" on class_what_to_do_if_items
  for select using (is_staff());
+drop policy if exists "class_what_to_do_if_items_staff_insert" on class_what_to_do_if_items;
  create policy "class_what_to_do_if_items_staff_insert" on class_what_to_do_if_items
  for insert with check (can_write());
+drop policy if exists "class_what_to_do_if_items_staff_update" on class_what_to_do_if_items;
  create policy "class_what_to_do_if_items_staff_update" on class_what_to_do_if_items
  for update using (can_write()) with check (can_write());
+drop policy if exists "class_what_to_do_if_items_staff_delete" on class_what_to_do_if_items;
  create policy "class_what_to_do_if_items_staff_delete" on class_what_to_do_if_items
  for delete using (can_write());
 
 -- class_overview_rows
  drop policy if exists "class_overview_rows_staff_all" on class_overview_rows;
+drop policy if exists "class_overview_rows_staff_select" on class_overview_rows;
  create policy "class_overview_rows_staff_select" on class_overview_rows
  for select using (is_staff());
+drop policy if exists "class_overview_rows_staff_insert" on class_overview_rows;
  create policy "class_overview_rows_staff_insert" on class_overview_rows
  for insert with check (can_write());
+drop policy if exists "class_overview_rows_staff_update" on class_overview_rows;
  create policy "class_overview_rows_staff_update" on class_overview_rows
  for update using (can_write()) with check (can_write());
+drop policy if exists "class_overview_rows_staff_delete" on class_overview_rows;
  create policy "class_overview_rows_staff_delete" on class_overview_rows
  for delete using (can_write());
 
 -- class_role_rows
  drop policy if exists "class_role_rows_staff_all" on class_role_rows;
+drop policy if exists "class_role_rows_staff_select" on class_role_rows;
  create policy "class_role_rows_staff_select" on class_role_rows
  for select using (is_staff());
+drop policy if exists "class_role_rows_staff_insert" on class_role_rows;
  create policy "class_role_rows_staff_insert" on class_role_rows
  for insert with check (can_write());
+drop policy if exists "class_role_rows_staff_update" on class_role_rows;
  create policy "class_role_rows_staff_update" on class_role_rows
  for update using (can_write()) with check (can_write());
+drop policy if exists "class_role_rows_staff_delete" on class_role_rows;
  create policy "class_role_rows_staff_delete" on class_role_rows
  for delete using (can_write());
 
 -- class_end_of_class_items
  drop policy if exists "class_end_of_class_items_staff_all" on class_end_of_class_items;
+drop policy if exists "class_end_of_class_items_staff_select" on class_end_of_class_items;
  create policy "class_end_of_class_items_staff_select" on class_end_of_class_items
  for select using (is_staff());
+drop policy if exists "class_end_of_class_items_staff_insert" on class_end_of_class_items;
  create policy "class_end_of_class_items_staff_insert" on class_end_of_class_items
  for insert with check (can_write());
+drop policy if exists "class_end_of_class_items_staff_update" on class_end_of_class_items;
  create policy "class_end_of_class_items_staff_update" on class_end_of_class_items
  for update using (can_write()) with check (can_write());
+drop policy if exists "class_end_of_class_items_staff_delete" on class_end_of_class_items;
  create policy "class_end_of_class_items_staff_delete" on class_end_of_class_items
  for delete using (can_write());
 
 -- toc_block_plans
  drop policy if exists "toc_block_plans_staff_all" on toc_block_plans;
+drop policy if exists "toc_block_plans_staff_select" on toc_block_plans;
  create policy "toc_block_plans_staff_select" on toc_block_plans
  for select using (is_staff());
+drop policy if exists "toc_block_plans_staff_insert" on toc_block_plans;
  create policy "toc_block_plans_staff_insert" on toc_block_plans
  for insert with check (can_write());
+drop policy if exists "toc_block_plans_staff_update" on toc_block_plans;
  create policy "toc_block_plans_staff_update" on toc_block_plans
  for update using (can_write()) with check (can_write());
+drop policy if exists "toc_block_plans_staff_delete" on toc_block_plans;
  create policy "toc_block_plans_staff_delete" on toc_block_plans
  for delete using (can_write());
 
 -- toc_opening_routine_steps
  drop policy if exists "toc_opening_routine_steps_staff_all" on toc_opening_routine_steps;
+drop policy if exists "toc_opening_routine_steps_staff_select" on toc_opening_routine_steps;
  create policy "toc_opening_routine_steps_staff_select" on toc_opening_routine_steps
  for select using (is_staff());
+drop policy if exists "toc_opening_routine_steps_staff_insert" on toc_opening_routine_steps;
  create policy "toc_opening_routine_steps_staff_insert" on toc_opening_routine_steps
  for insert with check (can_write());
+drop policy if exists "toc_opening_routine_steps_staff_update" on toc_opening_routine_steps;
  create policy "toc_opening_routine_steps_staff_update" on toc_opening_routine_steps
  for update using (can_write()) with check (can_write());
+drop policy if exists "toc_opening_routine_steps_staff_delete" on toc_opening_routine_steps;
  create policy "toc_opening_routine_steps_staff_delete" on toc_opening_routine_steps
  for delete using (can_write());
 
 -- toc_lesson_flow_phases
  drop policy if exists "toc_lesson_flow_phases_staff_all" on toc_lesson_flow_phases;
+drop policy if exists "toc_lesson_flow_phases_staff_select" on toc_lesson_flow_phases;
  create policy "toc_lesson_flow_phases_staff_select" on toc_lesson_flow_phases
  for select using (is_staff());
+drop policy if exists "toc_lesson_flow_phases_staff_insert" on toc_lesson_flow_phases;
  create policy "toc_lesson_flow_phases_staff_insert" on toc_lesson_flow_phases
  for insert with check (can_write());
+drop policy if exists "toc_lesson_flow_phases_staff_update" on toc_lesson_flow_phases;
  create policy "toc_lesson_flow_phases_staff_update" on toc_lesson_flow_phases
  for update using (can_write()) with check (can_write());
+drop policy if exists "toc_lesson_flow_phases_staff_delete" on toc_lesson_flow_phases;
  create policy "toc_lesson_flow_phases_staff_delete" on toc_lesson_flow_phases
  for delete using (can_write());
 
 -- toc_activity_options
  drop policy if exists "toc_activity_options_staff_all" on toc_activity_options;
+drop policy if exists "toc_activity_options_staff_select" on toc_activity_options;
  create policy "toc_activity_options_staff_select" on toc_activity_options
  for select using (is_staff());
+drop policy if exists "toc_activity_options_staff_insert" on toc_activity_options;
  create policy "toc_activity_options_staff_insert" on toc_activity_options
  for insert with check (can_write());
+drop policy if exists "toc_activity_options_staff_update" on toc_activity_options;
  create policy "toc_activity_options_staff_update" on toc_activity_options
  for update using (can_write()) with check (can_write());
+drop policy if exists "toc_activity_options_staff_delete" on toc_activity_options;
  create policy "toc_activity_options_staff_delete" on toc_activity_options
  for delete using (can_write());
 
 -- toc_activity_option_steps
  drop policy if exists "toc_activity_option_steps_staff_all" on toc_activity_option_steps;
+drop policy if exists "toc_activity_option_steps_staff_select" on toc_activity_option_steps;
  create policy "toc_activity_option_steps_staff_select" on toc_activity_option_steps
  for select using (is_staff());
+drop policy if exists "toc_activity_option_steps_staff_insert" on toc_activity_option_steps;
  create policy "toc_activity_option_steps_staff_insert" on toc_activity_option_steps
  for insert with check (can_write());
+drop policy if exists "toc_activity_option_steps_staff_update" on toc_activity_option_steps;
  create policy "toc_activity_option_steps_staff_update" on toc_activity_option_steps
  for update using (can_write()) with check (can_write());
+drop policy if exists "toc_activity_option_steps_staff_delete" on toc_activity_option_steps;
  create policy "toc_activity_option_steps_staff_delete" on toc_activity_option_steps
  for delete using (can_write());
 
 -- toc_what_to_do_if_items
  drop policy if exists "toc_what_to_do_if_items_staff_all" on toc_what_to_do_if_items;
+drop policy if exists "toc_what_to_do_if_items_staff_select" on toc_what_to_do_if_items;
  create policy "toc_what_to_do_if_items_staff_select" on toc_what_to_do_if_items
  for select using (is_staff());
+drop policy if exists "toc_what_to_do_if_items_staff_insert" on toc_what_to_do_if_items;
  create policy "toc_what_to_do_if_items_staff_insert" on toc_what_to_do_if_items
  for insert with check (can_write());
+drop policy if exists "toc_what_to_do_if_items_staff_update" on toc_what_to_do_if_items;
  create policy "toc_what_to_do_if_items_staff_update" on toc_what_to_do_if_items
  for update using (can_write()) with check (can_write());
+drop policy if exists "toc_what_to_do_if_items_staff_delete" on toc_what_to_do_if_items;
  create policy "toc_what_to_do_if_items_staff_delete" on toc_what_to_do_if_items
  for delete using (can_write());
 
 -- toc_overview_rows
  drop policy if exists "toc_overview_rows_staff_all" on toc_overview_rows;
+drop policy if exists "toc_overview_rows_staff_select" on toc_overview_rows;
  create policy "toc_overview_rows_staff_select" on toc_overview_rows
  for select using (is_staff());
+drop policy if exists "toc_overview_rows_staff_insert" on toc_overview_rows;
  create policy "toc_overview_rows_staff_insert" on toc_overview_rows
  for insert with check (can_write());
+drop policy if exists "toc_overview_rows_staff_update" on toc_overview_rows;
  create policy "toc_overview_rows_staff_update" on toc_overview_rows
  for update using (can_write()) with check (can_write());
+drop policy if exists "toc_overview_rows_staff_delete" on toc_overview_rows;
  create policy "toc_overview_rows_staff_delete" on toc_overview_rows
  for delete using (can_write());
 
 -- toc_role_rows
  drop policy if exists "toc_role_rows_staff_all" on toc_role_rows;
+drop policy if exists "toc_role_rows_staff_select" on toc_role_rows;
  create policy "toc_role_rows_staff_select" on toc_role_rows
  for select using (is_staff());
+drop policy if exists "toc_role_rows_staff_insert" on toc_role_rows;
  create policy "toc_role_rows_staff_insert" on toc_role_rows
  for insert with check (can_write());
+drop policy if exists "toc_role_rows_staff_update" on toc_role_rows;
  create policy "toc_role_rows_staff_update" on toc_role_rows
  for update using (can_write()) with check (can_write());
+drop policy if exists "toc_role_rows_staff_delete" on toc_role_rows;
  create policy "toc_role_rows_staff_delete" on toc_role_rows
  for delete using (can_write());
 
 -- toc_end_of_class_items
  drop policy if exists "toc_end_of_class_items_staff_all" on toc_end_of_class_items;
+drop policy if exists "toc_end_of_class_items_staff_select" on toc_end_of_class_items;
  create policy "toc_end_of_class_items_staff_select" on toc_end_of_class_items
  for select using (is_staff());
+drop policy if exists "toc_end_of_class_items_staff_insert" on toc_end_of_class_items;
  create policy "toc_end_of_class_items_staff_insert" on toc_end_of_class_items
  for insert with check (can_write());
+drop policy if exists "toc_end_of_class_items_staff_update" on toc_end_of_class_items;
  create policy "toc_end_of_class_items_staff_update" on toc_end_of_class_items
  for update using (can_write()) with check (can_write());
+drop policy if exists "toc_end_of_class_items_staff_delete" on toc_end_of_class_items;
  create policy "toc_end_of_class_items_staff_delete" on toc_end_of_class_items
  for delete using (can_write());
 
@@ -1483,23 +1583,31 @@ grant execute on function get_public_plans_for_week(date) to anon;
 
 -- learning_standards
 drop policy if exists "learning_standards_staff_all" on learning_standards;
+drop policy if exists "learning_standards_staff_select" on learning_standards;
 create policy "learning_standards_staff_select" on learning_standards
 for select using (is_staff());
+drop policy if exists "learning_standards_staff_insert" on learning_standards;
 create policy "learning_standards_staff_insert" on learning_standards
 for insert with check (can_write());
+drop policy if exists "learning_standards_staff_update" on learning_standards;
 create policy "learning_standards_staff_update" on learning_standards
 for update using (can_write()) with check (can_write());
+drop policy if exists "learning_standards_staff_delete" on learning_standards;
 create policy "learning_standards_staff_delete" on learning_standards
 for delete using (can_write());
 
 -- learning_standard_rubrics
 drop policy if exists "learning_standard_rubrics_staff_all" on learning_standard_rubrics;
+drop policy if exists "learning_standard_rubrics_staff_select" on learning_standard_rubrics;
 create policy "learning_standard_rubrics_staff_select" on learning_standard_rubrics
 for select using (is_staff());
+drop policy if exists "learning_standard_rubrics_staff_insert" on learning_standard_rubrics;
 create policy "learning_standard_rubrics_staff_insert" on learning_standard_rubrics
 for insert with check (can_write());
+drop policy if exists "learning_standard_rubrics_staff_update" on learning_standard_rubrics;
 create policy "learning_standard_rubrics_staff_update" on learning_standard_rubrics
 for update using (can_write()) with check (can_write());
+drop policy if exists "learning_standard_rubrics_staff_delete" on learning_standard_rubrics;
 create policy "learning_standard_rubrics_staff_delete" on learning_standard_rubrics
 for delete using (can_write());
 
