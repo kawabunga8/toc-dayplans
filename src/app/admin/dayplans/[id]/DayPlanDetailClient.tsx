@@ -832,7 +832,13 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                       const qs = new URLSearchParams();
                       if (subject) qs.set('subject', subject);
                       if (grade) qs.set('grade', grade);
-                      qs.set('return', `/admin/dayplans/${id}`);
+
+                      // Preserve any existing Core Competency focus while selecting a Learning Standard.
+                      const retQs = new URLSearchParams();
+                      if (draftCoreCompetencyFocus.trim()) retQs.set('core_competency_focus', draftCoreCompetencyFocus.trim());
+                      const ret = retQs.toString() ? `/admin/dayplans/${id}?${retQs.toString()}` : `/admin/dayplans/${id}`;
+
+                      qs.set('return', ret);
                       window.location.href = `/admin/policies?${qs.toString()}`;
                     }}
                     style={styles.secondaryBtn}
@@ -856,7 +862,14 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                     type="button"
                     onClick={() => {
                       const qs = new URLSearchParams();
-                      qs.set('return', `/admin/dayplans/${id}`);
+
+                      // Preserve any existing Learning Standard focus while selecting Core Competencies.
+                      const retQs = new URLSearchParams();
+                      if (draftLearningStandardId) retQs.set('learning_standard_id', draftLearningStandardId);
+                      if (draftLearningStandardFocus.trim()) retQs.set('learning_standard_focus', draftLearningStandardFocus.trim());
+                      const ret = retQs.toString() ? `/admin/dayplans/${id}?${retQs.toString()}` : `/admin/dayplans/${id}`;
+
+                      qs.set('return', ret);
                       window.location.href = `/admin/policies/core-competencies?${qs.toString()}`;
                     }}
                     style={styles.secondaryBtn}
