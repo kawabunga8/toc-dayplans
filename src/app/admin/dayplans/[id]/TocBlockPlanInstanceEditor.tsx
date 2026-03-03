@@ -1381,22 +1381,48 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         <div style={{ gridColumn: '1 / -1', ...styles.touchCard }}>
           <div style={{ ...styles.sectionHeader, marginBottom: 8, display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
             <div>Publishing Mode</div>
-            <label style={{ display: 'inline-flex', gap: 8, alignItems: 'center', fontSize: 12 }}>
-              <span style={{ opacity: 0.85 }}>TOC (Standard)</span>
-              <input
-                type="checkbox"
-                checked={publishMode === 'advanced'}
-                onChange={(e) => {
-                  setPublishMode(e.target.checked ? 'advanced' : 'toc');
-                  markUnsaved();
-                }}
-                disabled={isDemo}
-              />
-              <span style={{ opacity: 0.85 }}>Advanced (Everything)</span>
-            </label>
+            <div
+              role="switch"
+              aria-checked={publishMode === 'advanced'}
+              tabIndex={0}
+              onClick={() => { if (!isDemo) { setPublishMode(publishMode === 'advanced' ? 'toc' : 'advanced'); markUnsaved(); } }}
+              onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); if (!isDemo) { setPublishMode(publishMode === 'advanced' ? 'toc' : 'advanced'); markUnsaved(); } } }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 10,
+                cursor: isDemo ? 'default' : 'pointer',
+                userSelect: 'none',
+                fontSize: 12,
+              }}
+            >
+              <span style={{ opacity: publishMode === 'toc' ? 1 : 0.5, fontWeight: publishMode === 'toc' ? 800 : 400 }}>Standard (TOC)</span>
+              <div style={{
+                width: 44,
+                height: 24,
+                borderRadius: 12,
+                background: publishMode === 'advanced' ? RCS.deepNavy : '#ccc',
+                position: 'relative',
+                transition: 'background 0.2s',
+                flexShrink: 0,
+              }}>
+                <div style={{
+                  width: 20,
+                  height: 20,
+                  borderRadius: 10,
+                  background: '#fff',
+                  position: 'absolute',
+                  top: 2,
+                  left: publishMode === 'advanced' ? 22 : 2,
+                  transition: 'left 0.2s',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+                }} />
+              </div>
+              <span style={{ opacity: publishMode === 'advanced' ? 1 : 0.5, fontWeight: publishMode === 'advanced' ? 800 : 400 }}>Advanced (Everything)</span>
+            </div>
           </div>
           <div style={{ fontSize: 12, opacity: 0.85 }}>
-            Standard mode does not publish advanced sections to <code>/p</code>. Advanced mode publishes everything (blank sections are hidden).
+            Standard mode publishes core TOC sections + Materials Needed. Advanced mode publishes everything (blank sections are hidden).
           </div>
         </div>
 
@@ -1404,6 +1430,11 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
           <div style={{ ...styles.sectionHeader, marginBottom: 8 }}>Advanced Sections (editable; published only in Advanced mode)</div>
 
           <div style={styles.grid2}>
+            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+              <span style={styles.label}>Materials Needed (one per line) — <em>included in Standard + Advanced</em></span>
+              <textarea value={advMaterialsNeeded} onChange={(e) => { setAdvMaterialsNeeded(e.target.value); markUnsaved(); }} rows={5} style={styles.textarea} disabled={isDemo} />
+            </label>
+
             <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
               <span style={styles.label}>Central Theme</span>
               <textarea value={advCentralTheme} onChange={(e) => { setAdvCentralTheme(e.target.value); markUnsaved(); }} rows={2} style={styles.textarea} disabled={isDemo} />
@@ -1427,11 +1458,6 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
             <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
               <span style={styles.label}>Context</span>
               <textarea value={advContext} onChange={(e) => { setAdvContext(e.target.value); markUnsaved(); }} rows={3} style={styles.textarea} disabled={isDemo} />
-            </label>
-
-            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
-              <span style={styles.label}>Materials Needed (one per line)</span>
-              <textarea value={advMaterialsNeeded} onChange={(e) => { setAdvMaterialsNeeded(e.target.value); markUnsaved(); }} rows={5} style={styles.textarea} disabled={isDemo} />
             </label>
 
             <label style={{ ...styles.field, gridColumn: '1 / -1' }}>

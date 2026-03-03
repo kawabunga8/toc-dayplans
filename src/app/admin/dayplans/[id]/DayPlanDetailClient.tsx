@@ -194,7 +194,8 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
         setHasUnpublishedChanges(() => {
           if (!latestTocEdit) return false;
           if (!pubAt) return true;
-          return new Date(latestTocEdit).getTime() > new Date(pubAt).getTime();
+          // Allow 5s tolerance so publish+save timing jitter doesn't trigger false positives
+          return new Date(latestTocEdit).getTime() > new Date(pubAt).getTime() + 5000;
         });
       } catch {
         // ignore

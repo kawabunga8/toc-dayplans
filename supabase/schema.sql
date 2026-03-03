@@ -1308,9 +1308,13 @@ begin
     end if;
   end if;
 
+  -- Materials Needed: always included (Standard + Advanced), hidden when empty.
+  if jsonb_typeof(adv->'materials_needed') = 'array' and jsonb_array_length(adv->'materials_needed') > 0 then
+    adv_out := adv_out || jsonb_build_object('materials_needed', adv->'materials_needed');
+  end if;
+
   -- Advanced-only sections:
   -- Include only when publish_mode='advanced', and hide blanks.
-  adv_out := '{}'::jsonb;
 
   if publish_mode = 'advanced' then
     lesson_overview := jsonb_strip_nulls(jsonb_build_object(
@@ -1324,10 +1328,6 @@ begin
 
     if lesson_overview is not null and lesson_overview <> '{}'::jsonb then
       adv_out := adv_out || jsonb_build_object('lesson_overview', lesson_overview);
-    end if;
-
-    if jsonb_typeof(adv->'materials_needed') = 'array' and jsonb_array_length(adv->'materials_needed') > 0 then
-      adv_out := adv_out || jsonb_build_object('materials_needed', adv->'materials_needed');
     end if;
 
     if jsonb_typeof(adv->'assessment_touch_points') = 'array' and jsonb_array_length(adv->'assessment_touch_points') > 0 then
