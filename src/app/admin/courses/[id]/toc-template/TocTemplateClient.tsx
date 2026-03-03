@@ -668,8 +668,14 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
                 <input value={teacherName} onChange={(e) => setTeacherName(e.target.value)} style={styles.input} />
               </label>
               <label style={styles.field}>
-                <div style={styles.label}>Phone policy *</div>
-                <input value={phonePolicy} onChange={(e) => setPhonePolicy(e.target.value)} style={styles.input} />
+                <div style={styles.label}>Phones policy *</div>
+                <textarea
+                  value={phonePolicy}
+                  onChange={(e) => setPhonePolicy(e.target.value)}
+                  rows={2}
+                  wrap="soft"
+                  style={{ ...styles.textarea, resize: 'vertical' }}
+                />
               </label>
               <label style={styles.field}>
                 <div style={styles.label}>TA name (optional)</div>
