@@ -541,7 +541,29 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
     setPublishMode(pm === 'advanced' ? 'advanced' : 'toc');
 
     const templateAdv = (tplAdvPayload && typeof tplAdvPayload === 'object' ? tplAdvPayload : {}) as any;
-    const overrideAdv = (raw?.advanced && typeof raw.advanced === 'object' ? raw.advanced : {}) as any;
+    let overrideAdv = (raw?.advanced && typeof raw.advanced === 'object' ? raw.advanced : {}) as any;
+
+    // If the override advanced payload is completely blank (common when created by older Save flows),
+    // ignore it so template advanced areas show up.
+    const isAllBlankAdv = (a: any) => {
+      if (!a || typeof a !== 'object') return true;
+      const s = (x: any) => String(x ?? '').trim();
+      const arrLen = (x: any) => (Array.isArray(x) ? x.length : 0);
+      return (
+        !s(a.central_theme) &&
+        !s(a.deep_hope) &&
+        !s(a.big_idea) &&
+        !s(a.learning_target) &&
+        !s(a.collaborative_structure) &&
+        !s(a.context) &&
+        arrLen(a.materials_needed) === 0 &&
+        arrLen(a.assessment_touch_points) === 0 &&
+        arrLen(a.pd_goal_connections) === 0 &&
+        arrLen(a.first_peoples_principles) === 0
+      );
+    };
+    if (isAllBlankAdv(overrideAdv)) overrideAdv = {};
+
     const effAdv = { ...templateAdv, ...overrideAdv };
 
     setAdvCentralTheme(String(effAdv?.central_theme ?? ''));
@@ -1098,11 +1120,28 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         first_peoples_principles: normalizeLines(advFirstPeoplesPrinciples),
       };
 
+      const allBlankAdvanced =
+        !nextAdvanced.central_theme &&
+        !nextAdvanced.deep_hope &&
+        !nextAdvanced.big_idea &&
+        !nextAdvanced.learning_target &&
+        !nextAdvanced.collaborative_structure &&
+        !nextAdvanced.context &&
+        nextAdvanced.materials_needed.length === 0 &&
+        nextAdvanced.assessment_touch_points.length === 0 &&
+        nextAdvanced.pd_goal_connections.length === 0 &&
+        nextAdvanced.first_peoples_principles.length === 0;
+
+      const base = (overridePayload && typeof overridePayload === 'object' ? { ...(overridePayload as any) } : {}) as any;
       const nextPayload2 = {
-        ...(overridePayload && typeof overridePayload === 'object' ? overridePayload : {}),
+        ...base,
         publish_mode: publishMode,
-        advanced: nextAdvanced,
+        ...(allBlankAdvanced && publishMode === 'toc' ? { advanced: undefined } : { advanced: nextAdvanced }),
       };
+      if (allBlankAdvanced && publishMode === 'toc') {
+        // Remove key entirely so template advanced areas can shine through.
+        delete (nextPayload2 as any).advanced;
+      }
 
       const { data: saved2, error: up2Err } = await supabase
         .from('toc_block_plans')
