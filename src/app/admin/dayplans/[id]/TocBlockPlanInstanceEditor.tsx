@@ -483,7 +483,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
   async function loadAll(supabase: ReturnType<typeof getSupabaseClient>, tocPlanId: string, tplId: string | null) {
     const { data: plan, error: pErr } = await supabase
       .from('toc_block_plans')
-      .select('template_id,plan_mode,override_note_to_toc,override_assessment_touch_point,override_payload')
+      .select('template_id,plan_mode,override_note_to_toc,override_assessment_touch_point,override_payload,seeded_at')
       .eq('id', tocPlanId)
       .single();
     if (pErr) throw pErr;
@@ -506,6 +506,26 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
 
     if (effectiveTplId && effectiveTplId !== plan.template_id) {
       await supabase.from('toc_block_plans').update({ template_id: effectiveTplId }).eq('id', tocPlanId);
+    }
+
+    // New architecture: copy template content into TOC instance cards once.
+    // /p reads ONLY from toc_* instance tables, so we must seed before public use.
+    try {
+      if (!((plan as any).seeded_at) && effectiveTplId) {
+        await supabase.rpc('seed_toc_block_plan_from_template', { toc_block_plan_id: tocPlanId });
+        // Reload plan row after seeding so subsequent reads use instance tables.
+        const { data: plan2, error: p2Err } = await supabase
+          .from('toc_block_plans')
+          .select('template_id,plan_mode,override_note_to_toc,override_assessment_touch_point,override_payload,seeded_at')
+          .eq('id', tocPlanId)
+          .single();
+        if (!p2Err && plan2) {
+          (plan as any).override_payload = (plan2 as any).override_payload;
+          (plan as any).seeded_at = (plan2 as any).seeded_at;
+        }
+      }
+    } catch {
+      // seeding is best-effort; editor can still function
     }
 
     setTemplateId(effectiveTplId);

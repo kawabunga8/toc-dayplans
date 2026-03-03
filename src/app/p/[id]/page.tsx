@@ -18,7 +18,7 @@ export default async function PublicPlanPage({ params }: { params: Promise<{ id:
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  const { data, error } = await supabase.rpc('get_public_day_plan_by_id', { plan_id: id });
+  const { data, error } = await supabase.rpc('get_public_day_plan_from_toc', { plan_id: id });
 
   if (error || !data) {
     notFound();

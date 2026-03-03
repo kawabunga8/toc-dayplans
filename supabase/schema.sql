@@ -617,6 +617,11 @@ create unique index if not exists toc_block_plans_day_plan_block_id_uq on toc_bl
 create index if not exists toc_block_plans_class_id_idx on toc_block_plans(class_id);
 create index if not exists toc_block_plans_template_id_idx on toc_block_plans(template_id);
 
+-- Make TOC instances self-contained for public rendering.
+alter table public.toc_block_plans
+  add column if not exists override_payload jsonb,
+  add column if not exists seeded_at timestamptz;
+
 create table if not exists toc_opening_routine_steps (
   id uuid primary key default gen_random_uuid(),
   toc_block_plan_id uuid not null references toc_block_plans(id) on delete cascade,
@@ -1477,7 +1482,309 @@ $$;
 revoke all on function resolve_day_plan_payload(uuid) from public;
 grant execute on function resolve_day_plan_payload(uuid) to authenticated;
 
--- Public dayplan payload (by day_plans.id)
+-- Seed a TOC instance from its template (copy-once, staff only).
+create or replace function public.seed_toc_block_plan_from_template(toc_block_plan_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  tbp record;
+  tpl record;
+  tpl_adv jsonb;
+begin
+  if not is_staff() then
+    return;
+  end if;
+
+  select * into tbp
+  from toc_block_plans
+  where id = toc_block_plan_id
+  limit 1;
+
+  if not found then
+    return;
+  end if;
+
+  if tbp.seeded_at is not null then
+    return;
+  end if;
+
+  if tbp.template_id is null then
+    return;
+  end if;
+
+  select * into tpl
+  from class_toc_templates
+  where id = tbp.template_id
+  limit 1;
+
+  if not found then
+    return;
+  end if;
+
+  -- wipe existing instance rows
+  delete from toc_opening_routine_steps where toc_block_plan_id = tbp.id;
+  delete from toc_lesson_flow_phases where toc_block_plan_id = tbp.id;
+  delete from toc_activity_options where toc_block_plan_id = tbp.id;
+  delete from toc_what_to_do_if_items where toc_block_plan_id = tbp.id;
+  delete from toc_overview_rows where toc_block_plan_id = tbp.id;
+  delete from toc_role_rows where toc_block_plan_id = tbp.id;
+  delete from toc_end_of_class_items where toc_block_plan_id = tbp.id;
+
+  -- copy template -> instance
+  insert into toc_opening_routine_steps (toc_block_plan_id, sort_order, step_text, source_template_step_id)
+  select tbp.id, s.sort_order, s.step_text, s.id
+  from class_opening_routine_steps s
+  where s.template_id = tpl.id
+  order by s.sort_order;
+
+  insert into toc_lesson_flow_phases (toc_block_plan_id, sort_order, time_text, phase_text, activity_text, purpose_text, source_template_phase_id)
+  select tbp.id, p.sort_order, p.time_text, p.phase_text, p.activity_text, p.purpose_text, p.id
+  from class_lesson_flow_phases p
+  where p.template_id = tpl.id
+  order by p.sort_order;
+
+  -- activity options + steps
+  insert into toc_activity_options (toc_block_plan_id, sort_order, title, description, details_text, toc_role_text, source_template_option_id)
+  select tbp.id, o.sort_order, o.title, o.description, o.details_text, o.toc_role_text, o.id
+  from class_activity_options o
+  where o.template_id = tpl.id
+  order by o.sort_order;
+
+  insert into toc_activity_option_steps (toc_activity_option_id, sort_order, step_text, source_template_option_step_id)
+  select inst_opt.id, s.sort_order, s.step_text, s.id
+  from class_activity_option_steps s
+  join class_activity_options o on o.id = s.activity_option_id
+  join toc_activity_options inst_opt
+    on inst_opt.toc_block_plan_id = tbp.id
+   and inst_opt.source_template_option_id = o.id
+  where o.template_id = tpl.id
+  order by o.sort_order, s.sort_order;
+
+  insert into toc_what_to_do_if_items (toc_block_plan_id, sort_order, scenario_text, response_text, source_template_item_id)
+  select tbp.id, w.sort_order, w.scenario_text, w.response_text, w.id
+  from class_what_to_do_if_items w
+  where w.template_id = tpl.id
+  order by w.sort_order;
+
+  insert into toc_overview_rows (toc_block_plan_id, sort_order, label, value)
+  select tbp.id, r.sort_order, r.label, r.value
+  from class_overview_rows r
+  where r.template_id = tpl.id
+  order by r.sort_order;
+
+  insert into toc_role_rows (toc_block_plan_id, sort_order, who, responsibility)
+  select tbp.id, r.sort_order, r.who, r.responsibility
+  from class_role_rows r
+  where r.template_id = tpl.id
+  order by r.sort_order;
+
+  insert into toc_end_of_class_items (toc_block_plan_id, sort_order, item_text)
+  select tbp.id, r.sort_order, r.item_text
+  from class_end_of_class_items r
+  where r.template_id = tpl.id
+  order by r.sort_order;
+
+  tpl_adv := coalesce(tpl.advanced_payload, '{}'::jsonb);
+
+  update toc_block_plans
+  set seeded_at = now(),
+      override_payload = coalesce(override_payload, '{}'::jsonb)
+        || jsonb_build_object('publish_mode', coalesce(nullif((override_payload->>'publish_mode'), ''), 'toc'))
+        || jsonb_build_object('advanced', tpl_adv)
+  where id = tbp.id;
+end;
+$$;
+revoke all on function public.seed_toc_block_plan_from_template(uuid) from public;
+grant execute on function public.seed_toc_block_plan_from_template(uuid) to authenticated;
+
+-- Public dayplan payload built ONLY from TOC instance tables (no templates, no published snapshot).
+create or replace function public.get_public_day_plan_from_toc(plan_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  p record;
+  blocks jsonb;
+  primary_block_id uuid;
+  tbp record;
+  pm text;
+  adv jsonb;
+  lesson_overview jsonb;
+begin
+  if plan_id is null then
+    return null;
+  end if;
+
+  select * into p
+  from day_plans
+  where id = plan_id
+    and visibility = 'link'
+    and trashed_at is null
+  limit 1;
+
+  if not found then
+    return null;
+  end if;
+
+  -- blocks (no students here)
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'id', b.id,
+        'start_time', b.start_time,
+        'end_time', b.end_time,
+        'room', b.room,
+        'class_name', b.class_name,
+        'details', b.details,
+        'class_id', b.class_id
+      )
+      order by b.start_time asc
+    ),
+    '[]'::jsonb
+  )
+  into blocks
+  from day_plan_blocks b
+  where b.day_plan_id = p.id;
+
+  -- pick first block as primary
+  select b.id into primary_block_id
+  from day_plan_blocks b
+  where b.day_plan_id = p.id
+  order by b.start_time asc
+  limit 1;
+
+  select * into tbp
+  from toc_block_plans
+  where day_plan_block_id = primary_block_id
+  limit 1;
+
+  if not found then
+    -- no toc for this plan yet
+    return jsonb_build_object(
+      'id', p.id,
+      'plan_date', p.plan_date,
+      'slot', p.slot,
+      'friday_type', p.friday_type,
+      'title', p.title,
+      'notes', p.notes,
+      'blocks', blocks
+    );
+  end if;
+
+  pm := coalesce(nullif((tbp.override_payload->>'publish_mode'), ''), 'toc');
+  adv := coalesce(tbp.override_payload->'advanced', '{}'::jsonb);
+
+  lesson_overview := jsonb_strip_nulls(jsonb_build_object(
+    'central_theme', nullif(trim(coalesce(adv->>'central_theme','')), ''),
+    'deep_hope', nullif(trim(coalesce(adv->>'deep_hope','')), ''),
+    'big_idea', nullif(trim(coalesce(adv->>'big_idea','')), ''),
+    'learning_target', nullif(trim(coalesce(adv->>'learning_target','')), ''),
+    'collaborative_structure', nullif(trim(coalesce(adv->>'collaborative_structure','')), ''),
+    'context', nullif(trim(coalesce(adv->>'context','')), '')
+  ));
+
+  return jsonb_build_object(
+    'id', p.id,
+    'plan_date', p.plan_date,
+    'slot', p.slot,
+    'friday_type', p.friday_type,
+    'title', p.title,
+    'notes', p.notes,
+    'blocks', blocks,
+    'toc', (
+      jsonb_build_object(
+        'plan_mode', tbp.plan_mode,
+        'teacher_name', coalesce(nullif(tbp.override_teacher_name,''), ''),
+        'ta_name', coalesce(nullif(tbp.override_ta_name,''), ''),
+        'ta_role', coalesce(nullif(tbp.override_ta_role,''), ''),
+        'phone_policy', coalesce(nullif(tbp.override_phone_policy,''), 'Not permitted'),
+        'note_to_toc', coalesce(nullif(tbp.override_note_to_toc,''), ''),
+        'attendance_note', coalesce(nullif(tbp.override_attendance_note,''), ''),
+        'class_overview_rows', (
+          select coalesce(jsonb_agg(jsonb_build_object('label', r.label, 'value', r.value) order by r.sort_order), '[]'::jsonb)
+          from toc_overview_rows r where r.toc_block_plan_id = tbp.id
+        ),
+        'division_of_roles_rows', (
+          select coalesce(jsonb_agg(jsonb_build_object('who', r.who, 'responsibility', r.responsibility) order by r.sort_order), '[]'::jsonb)
+          from toc_role_rows r where r.toc_block_plan_id = tbp.id
+        ),
+        'opening_routine_steps', (
+          select coalesce(jsonb_agg(jsonb_build_object('step_text', s.step_text) order by s.sort_order), '[]'::jsonb)
+          from toc_opening_routine_steps s where s.toc_block_plan_id = tbp.id
+        ),
+        'lesson_flow_phases', (
+          select coalesce(jsonb_agg(jsonb_build_object('time_text', s.time_text, 'phase_text', s.phase_text, 'activity_text', s.activity_text, 'purpose_text', s.purpose_text) order by s.sort_order), '[]'::jsonb)
+          from toc_lesson_flow_phases s where s.toc_block_plan_id = tbp.id
+        ),
+        'activity_options', (
+          select coalesce(jsonb_agg(
+            jsonb_build_object(
+              'title', o.title,
+              'description', o.description,
+              'details_text', o.details_text,
+              'toc_role_text', o.toc_role_text,
+              'steps', (
+                select coalesce(jsonb_agg(jsonb_build_object('step_text', st.step_text) order by st.sort_order), '[]'::jsonb)
+                from toc_activity_option_steps st where st.toc_activity_option_id = o.id
+              )
+            )
+            order by o.sort_order
+          ), '[]'::jsonb)
+          from toc_activity_options o where o.toc_block_plan_id = tbp.id
+        ),
+        'what_to_do_if_items', (
+          select coalesce(jsonb_agg(jsonb_build_object('scenario_text', w.scenario_text, 'response_text', w.response_text) order by w.sort_order), '[]'::jsonb)
+          from toc_what_to_do_if_items w where w.toc_block_plan_id = tbp.id
+        ),
+        'end_of_class_items', (
+          select coalesce(jsonb_agg(jsonb_build_object('item_text', e.item_text) order by e.sort_order), '[]'::jsonb)
+          from toc_end_of_class_items e where e.toc_block_plan_id = tbp.id
+        )
+      )
+      || (
+        case
+          when pm = 'advanced' and lesson_overview <> '{}'::jsonb then jsonb_build_object('lesson_overview', lesson_overview)
+          when pm = 'advanced' then '{}'::jsonb
+          else '{}'::jsonb
+        end
+      )
+      || (
+        case
+          when jsonb_typeof(adv->'materials_needed') = 'array' and jsonb_array_length(adv->'materials_needed') > 0 then jsonb_build_object('materials_needed', adv->'materials_needed')
+          else '{}'::jsonb
+        end
+      )
+      || (
+        case
+          when pm = 'advanced' and jsonb_typeof(adv->'assessment_touch_points') = 'array' and jsonb_array_length(adv->'assessment_touch_points') > 0 then jsonb_build_object('assessment_touch_points', adv->'assessment_touch_points')
+          else '{}'::jsonb
+        end
+      )
+      || (
+        case
+          when pm = 'advanced' and jsonb_typeof(adv->'pd_goal_connections') = 'array' and jsonb_array_length(adv->'pd_goal_connections') > 0 then jsonb_build_object('pd_goal_connections', adv->'pd_goal_connections')
+          else '{}'::jsonb
+        end
+      )
+      || (
+        case
+          when pm = 'advanced' and jsonb_typeof(adv->'first_peoples_principles') = 'array' and jsonb_array_length(adv->'first_peoples_principles') > 0 then jsonb_build_object('first_peoples_principles', adv->'first_peoples_principles')
+          else '{}'::jsonb
+        end
+      )
+    )
+  );
+end;
+$$;
+revoke all on function public.get_public_day_plan_from_toc(uuid) from public;
+grant execute on function public.get_public_day_plan_from_toc(uuid) to anon;
+
+-- Legacy public dayplan payload (by day_plans.id)
 -- Reads the published snapshot only (no template access).
 create or replace function get_public_day_plan_by_id(plan_id uuid)
 returns jsonb
