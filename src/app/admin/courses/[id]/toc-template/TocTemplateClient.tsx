@@ -751,25 +751,55 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
 
               <label style={styles.field}>
                 <div style={styles.label}>Central Theme</div>
-                <input value={advCentralTheme} onChange={(e) => setAdvCentralTheme(e.target.value)} style={styles.input} />
+                <textarea
+                  value={advCentralTheme}
+                  onChange={(e) => setAdvCentralTheme(e.target.value)}
+                  rows={2}
+                  wrap="soft"
+                  style={{ ...styles.textarea, resize: 'vertical' }}
+                />
               </label>
               <label style={styles.field}>
                 <div style={styles.label}>Deep Hope</div>
-                <input value={advDeepHope} onChange={(e) => setAdvDeepHope(e.target.value)} style={styles.input} />
+                <textarea
+                  value={advDeepHope}
+                  onChange={(e) => setAdvDeepHope(e.target.value)}
+                  rows={2}
+                  wrap="soft"
+                  style={{ ...styles.textarea, resize: 'vertical' }}
+                />
               </label>
 
               <label style={styles.field}>
                 <div style={styles.label}>Big Idea</div>
-                <input value={advBigIdea} onChange={(e) => setAdvBigIdea(e.target.value)} style={styles.input} />
+                <textarea
+                  value={advBigIdea}
+                  onChange={(e) => setAdvBigIdea(e.target.value)}
+                  rows={2}
+                  wrap="soft"
+                  style={{ ...styles.textarea, resize: 'vertical' }}
+                />
               </label>
               <label style={styles.field}>
                 <div style={styles.label}>Learning Target</div>
-                <input value={advLearningTarget} onChange={(e) => setAdvLearningTarget(e.target.value)} style={styles.input} />
+                <textarea
+                  value={advLearningTarget}
+                  onChange={(e) => setAdvLearningTarget(e.target.value)}
+                  rows={2}
+                  wrap="soft"
+                  style={{ ...styles.textarea, resize: 'vertical' }}
+                />
               </label>
 
               <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
                 <div style={styles.label}>Collaborative Structure</div>
-                <input value={advCollaborativeStructure} onChange={(e) => setAdvCollaborativeStructure(e.target.value)} style={styles.input} />
+                <textarea
+                  value={advCollaborativeStructure}
+                  onChange={(e) => setAdvCollaborativeStructure(e.target.value)}
+                  rows={2}
+                  wrap="soft"
+                  style={{ ...styles.textarea, resize: 'vertical' }}
+                />
               </label>
 
               <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
@@ -1343,6 +1373,8 @@ const styles: Record<string, React.CSSProperties> = {
     background: RCS.white,
     color: RCS.textDark,
     fontFamily: 'inherit',
+    whiteSpace: 'pre-wrap',
+    overflowWrap: 'anywhere',
   },
   rowItem: {
     display: 'flex',
