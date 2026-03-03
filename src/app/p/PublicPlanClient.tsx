@@ -59,6 +59,20 @@ type PublicPlan = {
     division_of_roles_rows?: Array<{ who: string; responsibility: string }>;
     end_of_class_items?: Array<{ item_text: string }>;
     attendance_note?: string;
+
+    // Advanced-only (published only when publish_mode='advanced')
+    lesson_overview?: {
+      central_theme?: string;
+      deep_hope?: string;
+      big_idea?: string;
+      learning_target?: string;
+      collaborative_structure?: string;
+      context?: string;
+    };
+    materials_needed?: string[];
+    assessment_touch_points?: string[];
+    pd_goal_connections?: string[];
+    first_peoples_principles?: string[];
   };
 };
 
@@ -596,6 +610,79 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
                             <li key={idx} style={{ marginBottom: 4, fontSize: 12 }}>
                               {it.item_text}
                             </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+
+                    {/* Advanced sections (only present in payload when publish_mode='advanced' and non-empty) */}
+                    {plan.toc.lesson_overview && Object.values(plan.toc.lesson_overview).some((v) => v?.trim?.()) ? (
+                      <div style={styles.tocSection}>
+                        <div style={styles.tocSectionTitle}>Lesson Overview</div>
+                        <table style={styles.printTable as any}>
+                          <tbody>
+                            {plan.toc.lesson_overview.central_theme?.trim() ? (
+                              <tr><td style={styles.printTd as any}><b>Central Theme</b></td><td style={styles.printTd as any}>{plan.toc.lesson_overview.central_theme}</td></tr>
+                            ) : null}
+                            {plan.toc.lesson_overview.deep_hope?.trim() ? (
+                              <tr style={styles.printTrAlt as any}><td style={styles.printTd as any}><b>Deep Hope</b></td><td style={styles.printTd as any}>{plan.toc.lesson_overview.deep_hope}</td></tr>
+                            ) : null}
+                            {plan.toc.lesson_overview.big_idea?.trim() ? (
+                              <tr><td style={styles.printTd as any}><b>Big Idea</b></td><td style={styles.printTd as any}>{plan.toc.lesson_overview.big_idea}</td></tr>
+                            ) : null}
+                            {plan.toc.lesson_overview.learning_target?.trim() ? (
+                              <tr style={styles.printTrAlt as any}><td style={styles.printTd as any}><b>Learning Target</b></td><td style={styles.printTd as any}>{plan.toc.lesson_overview.learning_target}</td></tr>
+                            ) : null}
+                            {plan.toc.lesson_overview.collaborative_structure?.trim() ? (
+                              <tr><td style={styles.printTd as any}><b>Collaborative Structure</b></td><td style={styles.printTd as any}>{plan.toc.lesson_overview.collaborative_structure}</td></tr>
+                            ) : null}
+                            {plan.toc.lesson_overview.context?.trim() ? (
+                              <tr style={styles.printTrAlt as any}><td style={styles.printTd as any}><b>Context</b></td><td style={styles.printTd as any}>{plan.toc.lesson_overview.context}</td></tr>
+                            ) : null}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : null}
+
+                    {plan.toc.materials_needed?.length ? (
+                      <div style={styles.tocSection}>
+                        <div style={styles.tocSectionTitle}>Materials Needed</div>
+                        <ul style={{ margin: 0, paddingLeft: 18 }}>
+                          {plan.toc.materials_needed.map((m, idx) => (
+                            <li key={idx} style={{ marginBottom: 4, fontSize: 12 }}>{m}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+
+                    {plan.toc.assessment_touch_points?.length ? (
+                      <div style={{ ...styles.tocSection, background: RCS.lightGold, borderColor: RCS.gold }}>
+                        <div style={styles.tocSectionTitle}>★ Assessment Touch Points</div>
+                        <ul style={{ margin: 0, paddingLeft: 18 }}>
+                          {plan.toc.assessment_touch_points.map((t, idx) => (
+                            <li key={idx} style={{ marginBottom: 4, fontSize: 12 }}>{t}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+
+                    {plan.toc.pd_goal_connections?.length ? (
+                      <div style={{ ...styles.tocSection, background: RCS.lightBlue, borderColor: RCS.navy }}>
+                        <div style={styles.tocSectionTitle}>PD Goal Connections</div>
+                        <ul style={{ margin: 0, paddingLeft: 18 }}>
+                          {plan.toc.pd_goal_connections.map((g, idx) => (
+                            <li key={idx} style={{ marginBottom: 4, fontSize: 12 }}>{g}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+
+                    {plan.toc.first_peoples_principles?.length ? (
+                      <div style={styles.tocSection}>
+                        <div style={styles.tocSectionTitle}>First Peoples Principles of Learning</div>
+                        <ul style={{ margin: 0, paddingLeft: 18 }}>
+                          {plan.toc.first_peoples_principles.map((p2, idx) => (
+                            <li key={idx} style={{ marginBottom: 4, fontSize: 12 }}>{p2}</li>
                           ))}
                         </ul>
                       </div>

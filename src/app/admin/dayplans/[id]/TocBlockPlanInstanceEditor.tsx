@@ -78,6 +78,22 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
   const [noteTOC, setNoteTOC] = useState('');
   const [templateNoteTOC, setTemplateNoteTOC] = useState('');
 
+  // Publish mode + Advanced sections (editable always, but only published when publish_mode='advanced')
+  const [publishMode, setPublishMode] = useState<'toc' | 'advanced'>('toc');
+  const [templateAdvancedPayload, setTemplateAdvancedPayload] = useState<any>(null);
+
+  const [advCentralTheme, setAdvCentralTheme] = useState('');
+  const [advDeepHope, setAdvDeepHope] = useState('');
+  const [advBigIdea, setAdvBigIdea] = useState('');
+  const [advLearningTarget, setAdvLearningTarget] = useState('');
+  const [advCollaborativeStructure, setAdvCollaborativeStructure] = useState('');
+  const [advContext, setAdvContext] = useState('');
+
+  const [advMaterialsNeeded, setAdvMaterialsNeeded] = useState('');
+  const [advAssessmentTouchPoints, setAdvAssessmentTouchPoints] = useState('');
+  const [advPdGoalConnections, setAdvPdGoalConnections] = useState('');
+  const [advFirstPeoplesPrinciples, setAdvFirstPeoplesPrinciples] = useState('');
+
   // Assessment touch point (template preview + day override)
   const [templateTouchPoint, setTemplateTouchPoint] = useState<AssessmentTouchPoint | null>(null);
   const [touchTiming, setTouchTiming] = useState('');
@@ -499,20 +515,47 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
 
     let tplNote = '';
     let tplTouch: any = null;
+    let tplAdvPayload: any = null;
     if (effectiveTplId) {
       const { data: tplRow, error: tErr } = await supabase
         .from('class_toc_templates')
-        .select('note_to_toc,assessment_touch_point')
+        .select('note_to_toc,assessment_touch_point,advanced_payload')
         .eq('id', effectiveTplId)
         .maybeSingle();
       if (tErr) throw tErr;
       tplNote = (tplRow?.note_to_toc ?? '').toString();
       tplTouch = (tplRow as any)?.assessment_touch_point ?? null;
+      tplAdvPayload = (tplRow as any)?.advanced_payload ?? null;
+      setTemplateAdvancedPayload(tplAdvPayload);
+    } else {
+      setTemplateAdvancedPayload(null);
     }
     setTemplateNoteTOC(tplNote);
     setTemplateTouchPoint(tplTouch);
     const override = (plan.override_note_to_toc ?? '').toString();
     setNoteTOC(override || tplNote);
+
+    // publish mode + advanced fields (effective = template defaults overridden by instance override_payload.advanced)
+    const raw = (plan as any)?.override_payload ?? null;
+    const pm = String(raw?.publish_mode ?? '').trim();
+    setPublishMode(pm === 'advanced' ? 'advanced' : 'toc');
+
+    const templateAdv = (tplAdvPayload && typeof tplAdvPayload === 'object' ? tplAdvPayload : {}) as any;
+    const overrideAdv = (raw?.advanced && typeof raw.advanced === 'object' ? raw.advanced : {}) as any;
+    const effAdv = { ...templateAdv, ...overrideAdv };
+
+    setAdvCentralTheme(String(effAdv?.central_theme ?? ''));
+    setAdvDeepHope(String(effAdv?.deep_hope ?? ''));
+    setAdvBigIdea(String(effAdv?.big_idea ?? ''));
+    setAdvLearningTarget(String(effAdv?.learning_target ?? ''));
+    setAdvCollaborativeStructure(String(effAdv?.collaborative_structure ?? ''));
+    setAdvContext(String(effAdv?.context ?? ''));
+
+    const toLines = (arr: any) => (Array.isArray(arr) ? arr.map((x) => String(x ?? '').trim()).filter(Boolean).join('\n') : '');
+    setAdvMaterialsNeeded(toLines(effAdv?.materials_needed));
+    setAdvAssessmentTouchPoints(toLines(effAdv?.assessment_touch_points));
+    setAdvPdGoalConnections(toLines(effAdv?.pd_goal_connections));
+    setAdvFirstPeoplesPrinciples(toLines(effAdv?.first_peoples_principles));
 
     const tp = ((plan as any).override_assessment_touch_point ?? null) as any;
     const baseTp = tplTouch ?? null;
@@ -1035,6 +1078,41 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         await supabase.from('toc_lesson_flow_phases').delete().eq('toc_block_plan_id', tocBlockPlanId);
       }
 
+      // Persist publish_mode + advanced sections (JSON override payload)
+      const normalizeLines = (raw: string) =>
+        raw
+          .split('\n')
+          .map((l) => l.trim())
+          .filter(Boolean);
+
+      const nextAdvanced = {
+        central_theme: advCentralTheme.trim(),
+        deep_hope: advDeepHope.trim(),
+        big_idea: advBigIdea.trim(),
+        learning_target: advLearningTarget.trim(),
+        collaborative_structure: advCollaborativeStructure.trim(),
+        context: advContext.trim(),
+        materials_needed: normalizeLines(advMaterialsNeeded),
+        assessment_touch_points: normalizeLines(advAssessmentTouchPoints),
+        pd_goal_connections: normalizeLines(advPdGoalConnections),
+        first_peoples_principles: normalizeLines(advFirstPeoplesPrinciples),
+      };
+
+      const nextPayload2 = {
+        ...(overridePayload && typeof overridePayload === 'object' ? overridePayload : {}),
+        publish_mode: publishMode,
+        advanced: nextAdvanced,
+      };
+
+      const { data: saved2, error: up2Err } = await supabase
+        .from('toc_block_plans')
+        .update({ override_payload: nextPayload2, updated_at: new Date().toISOString() })
+        .eq('id', tocBlockPlanId)
+        .select('override_payload')
+        .maybeSingle();
+      if (up2Err) throw up2Err;
+      setOverridePayload((saved2 as any)?.override_payload ?? nextPayload2);
+
       // Opening routine overrides only if created
       if (openingOverride) {
         await supabase.from('toc_opening_routine_steps').delete().eq('toc_block_plan_id', tocBlockPlanId);
@@ -1298,6 +1376,79 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
               Template baseline: {String((templateTouchPoint as any)?.timing_in_lesson ?? '').trim() ? 'set' : '—'}
             </div>
           ) : null}
+        </div>
+
+        <div style={{ gridColumn: '1 / -1', ...styles.touchCard }}>
+          <div style={{ ...styles.sectionHeader, marginBottom: 8, display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+            <div>Publishing Mode</div>
+            <label style={{ display: 'inline-flex', gap: 8, alignItems: 'center', fontSize: 12 }}>
+              <span style={{ opacity: 0.85 }}>TOC (Standard)</span>
+              <input
+                type="checkbox"
+                checked={publishMode === 'advanced'}
+                onChange={(e) => {
+                  setPublishMode(e.target.checked ? 'advanced' : 'toc');
+                  markUnsaved();
+                }}
+                disabled={isDemo}
+              />
+              <span style={{ opacity: 0.85 }}>Advanced (Everything)</span>
+            </label>
+          </div>
+          <div style={{ fontSize: 12, opacity: 0.85 }}>
+            Standard mode does not publish advanced sections to <code>/p</code>. Advanced mode publishes everything (blank sections are hidden).
+          </div>
+        </div>
+
+        <div style={{ gridColumn: '1 / -1', ...styles.touchCard }}>
+          <div style={{ ...styles.sectionHeader, marginBottom: 8 }}>Advanced Sections (editable; published only in Advanced mode)</div>
+
+          <div style={styles.grid2}>
+            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+              <span style={styles.label}>Central Theme</span>
+              <textarea value={advCentralTheme} onChange={(e) => { setAdvCentralTheme(e.target.value); markUnsaved(); }} rows={2} style={styles.textarea} disabled={isDemo} />
+            </label>
+            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+              <span style={styles.label}>Deep Hope</span>
+              <textarea value={advDeepHope} onChange={(e) => { setAdvDeepHope(e.target.value); markUnsaved(); }} rows={2} style={styles.textarea} disabled={isDemo} />
+            </label>
+            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+              <span style={styles.label}>Big Idea</span>
+              <textarea value={advBigIdea} onChange={(e) => { setAdvBigIdea(e.target.value); markUnsaved(); }} rows={2} style={styles.textarea} disabled={isDemo} />
+            </label>
+            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+              <span style={styles.label}>Learning Target</span>
+              <textarea value={advLearningTarget} onChange={(e) => { setAdvLearningTarget(e.target.value); markUnsaved(); }} rows={2} style={styles.textarea} disabled={isDemo} />
+            </label>
+            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+              <span style={styles.label}>Collaborative Structure</span>
+              <textarea value={advCollaborativeStructure} onChange={(e) => { setAdvCollaborativeStructure(e.target.value); markUnsaved(); }} rows={2} style={styles.textarea} disabled={isDemo} />
+            </label>
+            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+              <span style={styles.label}>Context</span>
+              <textarea value={advContext} onChange={(e) => { setAdvContext(e.target.value); markUnsaved(); }} rows={3} style={styles.textarea} disabled={isDemo} />
+            </label>
+
+            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+              <span style={styles.label}>Materials Needed (one per line)</span>
+              <textarea value={advMaterialsNeeded} onChange={(e) => { setAdvMaterialsNeeded(e.target.value); markUnsaved(); }} rows={5} style={styles.textarea} disabled={isDemo} />
+            </label>
+
+            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+              <span style={styles.label}>Assessment Touch Points (one per line)</span>
+              <textarea value={advAssessmentTouchPoints} onChange={(e) => { setAdvAssessmentTouchPoints(e.target.value); markUnsaved(); }} rows={5} style={styles.textarea} disabled={isDemo} />
+            </label>
+
+            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+              <span style={styles.label}>PD Goal Connections (one per line)</span>
+              <textarea value={advPdGoalConnections} onChange={(e) => { setAdvPdGoalConnections(e.target.value); markUnsaved(); }} rows={5} style={styles.textarea} disabled={isDemo} />
+            </label>
+
+            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+              <span style={styles.label}>First Peoples Principles of Learning (one per line)</span>
+              <textarea value={advFirstPeoplesPrinciples} onChange={(e) => { setAdvFirstPeoplesPrinciples(e.target.value); markUnsaved(); }} rows={5} style={styles.textarea} disabled={isDemo} />
+            </label>
+          </div>
         </div>
       </div>
 

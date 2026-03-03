@@ -21,6 +21,7 @@ type DayPlanRow = {
   visibility: 'private' | 'link';
   share_expires_at: string | null;
   trashed_at: string | null;
+  published_at?: string | null;
 };
 
 type ClassRow = { id: string; block_label: string | null; name: string; room: string | null };
@@ -105,7 +106,7 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
         const full = await supabase
           .from('day_plans')
           .select(
-            'id,plan_date,slot,friday_type,title,notes,learning_standard_focus,core_competency_focus,learning_standard_id,tags,visibility,share_expires_at,trashed_at'
+            'id,plan_date,slot,friday_type,title,notes,learning_standard_focus,core_competency_focus,learning_standard_id,tags,visibility,share_expires_at,trashed_at,published_at'
           )
           .eq('id', id)
           .maybeSingle();
@@ -174,6 +175,30 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
         name: c.name,
         room: c.room ?? null,
       })) as ClassRow[]);
+
+      // Unpublished TOC changes indicator: compare latest toc_block_plans.updated_at to day_plans.published_at
+      try {
+        const blockIds = (blockData ?? []).map((b: any) => b.id).filter(Boolean);
+        let latestTocEdit: string | null = null;
+        if (blockIds.length) {
+          const { data: tbps, error: tbpErr } = await supabase
+            .from('toc_block_plans')
+            .select('updated_at')
+            .in('day_plan_block_id', blockIds)
+            .order('updated_at', { ascending: false })
+            .limit(1);
+          if (!tbpErr && tbps?.length) latestTocEdit = (tbps[0] as any)?.updated_at ?? null;
+        }
+
+        const pubAt = (p as any)?.published_at ?? null;
+        setHasUnpublishedChanges(() => {
+          if (!latestTocEdit) return false;
+          if (!pubAt) return true;
+          return new Date(latestTocEdit).getTime() > new Date(pubAt).getTime();
+        });
+      } catch {
+        // ignore
+      }
 
       setStatus('idle');
     } catch (e: any) {
@@ -750,6 +775,7 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
   }
 
   const [showAllBlocks, setShowAllBlocks] = useState(false);
+  const [hasUnpublishedChanges, setHasUnpublishedChanges] = useState(false);
 
   const published = plan?.visibility === 'link';
   const trashed = !!plan?.trashed_at;
@@ -1033,6 +1059,12 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
               </div>
             )}
             <div style={{ display: 'grid', gap: 8 }}>
+              {hasUnpublishedChanges ? (
+                <div style={{ ...styles.callout, borderColor: '#C9A84C', background: '#FDF3DC' }}>
+                  <b>Unpublished changes</b> — the public page (<code>/p</code>) shows the last published version.
+                </div>
+              ) : null}
+
               <div>
                 <b>Status:</b> {published ? <span>Published</span> : <span>Not published</span>}
               </div>
@@ -1050,9 +1082,12 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
             </div>
 
             <div style={{ display: 'flex', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
-              <button onClick={publish} disabled={status !== 'idle' || trashed} style={styles.primaryBtn}>
-                {status === 'publishing' ? 'Publishing…' : published ? 'Republish' : 'Publish'}
-              </button>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+                <button onClick={publish} disabled={status !== 'idle' || trashed} style={styles.primaryBtn}>
+                  {status === 'publishing' ? 'Publishing…' : published ? 'Republish' : 'Publish'}
+                </button>
+                {hasUnpublishedChanges ? <span style={{ fontSize: 12, color: '#7F1D1D', fontWeight: 800 }}>Unpublished changes</span> : null}
+              </div>
               <button onClick={revoke} disabled={!published || status !== 'idle'} style={styles.dangerBtn}>
                 Revoke
               </button>

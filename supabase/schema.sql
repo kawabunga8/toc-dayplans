@@ -481,6 +481,9 @@ create table if not exists class_toc_templates (
   constraint class_toc_templates_plan_mode_check check (plan_mode in ('lesson_flow','activity_options'))
 );
 
+-- Advanced TOC content (template-level JSON payload)
+alter table class_toc_templates add column if not exists advanced_payload jsonb;
+
 create index if not exists class_toc_templates_class_id_idx on class_toc_templates(class_id);
 
 create table if not exists class_opening_routine_steps (
@@ -945,6 +948,13 @@ declare
   eff_note text;
   eff_attendance_note text;
 
+  publish_mode text;
+  tpl_adv jsonb;
+  ov_adv jsonb;
+  adv jsonb;
+  adv_out jsonb;
+  lesson_overview jsonb;
+
 begin
   if not is_staff() then
     return null;
@@ -1088,6 +1098,11 @@ begin
     eff_phone := coalesce(nullif(tbp.override_phone_policy, ''), tpl.phone_policy, 'Not permitted');
     eff_note := coalesce(nullif(tbp.override_note_to_toc, ''), tpl.note_to_toc, '');
     eff_attendance_note := coalesce(nullif(tbp.override_attendance_note, ''), tpl.attendance_note, '');
+
+    publish_mode := coalesce(nullif((tbp.override_payload->>'publish_mode'), ''), 'toc');
+    tpl_adv := coalesce(tpl.advanced_payload, '{}'::jsonb);
+    ov_adv := coalesce(tbp.override_payload->'advanced', '{}'::jsonb);
+    adv := tpl_adv || ov_adv;
 
     -- Child tables: use instance if it exists, otherwise template.
     select exists(select 1 from toc_opening_routine_steps where toc_block_plan_id = tbp.id) into has_or;
@@ -1293,6 +1308,41 @@ begin
     end if;
   end if;
 
+  -- Advanced-only sections:
+  -- Include only when publish_mode='advanced', and hide blanks.
+  adv_out := '{}'::jsonb;
+
+  if publish_mode = 'advanced' then
+    lesson_overview := jsonb_strip_nulls(jsonb_build_object(
+      'central_theme', nullif(trim(coalesce(adv->>'central_theme','')), ''),
+      'deep_hope', nullif(trim(coalesce(adv->>'deep_hope','')), ''),
+      'big_idea', nullif(trim(coalesce(adv->>'big_idea','')), ''),
+      'learning_target', nullif(trim(coalesce(adv->>'learning_target','')), ''),
+      'collaborative_structure', nullif(trim(coalesce(adv->>'collaborative_structure','')), ''),
+      'context', nullif(trim(coalesce(adv->>'context','')), '')
+    ));
+
+    if lesson_overview is not null and lesson_overview <> '{}'::jsonb then
+      adv_out := adv_out || jsonb_build_object('lesson_overview', lesson_overview);
+    end if;
+
+    if jsonb_typeof(adv->'materials_needed') = 'array' and jsonb_array_length(adv->'materials_needed') > 0 then
+      adv_out := adv_out || jsonb_build_object('materials_needed', adv->'materials_needed');
+    end if;
+
+    if jsonb_typeof(adv->'assessment_touch_points') = 'array' and jsonb_array_length(adv->'assessment_touch_points') > 0 then
+      adv_out := adv_out || jsonb_build_object('assessment_touch_points', adv->'assessment_touch_points');
+    end if;
+
+    if jsonb_typeof(adv->'pd_goal_connections') = 'array' and jsonb_array_length(adv->'pd_goal_connections') > 0 then
+      adv_out := adv_out || jsonb_build_object('pd_goal_connections', adv->'pd_goal_connections');
+    end if;
+
+    if jsonb_typeof(adv->'first_peoples_principles') = 'array' and jsonb_array_length(adv->'first_peoples_principles') > 0 then
+      adv_out := adv_out || jsonb_build_object('first_peoples_principles', adv->'first_peoples_principles');
+    end if;
+  end if;
+
   return jsonb_build_object(
     'id', p.id,
     'plan_date', p.plan_date,
@@ -1301,21 +1351,24 @@ begin
     'title', p.title,
     'notes', p.notes,
     'blocks', blocks,
-    'toc', jsonb_build_object(
-      'plan_mode', coalesce(eff_plan_mode, 'lesson_flow'),
-      'teacher_name', coalesce(eff_teacher, ''),
-      'ta_name', coalesce(eff_ta_name, ''),
-      'ta_role', coalesce(eff_ta_role, ''),
-      'phone_policy', coalesce(eff_phone, 'Not permitted'),
-      'note_to_toc', coalesce(eff_note, ''),
-      'attendance_note', coalesce(eff_attendance_note, ''),
-      'class_overview_rows', coalesce(toc_overview, '[]'::jsonb),
-      'division_of_roles_rows', coalesce(toc_roles, '[]'::jsonb),
-      'opening_routine_steps', coalesce(toc_opening, '[]'::jsonb),
-      'lesson_flow_phases', coalesce(toc_lesson_flow, '[]'::jsonb),
-      'activity_options', coalesce(toc_activity_options, '[]'::jsonb),
-      'what_to_do_if_items', coalesce(toc_whatif, '[]'::jsonb),
-      'end_of_class_items', coalesce(toc_end, '[]'::jsonb)
+    'toc', (
+      jsonb_build_object(
+        'plan_mode', coalesce(eff_plan_mode, 'lesson_flow'),
+        'teacher_name', coalesce(eff_teacher, ''),
+        'ta_name', coalesce(eff_ta_name, ''),
+        'ta_role', coalesce(eff_ta_role, ''),
+        'phone_policy', coalesce(eff_phone, 'Not permitted'),
+        'note_to_toc', coalesce(eff_note, ''),
+        'attendance_note', coalesce(eff_attendance_note, ''),
+        'class_overview_rows', coalesce(toc_overview, '[]'::jsonb),
+        'division_of_roles_rows', coalesce(toc_roles, '[]'::jsonb),
+        'opening_routine_steps', coalesce(toc_opening, '[]'::jsonb),
+        'lesson_flow_phases', coalesce(toc_lesson_flow, '[]'::jsonb),
+        'activity_options', coalesce(toc_activity_options, '[]'::jsonb),
+        'what_to_do_if_items', coalesce(toc_whatif, '[]'::jsonb),
+        'end_of_class_items', coalesce(toc_end, '[]'::jsonb)
+      )
+      || coalesce(adv_out, '{}'::jsonb)
     )
   );
 end;
