@@ -1275,6 +1275,13 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         }
       }
 
+      // Materialize the live render into toc_block_plans.public_payload for /p.
+      try {
+        await supabase.rpc('resolve_toc_block_plan_public_payload', { toc_block_plan_id: tocBlockPlanId });
+      } catch {
+        // Best-effort: saving overrides should still succeed even if materialization fails.
+      }
+
       // Reload state (optional)
       if (reload) await loadAll(supabase, tocBlockPlanId, templateId);
       setUnsaved(false);
