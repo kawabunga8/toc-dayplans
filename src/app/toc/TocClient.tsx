@@ -68,8 +68,45 @@ export default function TocClient({
   initialView?: 'today' | 'calendar';
 }) {
   const today = useMemo(() => {
-    // Default should be the NEXT school day (skip weekends).
-    return nextSchoolDayIso(new Date());
+    // Default behavior (Pacific Time cutoff):
+    // - If before 3:05pm PT and today is a weekday → open on today's date.
+    // - Otherwise → open on the next school day (skip weekends).
+    const tz = 'America/Vancouver';
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: tz,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).formatToParts(new Date());
+
+    const get = (type: string) => parts.find((p) => p.type === type)?.value;
+    const y = Number(get('year') ?? '1970');
+    const m = Number(get('month') ?? '01');
+    const d = Number(get('day') ?? '01');
+    const hh = Number(get('hour') ?? '00');
+    const mm = Number(get('minute') ?? '00');
+
+    // Build a local Date anchored to the Pacific calendar date (noon avoids DST edge cases).
+    const pacificDateLocalNoon = new Date(y, (m || 1) - 1, d || 1, 12, 0, 0, 0);
+
+    const isWeekday = (() => {
+      // 0=Sun,6=Sat
+      const dow = new Date(y, (m || 1) - 1, d || 1, 12, 0, 0, 0).getDay();
+      return dow !== 0 && dow !== 6;
+    })();
+
+    const beforeCutoff = hh < 15 || (hh === 15 && mm < 5);
+    if (isWeekday && beforeCutoff) {
+      const yyyy = String(y).padStart(4, '0');
+      const mm2 = String(m).padStart(2, '0');
+      const dd2 = String(d).padStart(2, '0');
+      return `${yyyy}-${mm2}-${dd2}`;
+    }
+
+    return nextSchoolDayIso(pacificDateLocalNoon);
   }, []);
 
   const [view, setView] = useState<'today' | 'calendar'>(initialView ?? 'today');
