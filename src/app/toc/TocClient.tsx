@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useEffect } from 'react';
 import RcsBanner from '@/components/RcsBanner';
-import { nextSchoolDayIso } from '@/lib/appRules/dates';
+import { nextSchoolDayIso, nextSchoolDayIsoFromIso, prevSchoolDayIsoFromIso } from '@/lib/appRules/dates';
 
 type PublicPlanSummary = {
   id: string;
@@ -386,18 +386,48 @@ export default function TocClient({
 
             {view === 'today' ? (
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                <label style={{ display: 'grid', gap: 6, minWidth: 220 }}>
+                <div style={{ display: 'grid', gap: 6, minWidth: 220 }}>
                   <span style={{ fontSize: 12, fontWeight: 900, color: RCS.midBlue }}>Date</span>
-                  <input
-                    type="date"
-                    value={selectedDate}
-                    onChange={(e) => {
-                      setSelectedDate(e.target.value);
-                      setOpenPlanId(null);
-                    }}
-                    style={styles.dateInput}
-                  />
-                </label>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const prev = prevSchoolDayIsoFromIso(selectedDate);
+                        setSelectedDate(prev);
+                        setOpenPlanId(null);
+                      }}
+                      style={styles.dateNavBtn}
+                      aria-label="Previous teaching day"
+                      title="Previous teaching day"
+                    >
+                      ←
+                    </button>
+
+                    <input
+                      type="date"
+                      value={selectedDate}
+                      onChange={(e) => {
+                        setSelectedDate(e.target.value);
+                        setOpenPlanId(null);
+                      }}
+                      style={{ ...styles.dateInput, minWidth: 170 }}
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = nextSchoolDayIsoFromIso(selectedDate);
+                        setSelectedDate(next);
+                        setOpenPlanId(null);
+                      }}
+                      style={styles.dateNavBtn}
+                      aria-label="Next teaching day"
+                      title="Next teaching day"
+                    >
+                      →
+                    </button>
+                  </div>
+                </div>
 
                 {isSelectedFriday ? (
                   <label style={{ display: 'grid', gap: 6, minWidth: 160 }}>
@@ -997,6 +1027,16 @@ const styles: Record<string, React.CSSProperties> = {
     background: RCS.white,
     color: RCS.textDark,
     fontWeight: 900,
+  },
+  dateNavBtn: {
+    padding: '8px 10px',
+    borderRadius: 10,
+    border: `1px solid ${RCS.gold}`,
+    background: RCS.white,
+    color: RCS.deepNavy,
+    fontWeight: 900,
+    cursor: 'pointer',
+    lineHeight: 1,
   },
 
   card: { border: `1px solid ${RCS.deepNavy}`, borderRadius: 12, padding: 16, background: RCS.white, marginTop: 16 },
