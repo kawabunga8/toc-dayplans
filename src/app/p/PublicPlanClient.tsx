@@ -474,269 +474,284 @@ export default function PublicPlanClient({ plan, layout }: { plan: PublicPlan; l
                 {/* TOC plan content */}
                 {plan.toc ? (
                   <div style={styles.tocWrap}>
-                    <div style={styles.tocMeta}>
-                      {plan.toc.teacher_name ? <span><b>Teacher:</b> {plan.toc.teacher_name}</span> : null}
-                      {plan.toc.ta_name ? <span> • <b>TA:</b> {plan.toc.ta_name}{plan.toc.ta_role ? ` (${plan.toc.ta_role})` : ''}</span> : null}
-                      {plan.toc.phone_policy ? <span> • <b>Phones:</b> {plan.toc.phone_policy}</span> : null}
-                    </div>
-
                     {(() => {
-                      const sections: Record<LayoutSectionKey, React.ReactElement | null> = {
-                        class_overview: plan.toc.class_overview_rows?.length ? (
-                          <div style={styles.tocSection}>
-                            <div style={styles.tocSectionTitle}>Class Overview</div>
-                            <table style={styles.printTable as any}>
-                              <tbody>
-                                {plan.toc.class_overview_rows
-                                  .filter((r) => {
-                                    const k = String(r.label ?? '').trim().toLowerCase();
-                                    return k !== 'class' && k !== 'room' && k !== 'time';
-                                  })
-                                  .map((r, idx) => {
-                                    const v = resolveTokens(String(r.value ?? ''), b);
-                                    return (
-                                      <tr key={idx} style={idx % 2 === 1 ? (styles.printTrAlt as any) : undefined}>
-                                        <td style={styles.printTd as any}><b>{r.label}</b></td>
-                                        <td style={styles.printTd as any}>{v || ''}</td>
-                                      </tr>
-                                    );
-                                  })}
-                              </tbody>
-                            </table>
-                          </div>
-                        ) : null,
-
-                        division_of_roles: plan.toc.division_of_roles_rows?.length ? (
-                          <div style={styles.tocSection}>
-                            <div style={styles.tocSectionTitle}>Division of Roles</div>
-                            <table style={styles.printTable as any}>
-                              <thead>
-                                <tr>
-                                  <th style={styles.printTh as any}>WHO</th>
-                                  <th style={styles.printTh as any}>RESPONSIBILITY</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {plan.toc.division_of_roles_rows.map((r, idx) => (
-                                  <tr key={idx} style={idx % 2 === 1 ? (styles.printTrAlt as any) : undefined}>
-                                    <td style={styles.printTd as any}><b>{r.who}</b></td>
-                                    <td style={styles.printTd as any}>{r.responsibility}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        ) : null,
-
-                        opening_routine: plan.toc.opening_routine_steps?.length ? (
-                          <div style={styles.tocSection}>
-                            <div style={styles.tocSectionTitle}>Opening routine</div>
-                            <ol style={styles.tocList as any}>
-                              {plan.toc.opening_routine_steps.map((s, idx) => (
-                                <li key={idx} style={{ marginBottom: 4 }}>{s.step_text}</li>
-                              ))}
-                            </ol>
-                          </div>
-                        ) : null,
-
-                        lesson_flow: plan.toc.plan_mode === 'lesson_flow' && plan.toc.lesson_flow_phases?.length ? (
-                          <div style={{ ...styles.tocSection, background: RCS.lightGold, borderColor: RCS.gold }}>
-                            <div style={styles.tocSectionTitle}>Lesson flow</div>
-                            <table style={styles.printTable as any}>
-                              <thead>
-                                <tr>
-                                  <th style={styles.printTh as any}>TIME</th>
-                                  <th style={styles.printTh as any}>PHASE</th>
-                                  <th style={styles.printTh as any}>ACTIVITY</th>
-                                  <th style={styles.printTh as any}>PURPOSE</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {plan.toc.lesson_flow_phases.map((p, idx) => (
-                                  <tr key={idx} style={idx % 2 === 1 ? (styles.printTrAlt as any) : undefined}>
-                                    <td style={styles.printTd as any}><b>{p.time_text}</b></td>
-                                    <td style={styles.printTd as any}><b>{p.phase_text}</b></td>
-                                    <td style={{ ...(styles.printTd as any), whiteSpace: 'pre-wrap' } as any}>{p.activity_text}</td>
-                                    <td style={{ ...(styles.printTd as any), fontStyle: 'italic', whiteSpace: 'pre-wrap' } as any}>{p.purpose_text ?? ''}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        ) : null,
-
-                        activity_options: plan.toc.plan_mode === 'activity_options' && plan.toc.activity_options?.length ? (
-                          <div style={styles.tocSection}>
-                            <div style={styles.tocSectionTitle}>Activity options</div>
-                            <div style={{ display: 'grid', gap: 10 }}>
-                              {plan.toc.activity_options.map((o, idx) => (
-                                <div key={idx} style={styles.tocCard}>
-                                  <div style={{ fontWeight: 900 }}>{o.title}</div>
-                                  <div style={{ opacity: 0.9 }}>{o.description}</div>
-                                  <div style={{ marginTop: 6 }}>{o.details_text}</div>
-                                  {o.toc_role_text ? <div style={{ fontSize: 12, opacity: 0.85, marginTop: 6 }}><b>TOC role:</b> {o.toc_role_text}</div> : null}
-                                  {o.steps?.length ? (
-                                    <ol style={{ marginTop: 8 }}>
-                                      {o.steps.map((st, j) => (
-                                        <li key={j} style={{ marginBottom: 4 }}>{st.step_text}</li>
-                                      ))}
-                                    </ol>
-                                  ) : null}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ) : null,
-
-                        what_to_do_if: plan.toc.what_to_do_if_items?.length ? (
-                          <div style={{ ...styles.tocSection, background: RCS.lightBlue, borderColor: RCS.navy }}>
-                            <div style={styles.tocSectionTitle}>What to Do If…</div>
-                            <table style={styles.printTable as any}>
-                              <thead>
-                                <tr>
-                                  <th style={styles.printTh as any}>IF</th>
-                                  <th style={styles.printTh as any}>THEN</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {plan.toc.what_to_do_if_items.map((w, idx) => (
-                                  <tr key={idx} style={idx % 2 === 1 ? (styles.printTrAlt as any) : undefined}>
-                                    <td style={styles.printTd as any}><b>{w.scenario_text}</b></td>
-                                    <td style={styles.printTd as any}>{w.response_text}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        ) : null,
-
-                        end_of_class: plan.toc.end_of_class_items?.length ? (
-                          <div style={styles.tocSection}>
-                            <div style={styles.tocSectionTitle}>End of Class — Room Cleanup</div>
-                            <ul style={{ margin: 0, paddingLeft: 18 }}>
-                              {plan.toc.end_of_class_items.map((it, idx) => (
-                                <li key={idx} style={{ marginBottom: 4, fontSize: 12 }}>{it.item_text}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        ) : null,
-
-                        lesson_overview:
-                          plan.toc.lesson_overview && Object.values(plan.toc.lesson_overview).some((v) => v?.trim?.()) ? (
-                            <div style={styles.tocSection}>
-                              <div style={styles.tocSectionTitle}>Lesson Overview</div>
-                              <table style={styles.printTable as any}>
-                                <tbody>
-                                  {plan.toc.lesson_overview.central_theme?.trim() ? (
-                                    <tr><td style={styles.printTd as any}><b>Central Theme</b></td><td style={styles.printTd as any}>{plan.toc.lesson_overview.central_theme}</td></tr>
-                                  ) : null}
-                                  {plan.toc.lesson_overview.deep_hope?.trim() ? (
-                                    <tr style={styles.printTrAlt as any}><td style={styles.printTd as any}><b>Deep Hope</b></td><td style={styles.printTd as any}>{plan.toc.lesson_overview.deep_hope}</td></tr>
-                                  ) : null}
-                                  {plan.toc.lesson_overview.big_idea?.trim() ? (
-                                    <tr><td style={styles.printTd as any}><b>Big Idea</b></td><td style={styles.printTd as any}>{plan.toc.lesson_overview.big_idea}</td></tr>
-                                  ) : null}
-                                  {plan.toc.lesson_overview.learning_target?.trim() ? (
-                                    <tr style={styles.printTrAlt as any}><td style={styles.printTd as any}><b>Learning Target</b></td><td style={styles.printTd as any}>{plan.toc.lesson_overview.learning_target}</td></tr>
-                                  ) : null}
-                                  {plan.toc.lesson_overview.collaborative_structure?.trim() ? (
-                                    <tr><td style={styles.printTd as any}><b>Collaborative Structure</b></td><td style={styles.printTd as any}>{plan.toc.lesson_overview.collaborative_structure}</td></tr>
-                                  ) : null}
-                                  {plan.toc.lesson_overview.context?.trim() ? (
-                                    <tr style={styles.printTrAlt as any}><td style={styles.printTd as any}><b>Context</b></td><td style={styles.printTd as any}>{plan.toc.lesson_overview.context}</td></tr>
-                                  ) : null}
-                                </tbody>
-                              </table>
-                            </div>
-                          ) : null,
-
-                        materials_needed: plan.toc.materials_needed?.length ? (
-                          <div style={styles.tocSection}>
-                            <div style={styles.tocSectionTitle}>Materials Needed</div>
-                            <ul style={{ margin: 0, paddingLeft: 18 }}>
-                              {plan.toc.materials_needed.map((m, idx) => (
-                                <li key={idx} style={{ marginBottom: 4, fontSize: 12 }}>{m}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        ) : null,
-
-                        assessment_touch_points: plan.toc.assessment_touch_points?.length ? (
-                          <div style={{ ...styles.tocSection, background: RCS.lightGold, borderColor: RCS.gold }}>
-                            <div style={styles.tocSectionTitle}>★ Assessment Touch Points</div>
-                            <ul style={{ margin: 0, paddingLeft: 18 }}>
-                              {plan.toc.assessment_touch_points.map((t, idx) => (
-                                <li key={idx} style={{ marginBottom: 4, fontSize: 12 }}>{t}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        ) : null,
-
-                        pd_goal_connections: plan.toc.pd_goal_connections?.length ? (
-                          <div style={{ ...styles.tocSection, background: RCS.lightBlue, borderColor: RCS.navy }}>
-                            <div style={styles.tocSectionTitle}>PD Goal Connections</div>
-                            <ul style={{ margin: 0, paddingLeft: 18 }}>
-                              {plan.toc.pd_goal_connections.map((g, idx) => (
-                                <li key={idx} style={{ marginBottom: 4, fontSize: 12 }}>{g}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        ) : null,
-
-                        first_peoples_principles: plan.toc.first_peoples_principles?.length ? (
-                          <div style={styles.tocSection}>
-                            <div style={styles.tocSectionTitle}>First Peoples Principles of Learning</div>
-                            <ul style={{ margin: 0, paddingLeft: 18 }}>
-                              {plan.toc.first_peoples_principles.map((p2, idx) => (
-                                <li key={idx} style={{ marginBottom: 4, fontSize: 12 }}>{p2}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        ) : null,
-                      };
-
-                      const defaultLayout: PublicPlanLayout = {
-                        sections: [
-                          { key: 'class_overview' },
-                          { key: 'division_of_roles' },
-                          { key: 'opening_routine' },
-                          { key: 'lesson_flow' },
-                          { key: 'activity_options' },
-                          { key: 'what_to_do_if' },
-                          { key: 'end_of_class' },
-                          { key: 'lesson_overview' },
-                          { key: 'materials_needed' },
-                          { key: 'assessment_touch_points' },
-                          { key: 'pd_goal_connections' },
-                          { key: 'first_peoples_principles' },
-                        ],
-                      };
-
-                      const effective = (layout?.sections?.length ? layout : defaultLayout).sections ?? [];
-
+                      const isLowDetail = /\b(lunch|chapel)\b/i.test(String(b.class_name ?? ''));
                       return (
                         <>
-                          {effective
-                            .filter((s) => s && s.enabled !== false)
-                            .map((s, idx) => {
-                              const el = sections[s.key];
-                              if (!el) return null;
-                              // Optional title override: replace first title occurrence by cloning via wrapper.
-                              if (s.title && typeof s.title === 'string') {
-                                return (
-                                  <div key={idx}>
-                                    {React.cloneElement(el as any, {}, (el as any).props.children && Array.isArray((el as any).props.children)
-                                      ? (el as any).props.children.map((child: any) =>
-                                          child?.props?.style === styles.tocSectionTitle
-                                            ? React.cloneElement(child, {}, s.title)
-                                            : child
-                                        )
-                                      : (el as any).props.children)}
+                          <div style={styles.tocMeta}>
+                            {plan.toc.teacher_name ? <span><b>Teacher:</b> {plan.toc.teacher_name}</span> : null}
+                            {plan.toc.ta_name ? <span> • <b>TA:</b> {plan.toc.ta_name}{plan.toc.ta_role ? ` (${plan.toc.ta_role})` : ''}</span> : null}
+                            {plan.toc.phone_policy ? <span> • <b>Phones:</b> {plan.toc.phone_policy}</span> : null}
+                          </div>
+
+                          {isLowDetail ? (
+                            plan.toc.note_to_toc?.trim() ? (
+                              <div style={styles.notesBox}>
+                                <div style={styles.notesLabel}>Note</div>
+                                <div style={styles.notesText}>{plan.toc.note_to_toc}</div>
+                              </div>
+                            ) : null
+                          ) : (
+                            (() => {
+                              const sections: Record<LayoutSectionKey, React.ReactElement | null> = {
+                                class_overview: plan.toc.class_overview_rows?.length ? (
+                                  <div style={styles.tocSection}>
+                                    <div style={styles.tocSectionTitle}>Class Overview</div>
+                                    <table style={styles.printTable as any}>
+                                      <tbody>
+                                        {plan.toc.class_overview_rows
+                                          .filter((r) => {
+                                            const k = String(r.label ?? '').trim().toLowerCase();
+                                            return k !== 'class' && k !== 'room' && k !== 'time';
+                                          })
+                                          .map((r, idx) => {
+                                            const v = resolveTokens(String(r.value ?? ''), b);
+                                            return (
+                                              <tr key={idx} style={idx % 2 === 1 ? (styles.printTrAlt as any) : undefined}>
+                                                <td style={styles.printTd as any}><b>{r.label}</b></td>
+                                                <td style={styles.printTd as any}>{v || ''}</td>
+                                              </tr>
+                                            );
+                                          })}
+                                      </tbody>
+                                    </table>
                                   </div>
-                                );
-                              }
-                              return <div key={idx}>{el}</div>;
-                            })}
+                                ) : null,
+
+                                division_of_roles: plan.toc.division_of_roles_rows?.length ? (
+                                  <div style={styles.tocSection}>
+                                    <div style={styles.tocSectionTitle}>Division of Roles</div>
+                                    <table style={styles.printTable as any}>
+                                      <thead>
+                                        <tr>
+                                          <th style={styles.printTh as any}>WHO</th>
+                                          <th style={styles.printTh as any}>RESPONSIBILITY</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {plan.toc.division_of_roles_rows.map((r, idx) => (
+                                          <tr key={idx} style={idx % 2 === 1 ? (styles.printTrAlt as any) : undefined}>
+                                            <td style={styles.printTd as any}><b>{r.who}</b></td>
+                                            <td style={styles.printTd as any}>{r.responsibility}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                ) : null,
+
+                                opening_routine: plan.toc.opening_routine_steps?.length ? (
+                                  <div style={styles.tocSection}>
+                                    <div style={styles.tocSectionTitle}>Opening routine</div>
+                                    <ol style={styles.tocList as any}>
+                                      {plan.toc.opening_routine_steps.map((s, idx) => (
+                                        <li key={idx} style={{ marginBottom: 4 }}>{s.step_text}</li>
+                                      ))}
+                                    </ol>
+                                  </div>
+                                ) : null,
+
+                                lesson_flow: plan.toc.plan_mode === 'lesson_flow' && plan.toc.lesson_flow_phases?.length ? (
+                                  <div style={{ ...styles.tocSection, background: RCS.lightGold, borderColor: RCS.gold }}>
+                                    <div style={styles.tocSectionTitle}>Lesson flow</div>
+                                    <table style={styles.printTable as any}>
+                                      <thead>
+                                        <tr>
+                                          <th style={styles.printTh as any}>TIME</th>
+                                          <th style={styles.printTh as any}>PHASE</th>
+                                          <th style={styles.printTh as any}>ACTIVITY</th>
+                                          <th style={styles.printTh as any}>PURPOSE</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {plan.toc.lesson_flow_phases.map((p, idx) => (
+                                          <tr key={idx} style={idx % 2 === 1 ? (styles.printTrAlt as any) : undefined}>
+                                            <td style={styles.printTd as any}><b>{p.time_text}</b></td>
+                                            <td style={styles.printTd as any}><b>{p.phase_text}</b></td>
+                                            <td style={{ ...(styles.printTd as any), whiteSpace: 'pre-wrap' } as any}>{p.activity_text}</td>
+                                            <td style={{ ...(styles.printTd as any), fontStyle: 'italic', whiteSpace: 'pre-wrap' } as any}>{p.purpose_text ?? ''}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                ) : null,
+
+                                activity_options: plan.toc.plan_mode === 'activity_options' && plan.toc.activity_options?.length ? (
+                                  <div style={styles.tocSection}>
+                                    <div style={styles.tocSectionTitle}>Activity options</div>
+                                    <div style={{ display: 'grid', gap: 10 }}>
+                                      {plan.toc.activity_options.map((o, idx) => (
+                                        <div key={idx} style={styles.tocCard}>
+                                          <div style={{ fontWeight: 900 }}>{o.title}</div>
+                                          <div style={{ opacity: 0.9 }}>{o.description}</div>
+                                          <div style={{ marginTop: 6 }}>{o.details_text}</div>
+                                          {o.toc_role_text ? <div style={{ fontSize: 12, opacity: 0.85, marginTop: 6 }}><b>TOC role:</b> {o.toc_role_text}</div> : null}
+                                          {o.steps?.length ? (
+                                            <ol style={{ marginTop: 8 }}>
+                                              {o.steps.map((st, j) => (
+                                                <li key={j} style={{ marginBottom: 4 }}>{st.step_text}</li>
+                                              ))}
+                                            </ol>
+                                          ) : null}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ) : null,
+
+                                what_to_do_if: plan.toc.what_to_do_if_items?.length ? (
+                                  <div style={{ ...styles.tocSection, background: RCS.lightBlue, borderColor: RCS.navy }}>
+                                    <div style={styles.tocSectionTitle}>What to Do If…</div>
+                                    <table style={styles.printTable as any}>
+                                      <thead>
+                                        <tr>
+                                          <th style={styles.printTh as any}>IF</th>
+                                          <th style={styles.printTh as any}>THEN</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {plan.toc.what_to_do_if_items.map((w, idx) => (
+                                          <tr key={idx} style={idx % 2 === 1 ? (styles.printTrAlt as any) : undefined}>
+                                            <td style={styles.printTd as any}><b>{w.scenario_text}</b></td>
+                                            <td style={styles.printTd as any}>{w.response_text}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                ) : null,
+
+                                end_of_class: plan.toc.end_of_class_items?.length ? (
+                                  <div style={styles.tocSection}>
+                                    <div style={styles.tocSectionTitle}>End of Class — Room Cleanup</div>
+                                    <ul style={{ margin: 0, paddingLeft: 18 }}>
+                                      {plan.toc.end_of_class_items.map((it, idx) => (
+                                        <li key={idx} style={{ marginBottom: 4, fontSize: 12 }}>{it.item_text}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                ) : null,
+
+                                lesson_overview:
+                                  plan.toc.lesson_overview && Object.values(plan.toc.lesson_overview).some((v) => v?.trim?.()) ? (
+                                    <div style={styles.tocSection}>
+                                      <div style={styles.tocSectionTitle}>Lesson Overview</div>
+                                      <table style={styles.printTable as any}>
+                                        <tbody>
+                                          {plan.toc.lesson_overview.central_theme?.trim() ? (
+                                            <tr><td style={styles.printTd as any}><b>Central Theme</b></td><td style={styles.printTd as any}>{plan.toc.lesson_overview.central_theme}</td></tr>
+                                          ) : null}
+                                          {plan.toc.lesson_overview.deep_hope?.trim() ? (
+                                            <tr style={styles.printTrAlt as any}><td style={styles.printTd as any}><b>Deep Hope</b></td><td style={styles.printTd as any}>{plan.toc.lesson_overview.deep_hope}</td></tr>
+                                          ) : null}
+                                          {plan.toc.lesson_overview.big_idea?.trim() ? (
+                                            <tr><td style={styles.printTd as any}><b>Big Idea</b></td><td style={styles.printTd as any}>{plan.toc.lesson_overview.big_idea}</td></tr>
+                                          ) : null}
+                                          {plan.toc.lesson_overview.learning_target?.trim() ? (
+                                            <tr style={styles.printTrAlt as any}><td style={styles.printTd as any}><b>Learning Target</b></td><td style={styles.printTd as any}>{plan.toc.lesson_overview.learning_target}</td></tr>
+                                          ) : null}
+                                          {plan.toc.lesson_overview.collaborative_structure?.trim() ? (
+                                            <tr><td style={styles.printTd as any}><b>Collaborative Structure</b></td><td style={styles.printTd as any}>{plan.toc.lesson_overview.collaborative_structure}</td></tr>
+                                          ) : null}
+                                          {plan.toc.lesson_overview.context?.trim() ? (
+                                            <tr style={styles.printTrAlt as any}><td style={styles.printTd as any}><b>Context</b></td><td style={styles.printTd as any}>{plan.toc.lesson_overview.context}</td></tr>
+                                          ) : null}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  ) : null,
+
+                                materials_needed: plan.toc.materials_needed?.length ? (
+                                  <div style={styles.tocSection}>
+                                    <div style={styles.tocSectionTitle}>Materials Needed</div>
+                                    <ul style={{ margin: 0, paddingLeft: 18 }}>
+                                      {plan.toc.materials_needed.map((m, idx) => (
+                                        <li key={idx} style={{ marginBottom: 4, fontSize: 12 }}>{m}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                ) : null,
+
+                                assessment_touch_points: plan.toc.assessment_touch_points?.length ? (
+                                  <div style={{ ...styles.tocSection, background: RCS.lightGold, borderColor: RCS.gold }}>
+                                    <div style={styles.tocSectionTitle}>★ Assessment Touch Points</div>
+                                    <ul style={{ margin: 0, paddingLeft: 18 }}>
+                                      {plan.toc.assessment_touch_points.map((t, idx) => (
+                                        <li key={idx} style={{ marginBottom: 4, fontSize: 12 }}>{t}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                ) : null,
+
+                                pd_goal_connections: plan.toc.pd_goal_connections?.length ? (
+                                  <div style={{ ...styles.tocSection, background: RCS.lightBlue, borderColor: RCS.navy }}>
+                                    <div style={styles.tocSectionTitle}>PD Goal Connections</div>
+                                    <ul style={{ margin: 0, paddingLeft: 18 }}>
+                                      {plan.toc.pd_goal_connections.map((g, idx) => (
+                                        <li key={idx} style={{ marginBottom: 4, fontSize: 12 }}>{g}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                ) : null,
+
+                                first_peoples_principles: plan.toc.first_peoples_principles?.length ? (
+                                  <div style={styles.tocSection}>
+                                    <div style={styles.tocSectionTitle}>First Peoples Principles of Learning</div>
+                                    <ul style={{ margin: 0, paddingLeft: 18 }}>
+                                      {plan.toc.first_peoples_principles.map((p2, idx) => (
+                                        <li key={idx} style={{ marginBottom: 4, fontSize: 12 }}>{p2}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                ) : null,
+                              };
+
+                              const defaultLayout: PublicPlanLayout = {
+                                sections: [
+                                  { key: 'class_overview' },
+                                  { key: 'division_of_roles' },
+                                  { key: 'opening_routine' },
+                                  { key: 'lesson_flow' },
+                                  { key: 'activity_options' },
+                                  { key: 'what_to_do_if' },
+                                  { key: 'end_of_class' },
+                                  { key: 'lesson_overview' },
+                                  { key: 'materials_needed' },
+                                  { key: 'assessment_touch_points' },
+                                  { key: 'pd_goal_connections' },
+                                  { key: 'first_peoples_principles' },
+                                ],
+                              };
+
+                              const effective = (layout?.sections?.length ? layout : defaultLayout).sections ?? [];
+
+                              return (
+                                <>
+                                  {effective
+                                    .filter((s) => s && s.enabled !== false)
+                                    .map((s, idx) => {
+                                      const el = sections[s.key];
+                                      if (!el) return null;
+                                      if (s.title && typeof s.title === 'string') {
+                                        return (
+                                          <div key={idx}>
+                                            {React.cloneElement(el as any, {}, (el as any).props.children && Array.isArray((el as any).props.children)
+                                              ? (el as any).props.children.map((child: any) =>
+                                                  child?.props?.style === styles.tocSectionTitle
+                                                    ? React.cloneElement(child, {}, s.title)
+                                                    : child
+                                                )
+                                              : (el as any).props.children)}
+                                          </div>
+                                        );
+                                      }
+                                      return <div key={idx}>{el}</div>;
+                                    })}
+                                </>
+                              );
+                            })()
+                          )}
                         </>
                       );
                     })()}

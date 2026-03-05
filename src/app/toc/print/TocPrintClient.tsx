@@ -110,6 +110,7 @@ export default function TocPrintClient({
             : range;
 
           const toc = p.toc;
+          const isLowDetail = /\b(lunch|chapel)\b/i.test(String(b0?.class_name ?? p.title ?? ''));
 
           return (
             <section key={p.id} style={{ border: '2px solid #1F4E79', borderRadius: 12, padding: 12, pageBreakInside: 'avoid' }}>
@@ -135,7 +136,21 @@ export default function TocPrintClient({
               ) : null}
 
               {toc ? (
-                <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
+                isLowDetail ? (
+                  <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
+                    <div style={{ fontSize: 12, opacity: 0.9 }}>
+                      {toc.teacher_name ? <span><b>Teacher:</b> {toc.teacher_name}</span> : null}
+                      {toc.phone_policy ? <span> • <b>Phones:</b> {toc.phone_policy}</span> : null}
+                    </div>
+                    {toc.note_to_toc?.trim() ? (
+                      <div style={{ padding: 10, border: '1px solid #1F4E79', borderRadius: 10, background: '#D6E4F0' }}>
+                        <div style={{ fontWeight: 900, marginBottom: 6 }}>Note</div>
+                        <div style={{ whiteSpace: 'pre-wrap' }}>{toc.note_to_toc}</div>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
                   {/* Overview */}
                   {toc.class_overview_rows?.length ? (
                     <div style={{ border: '1px solid #1F4E79', borderRadius: 10, overflow: 'hidden' }}>
@@ -302,6 +317,7 @@ export default function TocPrintClient({
                     </div>
                   ) : null}
                 </div>
+                )
               ) : (
                 <div style={{ marginTop: 10, opacity: 0.8, fontSize: 12 }}>No TOC content for this plan.</div>
               )}
