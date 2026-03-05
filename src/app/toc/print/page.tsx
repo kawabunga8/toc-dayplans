@@ -33,7 +33,7 @@ export default async function TocPrintPage({ searchParams }: { searchParams: Pro
   // Sort plans in the order of the day's rotation (so Print All matches the day schedule)
   let rotationOrder: string[] = [];
   try {
-    const friType = (dayPlans.find((p) => p.friday_type)?.friday_type ?? null) as string | null;
+    const friType = (dayPlans.find((p) => !!p.friday_type)?.friday_type ?? null) as string | null;
     const { data: rot, error: rotErr } = await supabase.rpc('get_rotation_for_date', { plan_date: date, friday_type: friType });
     if (!rotErr && Array.isArray(rot)) {
       rotationOrder = rot
