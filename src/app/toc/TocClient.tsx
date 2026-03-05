@@ -514,7 +514,9 @@ export default function TocClient({
                   onClick={() => {
                     const ids = (plansByDate.get(selectedDate) ?? []).map((p) => p.id);
                     if (!ids.length) return;
-                    window.open(`/toc/print?date=${encodeURIComponent(selectedDate)}`, '_blank', 'noopener,noreferrer');
+                    const qs = new URLSearchParams({ date: selectedDate });
+                    if (isSelectedFriday && selectedFridayType) qs.set('friday_type', selectedFridayType);
+                    window.open(`/toc/print?${qs.toString()}`, '_blank', 'noopener,noreferrer');
                   }}
                   disabled={(plansByDate.get(selectedDate) ?? []).length === 0}
                   style={(plansByDate.get(selectedDate) ?? []).length === 0 ? styles.primaryBtnDisabled : styles.primaryBtn}
