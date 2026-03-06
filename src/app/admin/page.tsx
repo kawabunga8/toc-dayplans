@@ -29,6 +29,11 @@ export default function AdminHome() {
             <div style={styles.tileText}>Learning standards (ADST/FA/Bible) + rubric levels.</div>
           </Link>
 
+          <Link href="/admin/teacher" style={styles.tile}>
+            <div style={styles.tileTitle}>Teacher</div>
+            <div style={styles.tileText}>Generate lesson flow suggestions (Superprompt roles).</div>
+          </Link>
+
           <Link href="/toc" style={styles.tile}>
             <div style={styles.tileTitle}>View schedule</div>
             <div style={styles.tileText}>Open the TOC week view (public schedule page).</div>

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
 import { anthropicMessages, extractJsonObject } from '@/lib/ai/anthropic';
+import { TEACHER_ROLES, STANDING_GUARDRAILS, buildSection1FromFields } from '@/lib/teacherSuperprompt/superprompt';
 
 export const runtime = 'nodejs';
 
@@ -25,6 +26,25 @@ type SuggestReq =
         duration_min?: number | null;
         constraints?: string | null;
         current_phases?: Array<{ time_text: string; phase_text: string; activity_text: string; purpose_text?: string | null }>;
+      };
+    }
+  | {
+      section: 'teacher_lesson_flow_phases';
+      input: {
+        role_id: 1 | 2 | 3 | 4 | 5 | 6;
+        section1_fields: {
+          subject?: string;
+          grade?: string;
+          class_size?: string;
+          diversity?: string;
+          standards?: string;
+          unit_topic?: string;
+          unit_stage?: string;
+          tools?: string;
+          not_worked?: string;
+        };
+        task: string;
+        constraints?: string | null;
       };
     };
 
@@ -108,6 +128,57 @@ export async function POST(req: Request) {
     const currentPhases = Array.isArray(body.input?.current_phases) ? body.input.current_phases : [];
 
     const prompt = `Create a lesson flow (phases) as JSON.\n\nContext:\n- Class: ${className || '—'}\n- Date: ${planDate || '—'}\n- Block: ${slot || '—'}\n- Duration (min): ${durationMin ?? '—'}\n${constraints ? `- Constraints: ${constraints}\n` : ''}\n\nIf the user provided current phases, keep the same general structure but improve clarity and actionability.\n\nOutput MUST be valid JSON only.\nReturn this exact shape:\n{"lesson_flow_phases": [{"time_text":"","phase_text":"","activity_text":"","purpose_text":""}]}\n\nCurrent phases (may be empty):\n${JSON.stringify(currentPhases, null, 2)}`;
+
+    const { text } = await anthropicMessages({
+      apiKey,
+      model,
+      maxTokens: 900,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.4,
+    });
+
+    const parsed = extractJsonObject(text);
+    const phases = Array.isArray(parsed?.lesson_flow_phases) ? parsed.lesson_flow_phases : null;
+    if (!phases) return NextResponse.json({ error: 'Model returned missing lesson_flow_phases' }, { status: 400 });
+
+    const cleaned = phases
+      .map((p: any) => ({
+        time_text: String(p?.time_text ?? '').trim(),
+        phase_text: String(p?.phase_text ?? '').trim(),
+        activity_text: String(p?.activity_text ?? '').trim(),
+        purpose_text: String(p?.purpose_text ?? '').trim(),
+      }))
+      .filter((p: any) => p.time_text || p.phase_text || p.activity_text || p.purpose_text);
+
+    if (cleaned.length === 0) return NextResponse.json({ error: 'Model returned empty lesson_flow_phases' }, { status: 400 });
+
+    return NextResponse.json({ ok: true, suggestion: { lesson_flow_phases: cleaned } });
+  }
+
+  if (body.section === 'teacher_lesson_flow_phases') {
+    const roleId = body.input?.role_id;
+    const role = TEACHER_ROLES.find((r) => r.id === roleId);
+    if (!role) return NextResponse.json({ error: 'Invalid role_id' }, { status: 400 });
+
+    const task = String(body.input?.task ?? '').trim();
+    if (!task) return NextResponse.json({ error: 'task is required' }, { status: 400 });
+
+    const f = body.input?.section1_fields ?? {};
+    const section1 = buildSection1FromFields({
+      subject: f.subject,
+      grade: f.grade,
+      classSize: f.class_size,
+      diversity: f.diversity,
+      standards: f.standards,
+      unitTopic: f.unit_topic,
+      unitStage: f.unit_stage,
+      tools: f.tools,
+      notWorked: f.not_worked,
+    });
+
+    const constraints = String(body.input?.constraints ?? '').trim();
+
+    const prompt = `${section1}\n\n---\n\n${role.prompt}\n\n---\n\n${STANDING_GUARDRAILS}\n\n---\n\nNow do this task:\n${task}\n\n${constraints ? `Constraints:\n${constraints}\n\n` : ''}Output MUST be valid JSON only.\nReturn this exact shape:\n{"lesson_flow_phases": [{"time_text":"","phase_text":"","activity_text":"","purpose_text":""}]}`;
 
     const { text } = await anthropicMessages({
       apiKey,
