@@ -143,6 +143,11 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
 
   const [lessonOverride, setLessonOverride] = useState(false);
   const [lessonTouched, setLessonTouched] = useState(false);
+
+  const [aiFlowOpen, setAiFlowOpen] = useState(false);
+  const [aiFlowLoading, setAiFlowLoading] = useState(false);
+  const [aiFlowError, setAiFlowError] = useState<string | null>(null);
+  const [aiFlowSuggestion, setAiFlowSuggestion] = useState<Array<{ time_text: string; phase_text: string; activity_text: string; purpose_text: string }> | null>(null);
   const [dragPhaseIdx, setDragPhaseIdx] = useState<number | null>(null);
 
   const [activityOptions, setActivityOptions] = useState<ActivityOption[]>([]);
@@ -1624,49 +1629,156 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
       <div style={styles.section}>
         <div style={{ ...styles.sectionHeader, display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
           <div>Lesson Flow {lessonOverride ? '(overridden for this day)' : '(using template)'}</div>
-          {lessonOverride ? (
+
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             <button
               type="button"
+              disabled={isDemo || aiFlowLoading}
               onClick={async () => {
-                if (!tocBlockPlanId) return;
-                if (isDemo) return;
-                const ok = window.confirm('Revert lesson flow to the class template? This will delete day-specific overrides.');
-                if (!ok) return;
+                setAiFlowOpen(true);
+                setAiFlowLoading(true);
+                setAiFlowError(null);
+                setAiFlowSuggestion(null);
+
                 try {
-                  setStatus('saving');
-                  const supabase = getSupabaseClient();
-                  await supabase.from('toc_lesson_flow_phases').delete().eq('toc_block_plan_id', tocBlockPlanId);
+                  // Build a snapshot of current phase values (prefer DOM values).
+                  const current = phases.map((p, pIdx) => {
+                    const q = (field: string) => {
+                      if (typeof document === 'undefined') return null;
+                      return document.querySelector<HTMLInputElement | HTMLTextAreaElement>(
+                        `[data-phase-idx="${pIdx}"][data-phase-field="${field}"]`
+                      );
+                    };
+                    const timeEl = q('time');
+                    const phaseEl = q('phase');
+                    const actEl = q('activity');
+                    const purpEl = q('purpose');
+                    return {
+                      time_text: String(timeEl?.value ?? p.time_text ?? ''),
+                      phase_text: String(phaseEl?.value ?? p.phase_text ?? ''),
+                      activity_text: String(actEl?.value ?? p.activity_text ?? ''),
+                      purpose_text: String(purpEl?.value ?? p.purpose_text ?? ''),
+                    };
+                  });
 
-                  const nextPayload = (() => {
-                    const base = overridePayload && typeof overridePayload === 'object' ? { ...overridePayload } : {};
-                    delete (base as any).lesson_flow_phases;
-                    return Object.keys(base).length ? base : null;
-                  })();
-
-                  const { error: clrErr } = await supabase
-                    .from('toc_block_plans')
-                    .update({ override_payload: nextPayload, updated_at: new Date().toISOString() })
-                    .eq('id', tocBlockPlanId);
-                  if (clrErr) throw clrErr;
-
-                  setOverridePayload(nextPayload);
-                  setLessonOverride(false);
-                  setLessonTouched(false);
-                  setPhases([]);
-                  await loadAll(supabase, tocBlockPlanId, templateId);
-                  setStatus('idle');
+                  const res = await fetch('/api/ai/suggest', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      section: 'lesson_flow_phases',
+                      input: {
+                        class_name: '',
+                        plan_date: '',
+                        slot: '',
+                        current_phases: current,
+                      },
+                    }),
+                  });
+                  const j = await res.json();
+                  if (!res.ok) throw new Error(j?.error ?? 'AI suggest failed');
+                  setAiFlowSuggestion((j?.suggestion?.lesson_flow_phases ?? null) as any);
                 } catch (e: any) {
-                  setStatus('error');
-                  setError(e?.message ?? 'Failed to revert');
+                  setAiFlowError(e?.message ?? 'AI suggest failed');
+                } finally {
+                  setAiFlowLoading(false);
                 }
               }}
               style={styles.secondaryBtn}
-              disabled={isDemo || status === 'saving'}
             >
-              Revert to template
+              {aiFlowLoading ? 'Suggesting…' : 'AI: Suggest flow'}
             </button>
-          ) : null}
+
+            {lessonOverride ? (
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!tocBlockPlanId) return;
+                  if (isDemo) return;
+                  const ok = window.confirm('Revert lesson flow to the class template? This will delete day-specific overrides.');
+                  if (!ok) return;
+                  try {
+                    setStatus('saving');
+                    const supabase = getSupabaseClient();
+                    await supabase.from('toc_lesson_flow_phases').delete().eq('toc_block_plan_id', tocBlockPlanId);
+
+                    const nextPayload = (() => {
+                      const base = overridePayload && typeof overridePayload === 'object' ? { ...overridePayload } : {};
+                      delete (base as any).lesson_flow_phases;
+                      return Object.keys(base).length ? base : null;
+                    })();
+
+                    const { error: clrErr } = await supabase
+                      .from('toc_block_plans')
+                      .update({ override_payload: nextPayload, updated_at: new Date().toISOString() })
+                      .eq('id', tocBlockPlanId);
+                    if (clrErr) throw clrErr;
+
+                    setOverridePayload(nextPayload);
+                    setLessonOverride(false);
+                    setLessonTouched(false);
+                    setPhases([]);
+                    await loadAll(supabase, tocBlockPlanId, templateId);
+                    setStatus('idle');
+                  } catch (e: any) {
+                    setStatus('error');
+                    setError(e?.message ?? 'Failed to revert');
+                  }
+                }}
+                style={styles.secondaryBtn}
+                disabled={isDemo || status === 'saving'}
+              >
+                Revert to template
+              </button>
+            ) : null}
+          </div>
         </div>
+
+        {aiFlowOpen ? (
+          <div style={{ marginTop: 10, border: `1px solid ${RCS.gold}`, borderRadius: 12, padding: 10, background: '#fffdf2' }}>
+            <div style={{ fontWeight: 900, marginBottom: 6 }}>AI lesson flow (preview)</div>
+            {aiFlowError ? <div style={{ color: '#B00020', fontWeight: 700, fontSize: 12 }}>{aiFlowError}</div> : null}
+            {!aiFlowError && !aiFlowSuggestion && aiFlowLoading ? <div style={{ fontSize: 12, opacity: 0.8 }}>Working…</div> : null}
+            {aiFlowSuggestion ? (
+              <div style={{ display: 'grid', gap: 6, fontSize: 12 }}>
+                {aiFlowSuggestion.map((p, idx) => (
+                  <div key={idx} style={{ borderTop: idx ? '1px solid rgba(0,0,0,0.08)' : 'none', paddingTop: idx ? 6 : 0 }}>
+                    <b>{p.time_text || `Phase ${idx + 1}`}</b> — {p.phase_text}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                disabled={!aiFlowSuggestion}
+                onClick={() => {
+                  const sug = aiFlowSuggestion ?? [];
+                  setPhases(
+                    sug.map((p: any) => ({
+                      client_id: newClientId(),
+                      time_text: String(p.time_text ?? ''),
+                      phase_text: String(p.phase_text ?? ''),
+                      activity_text: String(p.activity_text ?? ''),
+                      purpose_text: String(p.purpose_text ?? ''),
+                      source_template_phase_id: null,
+                    }))
+                  );
+                  setLessonOverride(true);
+                  setLessonTouched(true);
+                  markUnsaved();
+                  setAiFlowOpen(false);
+                }}
+                style={styles.primaryBtn}
+              >
+                Apply
+              </button>
+              <button type="button" onClick={() => setAiFlowOpen(false)} style={styles.secondaryBtn}>
+                Close
+              </button>
+            </div>
+          </div>
+        ) : null}
 
         <div style={{ display: 'grid', gap: 8 }}>
           {phases.map((p: Phase, idx: number) => (
