@@ -76,6 +76,10 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
   const [planMode, setPlanMode] = useState<PlanMode>('lesson_flow');
   const [overridePayload, setOverridePayload] = useState<any>(null);
   const [noteTOC, setNoteTOC] = useState('');
+  const [aiNoteOpen, setAiNoteOpen] = useState(false);
+  const [aiNoteLoading, setAiNoteLoading] = useState(false);
+  const [aiNoteError, setAiNoteError] = useState<string | null>(null);
+  const [aiNoteSuggestion, setAiNoteSuggestion] = useState<string>('');
   const [templateNoteTOC, setTemplateNoteTOC] = useState('');
 
   // Publish mode + Advanced sections (editable always, but only published when publish_mode='advanced')
@@ -1397,7 +1401,46 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         </label>
 
         <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
-          <span style={styles.label}>Note to TOC (blank = use template)</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={styles.label}>Note to TOC (blank = use template)</span>
+            <button
+              type="button"
+              disabled={isDemo || aiNoteLoading}
+              onClick={async () => {
+                setAiNoteOpen(true);
+                setAiNoteLoading(true);
+                setAiNoteError(null);
+                setAiNoteSuggestion('');
+                try {
+                  const res = await fetch('/api/ai/suggest', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      section: 'note_to_toc_rewrite',
+                      input: {
+                        current_note_to_toc: noteTOC.trim() || templateNoteTOC || '',
+                        class_name: '',
+                        plan_date: '',
+                        slot: '',
+                        audience: 'toc',
+                      },
+                    }),
+                  });
+                  const j = await res.json();
+                  if (!res.ok) throw new Error(j?.error ?? 'AI suggest failed');
+                  setAiNoteSuggestion(String(j?.suggestion?.note_to_toc ?? ''));
+                } catch (e: any) {
+                  setAiNoteError(e?.message ?? 'AI suggest failed');
+                } finally {
+                  setAiNoteLoading(false);
+                }
+              }}
+              style={styles.secondaryBtn}
+            >
+              {aiNoteLoading ? 'Suggesting…' : 'AI: Rewrite'}
+            </button>
+          </div>
+
           <textarea
             value={noteTOC}
             placeholder={templateNoteTOC || ''}
@@ -1406,6 +1449,39 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
             style={styles.textarea}
             disabled={isDemo}
           />
+
+          {aiNoteOpen ? (
+            <div style={{ marginTop: 10, border: `1px solid ${RCS.gold}`, borderRadius: 12, padding: 10, background: '#fffdf2' }}>
+              <div style={{ fontWeight: 900, marginBottom: 6 }}>AI suggestion (preview)</div>
+              {aiNoteError ? <div style={{ color: '#B00020', fontWeight: 700, fontSize: 12 }}>{aiNoteError}</div> : null}
+              {!aiNoteError && !aiNoteSuggestion && aiNoteLoading ? <div style={{ fontSize: 12, opacity: 0.8 }}>Working…</div> : null}
+              {aiNoteSuggestion ? (
+                <div style={{ whiteSpace: 'pre-wrap', fontSize: 12, marginTop: 6 }}>{aiNoteSuggestion}</div>
+              ) : null}
+
+              <div style={{ display: 'flex', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  disabled={!aiNoteSuggestion}
+                  onClick={() => {
+                    setNoteTOC(aiNoteSuggestion);
+                    markUnsaved();
+                    setAiNoteOpen(false);
+                  }}
+                  style={styles.primaryBtn}
+                >
+                  Apply
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAiNoteOpen(false)}
+                  style={styles.secondaryBtn}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          ) : null}
         </label>
 
         <div style={{ gridColumn: '1 / -1', ...styles.touchCard }}>
