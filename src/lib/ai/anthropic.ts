@@ -27,6 +27,13 @@ export async function anthropicMessages(args: {
 
   const j: any = await res.json().catch(() => null);
   if (!res.ok) {
+    // Surface rate-limit info nicely; callers can choose to show a retry hint.
+    if (res.status === 429) {
+      const retryAfter = res.headers.get('retry-after');
+      const hint = retryAfter ? ` (retry after ${retryAfter}s)` : '';
+      throw new Error(`Rate limited by Anthropic (429)${hint}. Please retry in a moment.`);
+    }
+
     const msg = j?.error?.message || j?.message || `Anthropic error (${res.status})`;
     throw new Error(msg);
   }
