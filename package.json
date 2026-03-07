@@ -9,8 +9,10 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@ai-sdk/google": "^3.0.43",
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.97.0",
+    "ai": "^6.0.116",
     "docx": "^9.6.0",
     "luxon": "^3.7.0",
     "next": "16.1.6",
