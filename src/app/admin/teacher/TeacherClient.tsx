@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { TEACHER_ROLES, buildSection1FromFields, STANDING_GUARDRAILS } from '@/lib/teacherSuperprompt/superprompt';
 
 type RoleId = 1 | 2 | 3 | 4 | 5 | 6;
@@ -19,6 +19,18 @@ const RCS = {
 
 export default function TeacherClient() {
   const [roleId, setRoleId] = useState<RoleId>(1);
+
+  const [weekDate, setWeekDate] = useState(() => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const da = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${da}`;
+  });
+  const [weekLoading, setWeekLoading] = useState(false);
+  const [weekErr, setWeekErr] = useState<string | null>(null);
+  const [weekPlans, setWeekPlans] = useState<any>(null);
+  const [selectedBlockKey, setSelectedBlockKey] = useState<string>('');
 
   const [subject, setSubject] = useState('');
   const [grade, setGrade] = useState('');
@@ -38,10 +50,57 @@ export default function TeacherClient() {
   const [phases, setPhases] = useState<Phase[] | null>(null);
 
   const role = useMemo(() => TEACHER_ROLES.find((r) => r.id === roleId)!, [roleId]);
+
+  const blockOptions = useMemo(() => {
+    const plansByDate = (weekPlans?.plans ?? {}) as Record<string, any[]>;
+    const out: Array<{ key: string; label: string; plan_date: string; slot: string; class_name: string; room: string }> = [];
+    for (const [date, plans] of Object.entries(plansByDate)) {
+      for (const p of plans || []) {
+        for (const b of p.day_plan_blocks || []) {
+          const key = `${p.id}:${b.id}`;
+          const label = `${date} • Block ${p.slot} • ${b.class_name || '—'}${b.room ? ` (${b.room})` : ''}`;
+          out.push({ key, label, plan_date: date, slot: p.slot, class_name: b.class_name || '', room: b.room || '' });
+        }
+      }
+    }
+    return out;
+  }, [weekPlans]);
+
+  const selectedBlock = useMemo(() => blockOptions.find((o) => o.key === selectedBlockKey) ?? null, [blockOptions, selectedBlockKey]);
+
+  useEffect(() => {
+    // Fetch week
+    let cancelled = false;
+    (async () => {
+      setWeekLoading(true);
+      setWeekErr(null);
+      try {
+        const res = await fetch(`/api/admin/dayplans/week?date=${encodeURIComponent(weekDate)}`);
+        const j = await res.json();
+        if (!res.ok) throw new Error(j?.error ?? 'Failed to load week');
+        if (!cancelled) setWeekPlans(j);
+      } catch (e: any) {
+        if (!cancelled) setWeekErr(e?.message ?? 'Failed to load week');
+      } finally {
+        if (!cancelled) setWeekLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [weekDate]);
+
+  useEffect(() => {
+    // When a block is selected, auto-fill some context fields.
+    if (!selectedBlock) return;
+    if (!subject.trim()) setSubject(selectedBlock.class_name);
+    if (!tools.trim()) setTools('');
+  }, [selectedBlock]);
+
   const section1 = useMemo(
     () =>
       buildSection1FromFields({
-        subject,
+        subject: subject || selectedBlock?.class_name || '',
         grade,
         classSize,
         diversity,
@@ -51,7 +110,7 @@ export default function TeacherClient() {
         tools,
         notWorked,
       }),
-    [subject, grade, classSize, diversity, standards, unitTopic, unitStage, tools, notWorked]
+    [subject, grade, classSize, diversity, standards, unitTopic, unitStage, tools, notWorked, selectedBlock]
   );
 
   const fullPromptPreview = useMemo(() => {
@@ -71,9 +130,41 @@ export default function TeacherClient() {
       </div>
 
       <section style={{ marginTop: 16, border: `1px solid ${RCS.deepNavy}`, borderRadius: 12, padding: 16 }}>
+        <div style={{ fontWeight: 900, marginBottom: 10 }}>Pick a dayplan block (week view)</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10, alignItems: 'end' }}>
+          <label style={{ display: 'grid', gap: 6 }}>
+            <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.8 }}>Week containing date</div>
+            <input value={weekDate} onChange={(e) => setWeekDate(e.target.value)} style={styles.input} placeholder="YYYY-MM-DD" />
+          </label>
+
+          <label style={{ display: 'grid', gap: 6 }}>
+            <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.8 }}>Block</div>
+            <select value={selectedBlockKey} onChange={(e) => setSelectedBlockKey(e.target.value)} style={styles.input}>
+              <option value="">{weekLoading ? 'Loading…' : 'Select a block'}</option>
+              {blockOptions.map((o) => (
+                <option key={o.key} value={o.key}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        {weekErr ? <div style={{ marginTop: 10, color: '#B00020', fontWeight: 800 }}>{weekErr}</div> : null}
+
+        {selectedBlock ? (
+          <div style={{ marginTop: 10, fontSize: 12, opacity: 0.9 }}>
+            Using: <b>{selectedBlock.plan_date}</b> • <b>Block {selectedBlock.slot}</b> • <b>{selectedBlock.class_name}</b>
+          </div>
+        ) : (
+          <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>Pick a block to auto-fill context (you can still edit fields below).</div>
+        )}
+      </section>
+
+      <section style={{ marginTop: 16, border: `1px solid ${RCS.deepNavy}`, borderRadius: 12, padding: 16 }}>
         <div style={{ fontWeight: 900, marginBottom: 10 }}>Section 1 — Teaching context</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10 }}>
-          <Field label="Subject / Course" value={subject} setValue={setSubject} placeholder="e.g., ADST" />
+          <Field label="Subject / Course" value={subject} setValue={setSubject} placeholder={selectedBlock?.class_name ? selectedBlock.class_name : 'e.g., ADST'} />
           <Field label="Year/Grade" value={grade} setValue={setGrade} placeholder="e.g., Grade 7" />
           <Field label="Class size" value={classSize} setValue={setClassSize} placeholder="e.g., 28" />
           <Field label="Learner diversity" value={diversity} setValue={setDiversity} placeholder="e.g., EAL, IEP, mixed prior knowledge" />
@@ -137,9 +228,12 @@ export default function TeacherClient() {
                     section: 'teacher_lesson_flow_phases',
                     input: {
                       role_id: roleId,
-                      section1_fields: { subject, grade, class_size: classSize, diversity, standards, unit_topic: unitTopic, unit_stage: unitStage, tools, not_worked: notWorked },
+                      section1_fields: { subject: subject || selectedBlock?.class_name || '', grade, class_size: classSize, diversity, standards, unit_topic: unitTopic, unit_stage: unitStage, tools, not_worked: notWorked },
                       task,
                       constraints,
+                      plan_date: selectedBlock?.plan_date ?? null,
+                      slot: selectedBlock?.slot ?? null,
+                      class_name: selectedBlock?.class_name ?? null,
                     },
                   }),
                 });

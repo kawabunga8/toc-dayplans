@@ -32,6 +32,10 @@ type SuggestReq =
       section: 'teacher_lesson_flow_phases';
       input: {
         role_id: 1 | 2 | 3 | 4 | 5 | 6;
+        // Optional dayplan context (from week picker)
+        plan_date?: string | null;
+        slot?: string | null;
+        class_name?: string | null;
         section1_fields: {
           subject?: string;
           grade?: string;
@@ -177,8 +181,13 @@ export async function POST(req: Request) {
     });
 
     const constraints = String(body.input?.constraints ?? '').trim();
+    const planDate = String(body.input?.plan_date ?? '').trim();
+    const slot = String(body.input?.slot ?? '').trim();
+    const className = String(body.input?.class_name ?? '').trim();
 
-    const prompt = `${section1}\n\n---\n\n${role.prompt}\n\n---\n\n${STANDING_GUARDRAILS}\n\n---\n\nNow do this task:\n${task}\n\n${constraints ? `Constraints:\n${constraints}\n\n` : ''}Output MUST be valid JSON only.\nReturn this exact shape:\n{"lesson_flow_phases": [{"time_text":"","phase_text":"","activity_text":"","purpose_text":""}]}`;
+    const dayplanContext = planDate || slot || className ? `Dayplan context:\n- Date: ${planDate || '—'}\n- Block: ${slot || '—'}\n- Class: ${className || '—'}\n\n` : '';
+
+    const prompt = `${section1}\n\n---\n\n${role.prompt}\n\n---\n\n${STANDING_GUARDRAILS}\n\n---\n\n${dayplanContext}Now do this task:\n${task}\n\n${constraints ? `Constraints:\n${constraints}\n\n` : ''}Output MUST be valid JSON only.\nReturn this exact shape:\n{"lesson_flow_phases": [{"time_text":"","phase_text":"","activity_text":"","purpose_text":""}]}`;
 
     const { text } = await anthropicMessages({
       apiKey,
