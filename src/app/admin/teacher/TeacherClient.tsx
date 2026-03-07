@@ -320,7 +320,26 @@ export default function TeacherClient() {
                     throw new Error(String(msg));
                   }
 
-                  setOkMsg(`Applied: appended ${j?.appended ?? '?'} phase(s) to ${selectedBlock.plan_date} block ${selectedBlock.slot} (${selectedBlock.class_name}).`);
+                  // Republish the day plan so /toc and /p reflect the changes.
+                  const pubRes = await fetch(`/api/admin/dayplans/${encodeURIComponent(selectedBlock.plan_id)}/publish`, {
+                    method: 'POST',
+                  });
+                  let pubJ: any = null;
+                  try {
+                    pubJ = await pubRes.json();
+                  } catch {
+                    // ignore
+                  }
+                  if (!pubRes.ok) {
+                    throw new Error(pubJ?.error ?? `Republish failed (${pubRes.status})`);
+                  }
+
+                  setOkMsg(
+                    `Applied + republished: appended ${j?.appended ?? '?'} phase(s) to ${selectedBlock.plan_date} block ${selectedBlock.slot} (${selectedBlock.class_name}). Redirecting…`
+                  );
+
+                  // Jump to the dayplan detail page.
+                  window.location.href = `/admin/dayplans/${encodeURIComponent(selectedBlock.plan_id)}`;
                 } catch (e: any) {
                   setApplyErr(e?.message ?? 'Apply failed');
                 } finally {
