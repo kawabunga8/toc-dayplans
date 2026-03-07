@@ -134,7 +134,7 @@ export default function TeacherClient() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10, alignItems: 'end' }}>
           <label style={{ display: 'grid', gap: 6 }}>
             <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.8 }}>Week containing date</div>
-            <input value={weekDate} onChange={(e) => setWeekDate(e.target.value)} style={styles.input} placeholder="YYYY-MM-DD" />
+            <input type="date" value={weekDate} onChange={(e) => setWeekDate(e.target.value)} style={styles.input} />
           </label>
 
           <label style={{ display: 'grid', gap: 6 }}>

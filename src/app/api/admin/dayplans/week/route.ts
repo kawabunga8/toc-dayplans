@@ -26,7 +26,15 @@ export async function GET(req: Request) {
 
   const u = new URL(req.url);
   const dateStr = u.searchParams.get('date');
+
+  if (dateStr && !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    return NextResponse.json({ error: 'Invalid date (expected YYYY-MM-DD)' }, { status: 400 });
+  }
+
   const date = dateStr ? new Date(dateStr + 'T00:00:00') : new Date();
+  if (dateStr && Number.isNaN(date.getTime())) {
+    return NextResponse.json({ error: 'Invalid date (expected YYYY-MM-DD)' }, { status: 400 });
+  }
 
   const monday = mondayOfWeek(date);
   const friday = new Date(monday);
