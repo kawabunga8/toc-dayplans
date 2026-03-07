@@ -8,7 +8,8 @@ export const geminiProvider: AIProvider = {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) throw new Error('Missing GEMINI_API_KEY');
 
-    const model = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+    // Default to a broadly-available model; allow override via GEMINI_MODEL.
+    const model = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
 
     const ai = new GoogleGenAI({ apiKey });
 
@@ -21,6 +22,11 @@ export const geminiProvider: AIProvider = {
         lower.includes('rate-limited') ||
         lower.includes('resource_exhausted')
       );
+    };
+
+    const isModelNotFound = (err: any) => {
+      const msg = String(err?.message ?? err ?? '');
+      return msg.includes('404') || msg.includes('NOT_FOUND') || msg.includes('no longer available');
     };
 
     const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -50,8 +56,22 @@ export const geminiProvider: AIProvider = {
           if (isRateLimit(e2)) {
             throw new Error('Rate limited by Gemini. Please retry in a moment.');
           }
+          if (isModelNotFound(e2)) {
+            throw new Error(
+              `Gemini model not available. Set GEMINI_MODEL to an available model (e.g., gemini-1.5-flash or gemini-1.5-pro). Original error: ${String(
+                e2?.message ?? e2
+              )}`
+            );
+          }
           throw e2;
         }
+      }
+      if (isModelNotFound(e)) {
+        throw new Error(
+          `Gemini model not available. Set GEMINI_MODEL to an available model (e.g., gemini-1.5-flash or gemini-1.5-pro). Original error: ${String(
+            e?.message ?? e
+          )}`
+        );
       }
       throw e;
     }
