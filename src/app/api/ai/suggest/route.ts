@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
-import { anthropicMessages, extractJsonObject } from '@/lib/ai/anthropic';
+import { extractJsonObject } from '@/lib/ai/anthropic';
+import { providers } from '@/lib/ai/providers';
 import { TEACHER_ROLES, STANDING_GUARDRAILS, buildSection1FromFields } from '@/lib/teacherSuperprompt/superprompt';
 
 export const runtime = 'nodejs';
@@ -80,12 +81,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json({ error: 'Missing ANTHROPIC_API_KEY' }, { status: 500 });
+  const providerKey = (process.env.AI_BRAIN || 'anthropic') as keyof typeof providers;
+  const provider = (providers as any)[providerKey];
+  if (!provider) {
+    return NextResponse.json({ error: `Invalid AI_BRAIN (${String(providerKey)})` }, { status: 500 });
   }
-
-  const model = process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5';
 
   let body: SuggestReq;
   try {
@@ -107,13 +107,7 @@ export async function POST(req: Request) {
 
     const prompt = `Rewrite the following "Note to TOC" to be clearer and more actionable.\n\nAudience: ${audience === 'toc' ? 'TOC (support staff)' : 'Teacher'}\nClass: ${className || '—'}\nDate: ${planDate || '—'}\nBlock: ${slot || '—'}\n\nRules:\n- Keep it concise.\n- Use short sentences.\n- Preserve all concrete policies (phones/food/where to find work/etc.).\n- No emojis.\n- Output MUST be valid JSON only.\n\nReturn JSON with this exact shape:\n{"note_to_toc": "..."}\n\nINPUT NOTE:\n${current}`;
 
-    const { text } = await anthropicMessages({
-      apiKey,
-      model,
-      maxTokens: 500,
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.3,
-    });
+    const { text } = await provider.generate(prompt);
 
     const parsed = extractJsonObject(text);
     const note = String(parsed?.note_to_toc ?? '').trim();
@@ -134,13 +128,7 @@ export async function POST(req: Request) {
 
     const prompt = `Create a lesson flow (phases) as JSON.\n\nContext:\n- Class: ${className || '—'}\n- Date: ${planDate || '—'}\n- Block: ${slot || '—'}\n- Duration (min): ${durationMin ?? '—'}\n${constraints ? `- Constraints: ${constraints}\n` : ''}\n\nIf the user provided current phases, keep the same general structure but improve clarity and actionability.\n\nOutput MUST be valid JSON only.\nReturn this exact shape:\n{"lesson_flow_phases": [{"time_text":"","phase_text":"","activity_text":"","purpose_text":""}]}\n\nCurrent phases (may be empty):\n${JSON.stringify(currentPhases, null, 2)}`;
 
-    const { text } = await anthropicMessages({
-      apiKey,
-      model,
-      maxTokens: 900,
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.4,
-    });
+    const { text } = await provider.generate(prompt);
 
     const parsed = extractJsonObject(text);
     const phases = Array.isArray(parsed?.lesson_flow_phases) ? parsed.lesson_flow_phases : null;
@@ -190,13 +178,7 @@ export async function POST(req: Request) {
 
     const prompt = `${section1}\n\n---\n\n${role.prompt}\n\n---\n\n${STANDING_GUARDRAILS}\n\n---\n\n${dayplanContext}Now do this task:\n${task}\n\n${constraints ? `Constraints:\n${constraints}\n\n` : ''}Output MUST be valid JSON only.\nReturn this exact shape:\n{"lesson_flow_phases": [{"time_text":"","phase_text":"","activity_text":"","purpose_text":""}]}`;
 
-    const { text } = await anthropicMessages({
-      apiKey,
-      model,
-      maxTokens: 900,
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.4,
-    });
+    const { text } = await provider.generate(prompt);
 
     const parsed = extractJsonObject(text);
     const phases = Array.isArray(parsed?.lesson_flow_phases) ? parsed.lesson_flow_phases : null;
