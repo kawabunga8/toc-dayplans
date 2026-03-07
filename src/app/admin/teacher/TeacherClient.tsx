@@ -237,8 +237,20 @@ export default function TeacherClient() {
                     },
                   }),
                 });
-                const j = await res.json();
-                if (!res.ok) throw new Error(j?.error ?? 'AI suggest failed');
+
+                let j: any = null;
+                let rawText: string | null = null;
+                try {
+                  j = await res.json();
+                } catch {
+                  rawText = await res.text().catch(() => null);
+                }
+
+                if (!res.ok) {
+                  const msg = j?.error || rawText || `AI suggest failed (${res.status})`;
+                  throw new Error(String(msg));
+                }
+
                 setPhases(j?.suggestion?.lesson_flow_phases ?? null);
               } catch (e: any) {
                 setErr(e?.message ?? 'AI suggest failed');

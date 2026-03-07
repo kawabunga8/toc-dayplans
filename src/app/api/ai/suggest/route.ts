@@ -53,11 +53,12 @@ type SuggestReq =
     };
 
 export async function POST(req: Request) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !anon) {
-    return NextResponse.json({ error: 'Missing Supabase env.' }, { status: 500 });
-  }
+  try {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!url || !anon) {
+      return NextResponse.json({ error: 'Missing Supabase env.' }, { status: 500 });
+    }
 
   const cookieStore = await cookies();
   const supabase = createServerClient(url, anon, {
@@ -215,5 +216,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, suggestion: { lesson_flow_phases: cleaned } });
   }
 
-  return NextResponse.json({ error: 'Unsupported section' }, { status: 400 });
+    return NextResponse.json({ error: 'Unsupported section' }, { status: 400 });
+  } catch (e: any) {
+    // Normalize errors so the client always gets JSON.
+    const msg = e?.message ?? String(e);
+    console.error('[api/ai/suggest] error:', msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 }
