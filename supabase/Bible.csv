@@ -1,0 +1,239 @@
+standard_key,standard_title,grade,level,text
+know_god,KNOW GOD,9,emerging,"Begin to show spiritual knowledge through Biblical literacy and engagement with Scripture.
+
+Begin to show spiritual knowledge through prayer and spiritual practices"
+know_god,KNOW GOD,9,developing,"Partially show spiritual knowledge through Biblical literacy and engagement with Scripture.
+
+Partially show spiritual knowledge through prayer and spiritual practices"
+know_god,KNOW GOD,9,proficient,"Show spiritual knowledge through Biblical literacy and engagement with Scripture.
+
+Show spiritual knowledge through prayer and spiritual practices"
+know_god,KNOW GOD,9,extending,"Fully show spiritual knowledge through Biblical Literacy and engagement with Scripture.
+
+Fully show spiritual knowledge through prayer and spiritual practices"
+know_god,KNOW GOD,10,emerging,"Begin to apply spiritual knowledge through Biblical literacy and engagement with Scripture."
+know_god,KNOW GOD,10,developing,"Partially apply spiritual knowledge through Biblical literacy and engagement with Scripture."
+know_god,KNOW GOD,10,proficient,"Apply spiritual knowledge through Biblical literacy and engagement with Scripture."
+know_god,KNOW GOD,10,extending,"Fully apply spiritual knowledge through Biblical literacy and engagement with Scripture."
+know_god,KNOW GOD,11,emerging,"Begin to demonstrate spiritual knowledge through Biblical literacy and engagement with Scripture.
+
+Begin to demonstrate spiritual knowledge through prayer and spiritual practices"
+know_god,KNOW GOD,11,developing,"Partially demonstrate spiritual knowledge through Biblical literacy and engagement with Scripture.
+
+Partially demonstrate spiritual knowledge through prayer and spiritual practices"
+know_god,KNOW GOD,11,proficient,"Demonstrate spiritual knowledge through Biblical literacy and engagement with Scripture.
+
+Demonstrate spiritual knowledge through prayer and spiritual practices"
+know_god,KNOW GOD,11,extending,"Fully demonstrate spiritual knowledge through Biblical literacy and engagement with Scripture.
+
+Fully demonstrate spiritual knowledge through prayer and spiritual practices"
+know_god,KNOW GOD,12,emerging,"Begin to exemplify spiritual knowledge through Biblical literacy and engagement with Scripture.
+
+Begin to exemplify spiritual knowledge through prayer and spiritual practices"
+know_god,KNOW GOD,12,developing,"Partially exemplify spiritual knowledge through Biblical literacy and engagement with Scripture.
+
+Partially exemplify spiritual knowledge through prayer and spiritual practices"
+know_god,KNOW GOD,12,proficient,"Exemplify spiritual knowledge through Biblical literacy and engagement with Scripture.
+
+Exemplify spiritual knowledge through prayer and spiritual practices"
+know_god,KNOW GOD,12,extending,"Fully exemplify spiritual knowledge through Biblical literacy and engagement with Scripture.
+
+Fully exemplify spiritual knowledge through prayer and spiritual practices"
+know_self,KNOW SELF,9,emerging,"Begin to show personal identity through self-reflection, Biblical truth, and practicing discernment
+
+Begin to show confidence and purpose through personal strengths and God-given gifts"
+know_self,KNOW SELF,9,developing,"Partially show personal identity through self-reflection, Biblical truth, and practicing discernment
+
+Partially show confidence and purpose through personal strengths and God-given gifts"
+know_self,KNOW SELF,9,proficient,"Show personal identity through self-reflection, Biblical truth, and practicing discernment
+
+Show confidence and purpose through personal strengths and God-given gifts"
+know_self,KNOW SELF,9,extending,"Fully show personal identity through self-reflection, Biblical truth, and practicing discernment
+
+Fully show confidence and purpose through personal strengths and God-given gifts"
+know_self,KNOW SELF,10,emerging,"Begin to apply personal identity through self-reflection, Biblical truth, and practicing discernment
+
+Begin to apply confidence and purpose through personal strengths and God-given gifts"
+know_self,KNOW SELF,10,developing,"Partially apply personal identity through self-reflection, Biblical truth, and practicing discernment
+
+Partially apply confidence and purpose through personal strengths and God-given gifts"
+know_self,KNOW SELF,10,proficient,"Apply personal identity through self-reflection, Biblical truth, and practicing discernment
+
+Apply confidence and purpose through personal strengths and God-given gifts"
+know_self,KNOW SELF,10,extending,"Fully apply personal identity through self-reflection, Biblical truth, and practicing discernment
+
+Fully apply confidence and purpose through personal strengths and God-given gifts"
+know_self,KNOW SELF,11,emerging,"Begin to demonstrate personal identity through self-reflection, Biblical truth, and practicing discernment
+
+Begin to demonstrate confidence and purpose through personal strengths and God-given gifts"
+know_self,KNOW SELF,11,developing,"Partially demonstrate personal identity through self-reflection, Biblical truth, and practicing discernment
+
+Partially demonstrate confidence and purpose through personal strengths and God-given gifts"
+know_self,KNOW SELF,11,proficient,"Demonstrate personal identity through self-reflection, Biblical truth, and practicing discernment
+
+Demonstrate confidence and purpose through personal strengths and God-given gifts"
+know_self,KNOW SELF,11,extending,"Fully demonstrate personal identity through self-reflection, Biblical truth, and practicing discernment
+
+Fully demonstrate confidence and purpose through personal strengths and God-given gifts"
+know_self,KNOW SELF,12,emerging,"Begin to exemplify personal identity through self-reflection, Biblical truth, and practicing discernment
+
+Begin to exemplify confidence and purpose through personal strengths and God-given gifts"
+know_self,KNOW SELF,12,developing,"Partially exemplify personal identity through self-reflection, Biblical truth, and practicing discernment
+
+Partially exemplify confidence and purpose through personal strengths and God-given gifts"
+know_self,KNOW SELF,12,proficient,"Exemplify personal identity through self-reflection, Biblical truth, and practicing discernment
+
+Exemplify confidence and purpose through personal strengths and God-given gifts"
+know_self,KNOW SELF,12,extending,"Fully exemplify personal identity through self-reflection, Biblical truth, and practicing discernment
+
+Fully exemplify confidence and purpose through personal strengths and God-given gifts"
+love_god,LOVE GOD,9,emerging,"Begin to show their relationship with God through prayer, worship, and Scripture
+
+Begin to show God's love in daily life through service and compassion"
+love_god,LOVE GOD,9,developing,"Partially show their relationship with God through prayer, worship, and Scripture
+
+Partially show God's love in daily life through service and compassion"
+love_god,LOVE GOD,9,proficient,"Show their relationship with God through prayer, worship, and Scripture
+
+Show God's love in daily life through service and compassion"
+love_god,LOVE GOD,9,extending,"Fully show their relationship with God through prayer, worship, and Scripture
+
+Fully show God's love in daily life through service and compassion"
+love_god,LOVE GOD,10,emerging,"Begin to apply their relationship with God through prayer, worship, and Scripture
+
+Begin to apply God's love in daily life through service and compassion"
+love_god,LOVE GOD,10,developing,"Partially apply their relationship with God through prayer, worship, and Scripture
+
+Partially apply God's love in daily life through service and compassion"
+love_god,LOVE GOD,10,proficient,"Apply their relationship with God through prayer, worship, and Scripture
+
+Apply God's love in daily life through service and compassion"
+love_god,LOVE GOD,10,extending,"Fully apply their relationship with God through prayer, worship, and Scripture
+
+Fully apply God's love in daily life through service and compassion"
+love_god,LOVE GOD,11,emerging,"Begin to demonstrate their relationship with God through prayer, worship, and Scripture
+
+Begin to demonstrate God's love in daily life through service and compassion"
+love_god,LOVE GOD,11,developing,"Partially demonstrate their relationship with God through prayer, worship, and Scripture
+
+Partially demonstrate God's love in daily life through service and compassion"
+love_god,LOVE GOD,11,proficient,"Demonstrate their relationship with God through prayer, worship, and Scripture
+
+Demonstrate God's love in daily life through service and compassion"
+love_god,LOVE GOD,11,extending,"Fully demonstrate their relationship with God through prayer, worship, and Scripture
+
+Fully demonstrate God's love in daily life through service and compassion"
+love_god,LOVE GOD,12,emerging,"Begin to exemplify their relationship with God through prayer, worship, and Scripture
+
+Begin to exemplify God's love in daily life through service and compassion"
+love_god,LOVE GOD,12,developing,"Partially exemplify their relationship with God through prayer, worship, and Scripture
+
+Partially exemplify God's love in daily life through service and compassion"
+love_god,LOVE GOD,12,proficient,"Exemplify their relationship with God through prayer, worship, and Scripture
+
+Exemplify God's love in daily life through service and compassion"
+love_god,LOVE GOD,12,extending,"Fully exemplify their relationship with God through prayer, worship, and Scripture
+
+Fully exemplify God's love in daily life through service and compassion"
+love_others,LOVE OTHERS,9,emerging,"Begin to show compassion and empathy in relationships
+
+Begin to show service to others as modeled by Christ"
+love_others,LOVE OTHERS,9,developing,"Partially show compassion and empathy in relationships
+
+Partially show service to others as modeled by Christ"
+love_others,LOVE OTHERS,9,proficient,"Show compassion and empathy in relationships
+
+Show service to others as modeled by Christ"
+love_others,LOVE OTHERS,9,extending,"Fully show compassion and empathy in relationships
+
+Fully show service to others as modeled by Christ"
+love_others,LOVE OTHERS,10,emerging,"Begin to apply compassion and empathy in relationships
+
+Begin to apply service to others as modeled by Christ"
+love_others,LOVE OTHERS,10,developing,"Partially apply compassion and empathy in relationships
+
+Partially apply service to others as modeled by Christ"
+love_others,LOVE OTHERS,10,proficient,"Apply compassion and empathy in relationships
+
+Apply service to others as modeled by Christ"
+love_others,LOVE OTHERS,10,extending,"Fully apply compassion and empathy in relationships
+
+Fully apply service to others as modeled by Christ"
+love_others,LOVE OTHERS,11,emerging,"Begin to demonstrate compassion and empathy in relationships
+
+Begin to demonstrate service to others as modeled by Christ"
+love_others,LOVE OTHERS,11,developing,"Partially demonstrate compassion and empathy in relationships
+
+Partially demonstrate service to others as modeled by Christ"
+love_others,LOVE OTHERS,11,proficient,"Demonstrate compassion and empathy in relationships
+
+Demonstrate service to others as modeled by Christ"
+love_others,LOVE OTHERS,11,extending,"Fully demonstrate compassion and empathy in relationships
+
+Fully demonstrate service to others as modeled by Christ"
+love_others,LOVE OTHERS,12,emerging,"Begin to exemplify compassion and empathy in relationships
+
+Begin to exemplify service to others as modeled by Christ"
+love_others,LOVE OTHERS,12,developing,"Partially exemplify compassion and empathy in relationships
+
+Partially exemplify service to others as modeled by Christ"
+love_others,LOVE OTHERS,12,proficient,"Exemplify compassion and empathy in relationships
+
+Exemplify service to others as modeled by Christ"
+love_others,LOVE OTHERS,12,extending,"Fully exemplify compassion and empathy in relationships
+
+Fully exemplify service to others as modeled by Christ"
+be_equipped,BE EQUIPPED,9,emerging,"Begin to outline what spiritual knowledge, spiritual practices, and Biblical principles equip self for purposeful living
+
+Begin to reflect on personal character and leadership attributes informed by beginning to show faith-based service and responsibility to others"
+be_equipped,BE EQUIPPED,9,developing,"Somewhat outline what spiritual knowledge, spiritual practices, and Biblical principles equip self for purposeful living
+
+Reflect on personal character and leadership attributes informed by showing faith-based service and responsibility to others
+
+Somewhat reflect on personal character and leadership attributes informed by partially showing faith-based service and responsibility to others"
+be_equipped,BE EQUIPPED,9,proficient,"Outline what spiritual knowledge, spiritual practices, and Biblical principles equip self for purposeful living
+
+Completely reflect on personal character and leadership attributes informed by fully showing faith-based service and responsibility to others"
+be_equipped,BE EQUIPPED,9,extending,"Outline what spiritual knowledge, spiritual practices, and Biblical principles equip self for purposeful living
+
+Completely reflect on personal character and leadership attributes informed by fully showing faith-based service and responsibility to others"
+be_equipped,BE EQUIPPED,10,emerging,"Begin to describe what spiritual knowledge, spiritual practices, and Biblical principles equip self for purposeful living
+
+Begin to reflect on personal character and leadership attributes informed by beginning to apply faith-based service and responsibility to others"
+be_equipped,BE EQUIPPED,10,developing,"Somewhat describe what spiritual knowledge, spiritual practices, and Biblical principles equip self for purposeful living
+
+Reflect on personal character and leadership attributes informed by applying faith-based service and responsibility to others
+
+Somewhat reflect on personal character and leadership attributes informed by partially applying faith-based service and responsibility to others"
+be_equipped,BE EQUIPPED,10,proficient,"Describe what spiritual knowledge, spiritual practices, and Biblical principles equip self for purposeful living
+
+Completely reflect on personal character and leadership attributes informed by fully applying faith-based service and responsibility to others"
+be_equipped,BE EQUIPPED,10,extending,"Fully describe what spiritual knowledge, spiritual practices, and Biblical principles equip self for purposeful living
+
+Completely reflect on personal character and leadership attributes informed by fully applying faith-based service and responsibility to others"
+be_equipped,BE EQUIPPED,11,emerging,"Begin to explain what spiritual knowledge, spiritual practices, and Biblical principles equip self for purposeful living
+
+Begin to reflect on personal character and leadership attributes informed by beginning to exemplify faith-based service and responsibility to others"
+be_equipped,BE EQUIPPED,11,developing,"Somewhat explain what spiritual knowledge, spiritual practices, and Biblical principles equip self for purposeful living
+
+Reflect on personal character and leadership attributes informed by exemplifying faith-based service and responsibility to others
+
+Somewhat reflect on personal character and leadership attributes informed by partially exemplifying faith-based service and responsibility to others"
+be_equipped,BE EQUIPPED,11,proficient,"Explain what spiritual knowledge, spiritual practices, and Biblical principles equip self for purposeful living
+
+Completely reflect on personal character and leadership attributes informed by fully exemplifying faith-based service and responsibility to others"
+be_equipped,BE EQUIPPED,11,extending,"Fully explain what spiritual knowledge, spiritual practices, and Biblical principles equip self for purposeful living
+
+Completely reflect on personal character and leadership attributes informed by fully exemplifying faith-based service and responsibility to others"
+be_equipped,BE EQUIPPED,12,emerging,"Begin to justify what spiritual knowledge, spiritual practices, and Biblical principles equip self for purposeful living
+
+Begin to reflect on personal character and leadership attributes informed by beginning to demonstrate faith-based service and responsibility to others"
+be_equipped,BE EQUIPPED,12,developing,"Somewhat justify what spiritual knowledge, spiritual practices, and Biblical principles equip self for purposeful living
+
+Somewhat reflect on personal character and leadership attributes informed by partially demonstrating faith-based service and responsibility to others"
+be_equipped,BE EQUIPPED,12,proficient,"Justify what spiritual knowledge, spiritual practices, and Biblical principles equip self for purposeful living
+
+Reflect on personal character and leadership attributes informed by demonstrating faith-based service and responsibility to others"
+be_equipped,BE EQUIPPED,12,extending,"Fully justify what spiritual knowledge, spiritual practices, and Biblical principles equip self for purposeful living
+
+Completely reflect on personal character and leadership attributes informed by fully demonstrating faith-based service and responsibility to others"
