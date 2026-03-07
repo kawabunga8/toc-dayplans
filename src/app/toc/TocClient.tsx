@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useEffect } from 'react';
 import RcsBanner from '@/components/RcsBanner';
+import { nextSchoolDayIso, nextSchoolDayIsoFromIso, prevSchoolDayIsoFromIso } from '@/lib/appRules/dates';
 
 type PublicPlanSummary = {
   id: string;
@@ -37,20 +38,78 @@ type PublicPlanDetail = {
     details: string | null;
     class_id: string | null;
   }>;
+  toc?: {
+    plan_mode: 'lesson_flow' | 'activity_options';
+    teacher_name: string;
+    ta_name: string;
+    ta_role: string;
+    phone_policy: string;
+    note_to_toc: string;
+    opening_routine_steps: Array<{ step_text: string }>;
+    lesson_flow_phases: Array<{ time_text: string; phase_text: string; activity_text: string; purpose_text: string | null }>;
+    activity_options: Array<{ title: string; description: string; details_text: string; toc_role_text: string | null; steps: Array<{ step_text: string }> }>;
+    what_to_do_if_items: Array<{ scenario_text: string; response_text: string }>;
+    class_overview_rows?: Array<{ label: string; value: string }>;
+    division_of_roles_rows?: Array<{ who: string; responsibility: string }>;
+    end_of_class_items?: Array<{ item_text: string }>;
+    attendance_note?: string;
+  };
 };
 
 export default function TocClient({
   weekStart,
   plans,
   classes,
+  initialView,
 }: {
   weekStart: string;
   plans: PublicPlanSummary[];
   classes: PublicClass[];
+  initialView?: 'today' | 'calendar';
 }) {
-  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const today = useMemo(() => {
+    // Default behavior (Pacific Time cutoff):
+    // - If before 3:05pm PT and today is a weekday → open on today's date.
+    // - Otherwise → open on the next school day (skip weekends).
+    const tz = 'America/Vancouver';
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: tz,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).formatToParts(new Date());
 
-  const [view, setView] = useState<'today' | 'calendar'>('today');
+    const get = (type: string) => parts.find((p) => p.type === type)?.value;
+    const y = Number(get('year') ?? '1970');
+    const m = Number(get('month') ?? '01');
+    const d = Number(get('day') ?? '01');
+    const hh = Number(get('hour') ?? '00');
+    const mm = Number(get('minute') ?? '00');
+
+    // Build a local Date anchored to the Pacific calendar date (noon avoids DST edge cases).
+    const pacificDateLocalNoon = new Date(y, (m || 1) - 1, d || 1, 12, 0, 0, 0);
+
+    const isWeekday = (() => {
+      // 0=Sun,6=Sat
+      const dow = new Date(y, (m || 1) - 1, d || 1, 12, 0, 0, 0).getDay();
+      return dow !== 0 && dow !== 6;
+    })();
+
+    const beforeCutoff = hh < 15 || (hh === 15 && mm < 5);
+    if (isWeekday && beforeCutoff) {
+      const yyyy = String(y).padStart(4, '0');
+      const mm2 = String(m).padStart(2, '0');
+      const dd2 = String(d).padStart(2, '0');
+      return `${yyyy}-${mm2}-${dd2}`;
+    }
+
+    return nextSchoolDayIso(pacificDateLocalNoon);
+  }, []);
+
+  const [view, setView] = useState<'today' | 'calendar'>(initialView ?? 'today');
   const [selectedDate, setSelectedDate] = useState<string>(today);
   const [selectedFridayType, setSelectedFridayType] = useState<'' | 'day1' | 'day2'>('');
 
@@ -327,18 +386,48 @@ export default function TocClient({
 
             {view === 'today' ? (
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                <label style={{ display: 'grid', gap: 6, minWidth: 220 }}>
+                <div style={{ display: 'grid', gap: 6, minWidth: 220 }}>
                   <span style={{ fontSize: 12, fontWeight: 900, color: RCS.midBlue }}>Date</span>
-                  <input
-                    type="date"
-                    value={selectedDate}
-                    onChange={(e) => {
-                      setSelectedDate(e.target.value);
-                      setOpenPlanId(null);
-                    }}
-                    style={styles.dateInput}
-                  />
-                </label>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const prev = prevSchoolDayIsoFromIso(selectedDate);
+                        setSelectedDate(prev);
+                        setOpenPlanId(null);
+                      }}
+                      style={styles.dateNavBtn}
+                      aria-label="Previous teaching day"
+                      title="Previous teaching day"
+                    >
+                      ←
+                    </button>
+
+                    <input
+                      type="date"
+                      value={selectedDate}
+                      onChange={(e) => {
+                        setSelectedDate(e.target.value);
+                        setOpenPlanId(null);
+                      }}
+                      style={{ ...styles.dateInput, minWidth: 170 }}
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = nextSchoolDayIsoFromIso(selectedDate);
+                        setSelectedDate(next);
+                        setOpenPlanId(null);
+                      }}
+                      style={styles.dateNavBtn}
+                      aria-label="Next teaching day"
+                      title="Next teaching day"
+                    >
+                      →
+                    </button>
+                  </div>
+                </div>
 
                 {isSelectedFriday ? (
                   <label style={{ display: 'grid', gap: 6, minWidth: 160 }}>
@@ -364,10 +453,10 @@ export default function TocClient({
         {view === 'calendar' ? (
           <>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 12 }}>
-              <a href={`/toc?week=${shiftWeek(weekStart, -7)}`} style={styles.secondaryLink}>
+              <a href={`/toc?view=calendar&week=${shiftWeek(weekStart, -7)}`} style={styles.secondaryLink}>
                 ← Prev
               </a>
-              <a href={`/toc?week=${shiftWeek(weekStart, 7)}`} style={styles.secondaryLink}>
+              <a href={`/toc?view=calendar&week=${shiftWeek(weekStart, 7)}`} style={styles.secondaryLink}>
                 Next →
               </a>
 
@@ -380,7 +469,7 @@ export default function TocClient({
                     const v = e.target.value;
                     if (!v) return;
                     const monday = mondayOf(v);
-                    window.location.href = `/toc?week=${monday}`;
+                    window.location.href = `/toc?view=calendar&week=${monday}`;
                   }}
                   style={styles.dateInput}
                 />
@@ -425,7 +514,9 @@ export default function TocClient({
                   onClick={() => {
                     const ids = (plansByDate.get(selectedDate) ?? []).map((p) => p.id);
                     if (!ids.length) return;
-                    window.open(`/toc/print?date=${encodeURIComponent(selectedDate)}`, '_blank', 'noopener,noreferrer');
+                    const qs = new URLSearchParams({ date: selectedDate });
+                    if (isSelectedFriday && selectedFridayType) qs.set('friday_type', selectedFridayType);
+                    window.open(`/toc/print?${qs.toString()}`, '_blank', 'noopener,noreferrer');
                   }}
                   disabled={(plansByDate.get(selectedDate) ?? []).length === 0}
                   style={(plansByDate.get(selectedDate) ?? []).length === 0 ? styles.primaryBtnDisabled : styles.primaryBtn}
@@ -587,19 +678,185 @@ export default function TocClient({
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-              <a href={`/p/${openPlan.id}`} style={styles.primaryBtn}>
-                Open
-              </a>
-              <a href={`/p/${openPlan.id}?print=1`} target="_blank" rel="noopener noreferrer" style={styles.secondaryLink}>
-                Print
-              </a>
+            <div style={{ display: 'grid', gap: 8 }}>
+              <div style={{ fontSize: 12, opacity: 0.85 }}>
+                <b>Plan ID:</b> <code style={{ fontSize: 11 }}>{openPlan.id}</code>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await copyToClipboard(openPlan.id);
+                  }}
+                  style={{ ...styles.smallBtn, marginLeft: 8 }}
+                >
+                  Copy
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                <a href={`/p/${openPlan.id}`} style={styles.primaryBtn}>
+                  Open
+                </a>
+                <a href={`/p/${openPlan.id}?print=1`} target="_blank" rel="noopener noreferrer" style={styles.secondaryLink}>
+                  Print
+                </a>
+              </div>
             </div>
 
-            {openPlan.notes?.trim() ? (
+            {openPlan.toc?.note_to_toc?.trim() ? (
               <div style={styles.notesBox}>
-                <div style={styles.notesLabel}>Notes</div>
+                <div style={styles.notesLabel}>Note to the TOC</div>
+                <div style={styles.notesText}>{openPlan.toc.note_to_toc}</div>
+              </div>
+            ) : openPlan.notes?.trim() ? (
+              <div style={styles.notesBox}>
+                <div style={styles.notesLabel}>Teacher Notes</div>
                 <div style={styles.notesText}>{openPlan.notes}</div>
+              </div>
+            ) : null}
+
+            {openPlan.toc?.class_overview_rows?.length ? (
+              <div style={styles.planBlockCard}>
+                <div style={{ fontWeight: 900, marginBottom: 6 }}>Class Overview</div>
+                <div style={{ display: 'grid', gap: 6 }}>
+                  {openPlan.toc.class_overview_rows.map((r, idx) => {
+                    const b0 = openPlanPrimaryBlocks[0];
+                    const timeRange = openPlanTimeRange ? `${openPlanTimeRange.start}–${openPlanTimeRange.end}` : null;
+                    const resolved = String(r.value ?? '')
+                      .replaceAll('{{class_name}}', String(b0?.class_name ?? openPlan.title ?? ''))
+                      .replaceAll('{{room}}', b0?.room ? `Room ${b0.room}` : '')
+                      .replaceAll('{{time_range}}', timeRange ?? (b0 ? `${formatTime(b0.start_time)}–${formatTime(b0.end_time)}` : ''))
+                      .trim();
+                    return (
+                      <div key={idx}>
+                        <b>{r.label}:</b> <span style={{ whiteSpace: 'pre-wrap' }}>{resolved || '—'}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+
+            {openPlan.toc?.division_of_roles_rows?.length ? (
+              <div style={styles.planBlockCard}>
+                <div style={{ fontWeight: 900, marginBottom: 6 }}>Division of Roles</div>
+                <div style={{ display: 'grid', gap: 6 }}>
+                  {openPlan.toc.division_of_roles_rows.map((r, idx) => (
+                    <div key={idx}>
+                      <b>{r.who}:</b> <span style={{ whiteSpace: 'pre-wrap' }}>{r.responsibility}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {openPlan.toc?.end_of_class_items?.length ? (
+              <div style={styles.planBlockCard}>
+                <div style={{ fontWeight: 900, marginBottom: 6 }}>End of Class — Room Cleanup</div>
+                <ul style={{ margin: 0, paddingLeft: 18 }}>
+                  {openPlan.toc.end_of_class_items.map((it, idx) => (
+                    <li key={idx} style={{ marginBottom: 4 }}>
+                      {it.item_text}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            {openPlan.toc ? (
+              <div style={{ display: 'grid', gap: 10 }}>
+                <div style={{ fontSize: 12, opacity: 0.9 }}>
+                  {openPlan.toc.teacher_name ? (
+                    <span>
+                      <b>Teacher:</b> {openPlan.toc.teacher_name}
+                    </span>
+                  ) : null}
+                  {openPlan.toc.ta_name ? (
+                    <span>
+                      {' '}
+                      • <b>TA:</b> {openPlan.toc.ta_name}
+                      {openPlan.toc.ta_role ? ` (${openPlan.toc.ta_role})` : ''}
+                    </span>
+                  ) : null}
+                  {openPlan.toc.phone_policy ? (
+                    <span>
+                      {' '}
+                      • <b>Phones:</b> {openPlan.toc.phone_policy}
+                    </span>
+                  ) : null}
+                </div>
+
+                {openPlan.toc.opening_routine_steps?.length ? (
+                  <div style={styles.planBlockCard}>
+                    <div style={{ fontWeight: 900, marginBottom: 6 }}>Opening routine</div>
+                    <ol style={{ margin: 0, paddingLeft: 18 }}>
+                      {openPlan.toc.opening_routine_steps.map((s, idx) => (
+                        <li key={idx} style={{ marginBottom: 4 }}>
+                          {s.step_text}
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                ) : null}
+
+                {openPlan.toc.plan_mode === 'lesson_flow' && openPlan.toc.lesson_flow_phases?.length ? (
+                  <div style={styles.planBlockCard}>
+                    <div style={{ fontWeight: 900, marginBottom: 6 }}>Lesson flow</div>
+                    <div style={{ display: 'grid', gap: 8 }}>
+                      {openPlan.toc.lesson_flow_phases.map((p, idx) => (
+                        <div key={idx} style={{ borderTop: idx ? '1px solid rgba(0,0,0,0.08)' : 'none', paddingTop: idx ? 8 : 0 }}>
+                          <div>
+                            <b>{p.time_text}</b> — {p.phase_text}
+                          </div>
+                          <div style={{ opacity: 0.9 }}>{p.activity_text}</div>
+                          {p.purpose_text ? <div style={{ fontSize: 12, opacity: 0.85 }}><b>Purpose:</b> {p.purpose_text}</div> : null}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {openPlan.toc.plan_mode === 'activity_options' && openPlan.toc.activity_options?.length ? (
+                  <div style={styles.planBlockCard}>
+                    <div style={{ fontWeight: 900, marginBottom: 6 }}>Activity options</div>
+                    <div style={{ display: 'grid', gap: 10 }}>
+                      {openPlan.toc.activity_options.map((o, idx) => (
+                        <div key={idx} style={{ borderTop: idx ? '1px solid rgba(0,0,0,0.08)' : 'none', paddingTop: idx ? 8 : 0 }}>
+                          <div style={{ fontWeight: 900 }}>{o.title}</div>
+                          <div style={{ opacity: 0.9 }}>{o.description}</div>
+                          <div style={{ marginTop: 6 }}>{o.details_text}</div>
+                          {o.toc_role_text ? <div style={{ fontSize: 12, opacity: 0.85, marginTop: 6 }}><b>TOC role:</b> {o.toc_role_text}</div> : null}
+                          {o.steps?.length ? (
+                            <ol style={{ marginTop: 8, paddingLeft: 18 }}>
+                              {o.steps.map((st, j) => (
+                                <li key={j} style={{ marginBottom: 4 }}>
+                                  {st.step_text}
+                                </li>
+                              ))}
+                            </ol>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {openPlan.toc.what_to_do_if_items?.length ? (
+                  <div style={styles.planBlockCard}>
+                    <div style={{ fontWeight: 900, marginBottom: 6 }}>What to do if…</div>
+                    <div style={{ display: 'grid', gap: 8 }}>
+                      {openPlan.toc.what_to_do_if_items.map((w, idx) => (
+                        <div key={idx} style={{ borderTop: idx ? '1px solid rgba(0,0,0,0.08)' : 'none', paddingTop: idx ? 8 : 0 }}>
+                          <div>
+                            <b>If:</b> {w.scenario_text}
+                          </div>
+                          <div>
+                            <b>Then:</b> {w.response_text}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             ) : null}
 
@@ -754,6 +1011,17 @@ const styles: Record<string, React.CSSProperties> = {
     height: 'fit-content',
     alignSelf: 'flex-start',
   },
+  smallBtn: {
+    padding: '4px 8px',
+    borderRadius: 10,
+    border: `1px solid ${RCS.gold}`,
+    background: RCS.white,
+    color: RCS.deepNavy,
+    fontWeight: 900,
+    cursor: 'pointer',
+    fontSize: 12,
+    lineHeight: 1,
+  },
   dateInput: {
     padding: '8px 10px',
     borderRadius: 10,
@@ -761,6 +1029,16 @@ const styles: Record<string, React.CSSProperties> = {
     background: RCS.white,
     color: RCS.textDark,
     fontWeight: 900,
+  },
+  dateNavBtn: {
+    padding: '8px 10px',
+    borderRadius: 10,
+    border: `1px solid ${RCS.gold}`,
+    background: RCS.white,
+    color: RCS.deepNavy,
+    fontWeight: 900,
+    cursor: 'pointer',
+    lineHeight: 1,
   },
 
   card: { border: `1px solid ${RCS.deepNavy}`, borderRadius: 12, padding: 16, background: RCS.white, marginTop: 16 },

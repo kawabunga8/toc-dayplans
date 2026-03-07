@@ -24,6 +24,16 @@ export default function AdminHome() {
             <div style={styles.tileText}>See all published plans and revoke links.</div>
           </Link>
 
+          <Link href="/admin/policies" style={styles.tile}>
+            <div style={styles.tileTitle}>Policies</div>
+            <div style={styles.tileText}>Learning standards (ADST/FA/Bible) + rubric levels.</div>
+          </Link>
+
+          <Link href="/admin/teacher" style={styles.tile}>
+            <div style={styles.tileTitle}>Teacher</div>
+            <div style={styles.tileText}>Generate lesson flow suggestions (Superprompt roles).</div>
+          </Link>
+
           <Link href="/toc" style={styles.tile}>
             <div style={styles.tileTitle}>View schedule</div>
             <div style={styles.tileText}>Open the TOC week view (public schedule page).</div>
@@ -32,6 +42,11 @@ export default function AdminHome() {
           <Link href="/admin/block-times" style={styles.tile}>
             <div style={styles.tileTitle}>Block times</div>
             <div style={styles.tileText}>Set default bell schedule times.</div>
+          </Link>
+
+          <Link href="/admin/public-layout" style={styles.tile}>
+            <div style={styles.tileTitle}>Public page layout</div>
+            <div style={styles.tileText}>Global layout template for /p (section order + titles).</div>
           </Link>
 
           <Link href="/admin/class-lists" style={styles.tile}>

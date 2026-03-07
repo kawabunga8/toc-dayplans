@@ -16,6 +16,27 @@ type ClassRow = {
   block_label: string | null;
 };
 
+type AssessmentTouchPoint = {
+  timing_in_lesson: string;
+  learning_standard_focus: string;
+  evidence_to_collect: string;
+  differentiation_strategy: string;
+  cyclical_loop_type: string;
+};
+
+type AdvancedPayload = {
+  central_theme?: string;
+  deep_hope?: string;
+  big_idea?: string;
+  learning_target?: string;
+  collaborative_structure?: string;
+  context?: string;
+  materials_needed?: string[];
+  assessment_touch_points?: string[];
+  pd_goal_connections?: string[];
+  first_peoples_principles?: string[];
+};
+
 type TemplateRow = {
   id: string;
   class_id: string;
@@ -27,6 +48,8 @@ type TemplateRow = {
   note_to_toc: string;
   plan_mode: PlanMode;
   default_tags: string[] | null;
+  assessment_touch_point?: AssessmentTouchPoint | null;
+  advanced_payload?: AdvancedPayload | null;
 };
 
 type RoutineStep = { id?: string; text: string };
@@ -52,6 +75,8 @@ type ActivityOption = {
 
 type WhatIfItem = { id?: string; scenario_text: string; response_text: string };
 
+type RoleRow = { id?: string; who: string; responsibility: string };
+
 type Status = 'loading' | 'idle' | 'saving' | 'error';
 
 export default function TocTemplateClient({ classId }: { classId?: string }) {
@@ -76,11 +101,37 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
   // ordered content
   const [openingRoutine, setOpeningRoutine] = useState<RoutineStep[]>([]);
 
+  // Standards-based assessment touch point (template-level)
+  const [touchTiming, setTouchTiming] = useState('');
+  const [touchStandard, setTouchStandard] = useState('');
+  const [touchEvidence, setTouchEvidence] = useState('');
+  const [touchDiff, setTouchDiff] = useState('');
+  const [touchCycle, setTouchCycle] = useState('');
+
+  // Advanced template areas (used when publishing Advanced plans)
+  const [advCentralTheme, setAdvCentralTheme] = useState('');
+  const [advDeepHope, setAdvDeepHope] = useState('');
+  const [advBigIdea, setAdvBigIdea] = useState('');
+  const [advLearningTarget, setAdvLearningTarget] = useState('');
+  const [advCollaborativeStructure, setAdvCollaborativeStructure] = useState('');
+  const [advContext, setAdvContext] = useState('');
+  const [advMaterialsNeeded, setAdvMaterialsNeeded] = useState(''); // one per line
+  const [advAssessmentTouchPoints, setAdvAssessmentTouchPoints] = useState(''); // one per line
+  const [advPdGoalConnections, setAdvPdGoalConnections] = useState(''); // one per line
+  const [advFirstPeoplesPrinciples, setAdvFirstPeoplesPrinciples] = useState(''); // one per line
+
   const [planMode, setPlanMode] = useState<PlanMode>('lesson_flow');
   const [lessonFlow, setLessonFlow] = useState<PhaseRow[]>([]);
   const [activityOptions, setActivityOptions] = useState<ActivityOption[]>([]);
 
   const [whatIfItems, setWhatIfItems] = useState<WhatIfItem[]>([]);
+  const [roles, setRoles] = useState<RoleRow[]>([]);
+
+  const parseLines = (s: string) =>
+    (s ?? '')
+      .split('\n')
+      .map((x) => x.trim())
+      .filter(Boolean);
 
   const title = useMemo(() => {
     if (!klass) return 'TOC Template';
@@ -182,6 +233,30 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
             }))
           );
 
+          // 10) Default roles
+          setRoles([
+            { who: 'TOC', responsibility: 'Take attendance. Supervise throughout.' },
+            { who: 'Students', responsibility: 'Follow the plan and stay on task.' },
+          ]);
+
+          setTouchTiming('');
+          setTouchStandard('');
+          setTouchEvidence('');
+          setTouchDiff('');
+          setTouchCycle('');
+
+          // Advanced defaults (blank)
+          setAdvCentralTheme('');
+          setAdvDeepHope('');
+          setAdvBigIdea('');
+          setAdvLearningTarget('');
+          setAdvCollaborativeStructure('');
+          setAdvContext('');
+          setAdvMaterialsNeeded('');
+          setAdvAssessmentTouchPoints('');
+          setAdvPdGoalConnections('');
+          setAdvFirstPeoplesPrinciples('');
+
           setStatus('idle');
           return;
         }
@@ -197,10 +272,29 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
         setDefaultTags(Array.isArray((tplRow as any).default_tags) ? (tplRow as any).default_tags.join(', ') : '');
         setPlanMode(tplRow.plan_mode);
 
+        const tp = ((tplRow as any).assessment_touch_point ?? null) as any;
+        setTouchTiming(String(tp?.timing_in_lesson ?? ''));
+        setTouchStandard(String(tp?.learning_standard_focus ?? ''));
+        setTouchEvidence(String(tp?.evidence_to_collect ?? ''));
+        setTouchDiff(String(tp?.differentiation_strategy ?? ''));
+        setTouchCycle(String(tp?.cyclical_loop_type ?? ''));
+
+        const adv = (tplRow.advanced_payload ?? (tplRow as any).advanced_payload ?? null) as any;
+        setAdvCentralTheme(String(adv?.central_theme ?? ''));
+        setAdvDeepHope(String(adv?.deep_hope ?? ''));
+        setAdvBigIdea(String(adv?.big_idea ?? ''));
+        setAdvLearningTarget(String(adv?.learning_target ?? ''));
+        setAdvCollaborativeStructure(String(adv?.collaborative_structure ?? ''));
+        setAdvContext(String(adv?.context ?? ''));
+        setAdvMaterialsNeeded(Array.isArray(adv?.materials_needed) ? adv.materials_needed.join('\n') : '');
+        setAdvAssessmentTouchPoints(Array.isArray(adv?.assessment_touch_points) ? adv.assessment_touch_points.join('\n') : '');
+        setAdvPdGoalConnections(Array.isArray(adv?.pd_goal_connections) ? adv.pd_goal_connections.join('\n') : '');
+        setAdvFirstPeoplesPrinciples(Array.isArray(adv?.first_peoples_principles) ? adv.first_peoples_principles.join('\n') : '');
+
         const templateId = tplRow.id;
 
         // child rows
-        const [routineRes, phaseRes, optRes, optStepsRes, whatIfRes] = await Promise.all([
+        const [routineRes, phaseRes, optRes, optStepsRes, whatIfRes, roleRes] = await Promise.all([
           supabase
             .from('class_opening_routine_steps')
             .select('*')
@@ -229,12 +323,18 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
             .select('*')
             .eq('template_id', templateId)
             .order('sort_order', { ascending: true }),
+          supabase
+            .from('class_role_rows')
+            .select('*')
+            .eq('template_id', templateId)
+            .order('sort_order', { ascending: true }),
         ]);
 
         if (routineRes.error) throw routineRes.error;
         if (phaseRes.error) throw phaseRes.error;
         if (optRes.error) throw optRes.error;
         if (whatIfRes.error) throw whatIfRes.error;
+        if (roleRes.error) throw roleRes.error;
 
         const routine = (routineRes.data ?? []).map((r: any) => ({ id: r.id, text: r.step_text })) as RoutineStep[];
         const phases = (phaseRes.data ?? []).map((r: any) => ({
@@ -280,11 +380,18 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
           response_text: r.response_text,
         })) as WhatIfItem[];
 
+        const roleRows = (roleRes.data ?? []).map((r: any) => ({
+          id: r.id,
+          who: r.who,
+          responsibility: r.responsibility,
+        })) as RoleRow[];
+
         if (cancelled) return;
         setOpeningRoutine(routine);
         setLessonFlow(phases);
         setActivityOptions(options);
         setWhatIfItems(whatIf);
+        setRoles(roleRows);
 
         setStatus('idle');
       } catch (e: any) {
@@ -336,6 +443,25 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
         note_to_toc: noteToToc.trim() ? noteToToc.trim() : '',
         plan_mode: planMode,
         default_tags: tagsArr.length ? tagsArr : null,
+        assessment_touch_point: {
+          timing_in_lesson: touchTiming.trim(),
+          learning_standard_focus: touchStandard.trim(),
+          evidence_to_collect: touchEvidence.trim(),
+          differentiation_strategy: touchDiff.trim(),
+          cyclical_loop_type: touchCycle.trim(),
+        },
+        advanced_payload: {
+          central_theme: advCentralTheme.trim(),
+          deep_hope: advDeepHope.trim(),
+          big_idea: advBigIdea.trim(),
+          learning_target: advLearningTarget.trim(),
+          collaborative_structure: advCollaborativeStructure.trim(),
+          context: advContext.trim(),
+          materials_needed: parseLines(advMaterialsNeeded),
+          assessment_touch_points: parseLines(advAssessmentTouchPoints),
+          pd_goal_connections: parseLines(advPdGoalConnections),
+          first_peoples_principles: parseLines(advFirstPeoplesPrinciples),
+        },
         updated_at: new Date().toISOString(),
       };
 
@@ -459,6 +585,26 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
         }
       }
 
+      // Division of Roles
+      {
+        const { error: delErr } = await supabase.from('class_role_rows').delete().eq('template_id', templateId);
+        if (delErr) throw delErr;
+
+        const rows = roles
+          .map((r, idx) => ({
+            template_id: templateId,
+            sort_order: idx + 1,
+            who: r.who.trim(),
+            responsibility: r.responsibility.trim(),
+          }))
+          .filter((r) => r.who || r.responsibility);
+
+        if (rows.length > 0) {
+          const { error: insErr } = await supabase.from('class_role_rows').insert(rows);
+          if (insErr) throw insErr;
+        }
+      }
+
       setStatus('idle');
     } catch (e: any) {
       setStatus('error');
@@ -522,8 +668,14 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
                 <input value={teacherName} onChange={(e) => setTeacherName(e.target.value)} style={styles.input} />
               </label>
               <label style={styles.field}>
-                <div style={styles.label}>Phone policy *</div>
-                <input value={phonePolicy} onChange={(e) => setPhonePolicy(e.target.value)} style={styles.input} />
+                <div style={styles.label}>Phones policy *</div>
+                <textarea
+                  value={phonePolicy}
+                  onChange={(e) => setPhonePolicy(e.target.value)}
+                  rows={2}
+                  wrap="soft"
+                  style={{ ...styles.textarea, resize: 'vertical' }}
+                />
               </label>
               <label style={styles.field}>
                 <div style={styles.label}>TA name (optional)</div>
@@ -558,6 +710,124 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
               <div style={styles.label}>Note to the TOC (plain text)</div>
               <textarea value={noteToToc} onChange={(e) => setNoteToToc(e.target.value)} rows={6} style={styles.textarea} />
             </label>
+          </section>
+
+          {/* 3.5) Standards-Based Assessment Touch Point */}
+          <section style={styles.card}>
+            <div style={styles.sectionHeader}>3.5 Standards-Based Assessment Touch Point</div>
+            <div style={styles.mutedSmall}>
+              A lightweight check-in you can reuse each lesson: what you’ll look/listen for, and how you’ll differentiate.
+            </div>
+            <div style={{ ...styles.grid2, marginTop: 10 }}>
+              <label style={styles.field}>
+                <div style={styles.label}>Timing in lesson</div>
+                <input value={touchTiming} onChange={(e) => setTouchTiming(e.target.value)} style={styles.input} placeholder="e.g., 15 minutes into flow" />
+              </label>
+              <label style={styles.field}>
+                <div style={styles.label}>Cyclical loop type</div>
+                <input value={touchCycle} onChange={(e) => setTouchCycle(e.target.value)} style={styles.input} placeholder="design / rehearsal / refinement" />
+              </label>
+              <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                <div style={styles.label}>Learning Standard focus (reference)</div>
+                <input value={touchStandard} onChange={(e) => setTouchStandard(e.target.value)} style={styles.input} placeholder="e.g., ADST > Define and Ideate" />
+              </label>
+              <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                <div style={styles.label}>Evidence to collect</div>
+                <input value={touchEvidence} onChange={(e) => setTouchEvidence(e.target.value)} style={styles.input} placeholder="e.g., verbal articulation of…" />
+              </label>
+              <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                <div style={styles.label}>Differentiation strategy (UDL / IEP)</div>
+                <input value={touchDiff} onChange={(e) => setTouchDiff(e.target.value)} style={styles.input} placeholder="e.g., chunking, sentence starters, extended time…" />
+              </label>
+            </div>
+          </section>
+
+          {/* 3.6) Advanced Areas (template-level) */}
+          <section style={styles.card}>
+            <div style={styles.sectionHeader}>3.6 Advanced Areas (optional)</div>
+            <div style={styles.mutedSmall}>
+              These are used when a day plan is published in <b>Advanced</b> mode (and Materials Needed is also used in Standard mode).
+            </div>
+
+            <div style={{ ...styles.grid2, marginTop: 10 }}>
+              <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                <div style={styles.label}>Materials Needed (one per line)</div>
+                <textarea value={advMaterialsNeeded} onChange={(e) => setAdvMaterialsNeeded(e.target.value)} rows={4} style={styles.textarea} />
+              </label>
+
+              <label style={styles.field}>
+                <div style={styles.label}>Central Theme</div>
+                <textarea
+                  value={advCentralTheme}
+                  onChange={(e) => setAdvCentralTheme(e.target.value)}
+                  rows={2}
+                  wrap="soft"
+                  style={{ ...styles.textarea, resize: 'vertical' }}
+                />
+              </label>
+              <label style={styles.field}>
+                <div style={styles.label}>Deep Hope</div>
+                <textarea
+                  value={advDeepHope}
+                  onChange={(e) => setAdvDeepHope(e.target.value)}
+                  rows={2}
+                  wrap="soft"
+                  style={{ ...styles.textarea, resize: 'vertical' }}
+                />
+              </label>
+
+              <label style={styles.field}>
+                <div style={styles.label}>Big Idea</div>
+                <textarea
+                  value={advBigIdea}
+                  onChange={(e) => setAdvBigIdea(e.target.value)}
+                  rows={2}
+                  wrap="soft"
+                  style={{ ...styles.textarea, resize: 'vertical' }}
+                />
+              </label>
+              <label style={styles.field}>
+                <div style={styles.label}>Learning Target</div>
+                <textarea
+                  value={advLearningTarget}
+                  onChange={(e) => setAdvLearningTarget(e.target.value)}
+                  rows={2}
+                  wrap="soft"
+                  style={{ ...styles.textarea, resize: 'vertical' }}
+                />
+              </label>
+
+              <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                <div style={styles.label}>Collaborative Structure</div>
+                <textarea
+                  value={advCollaborativeStructure}
+                  onChange={(e) => setAdvCollaborativeStructure(e.target.value)}
+                  rows={2}
+                  wrap="soft"
+                  style={{ ...styles.textarea, resize: 'vertical' }}
+                />
+              </label>
+
+              <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                <div style={styles.label}>Context</div>
+                <textarea value={advContext} onChange={(e) => setAdvContext(e.target.value)} rows={3} style={styles.textarea} />
+              </label>
+
+              <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                <div style={styles.label}>Assessment Touch Points (one per line)</div>
+                <textarea value={advAssessmentTouchPoints} onChange={(e) => setAdvAssessmentTouchPoints(e.target.value)} rows={4} style={styles.textarea} />
+              </label>
+
+              <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                <div style={styles.label}>PD Goal Connections (one per line)</div>
+                <textarea value={advPdGoalConnections} onChange={(e) => setAdvPdGoalConnections(e.target.value)} rows={4} style={styles.textarea} />
+              </label>
+
+              <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                <div style={styles.label}>First Peoples Principles (one per line)</div>
+                <textarea value={advFirstPeoplesPrinciples} onChange={(e) => setAdvFirstPeoplesPrinciples(e.target.value)} rows={4} style={styles.textarea} />
+              </label>
+            </div>
           </section>
 
           {/* 4) Opening routine */}
@@ -885,9 +1155,55 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
             </section>
           )}
 
-          {/* 6) What to do if */}
+          {/* 6) Division of Roles */}
           <section style={styles.card}>
-            <div style={styles.sectionHeader}>6. What to do if…</div>
+            <div style={styles.sectionHeader}>6. Division of Roles</div>
+            <div style={styles.mutedSmall}>Ordered rows: who / responsibility.</div>
+
+            <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
+              {roles.map((r, idx) => (
+                <div key={idx} style={styles.cardInner}>
+                  <div style={styles.rowBetween}>
+                    <div style={{ fontWeight: 900, color: RCS.deepNavy }}>Row {idx + 1}</div>
+                    <div style={styles.rowBtns}>
+                      <button onClick={() => setRoles((prev) => moveUp(prev, idx))} style={styles.smallBtn}>
+                        ↑
+                      </button>
+                      <button onClick={() => setRoles((prev) => moveDown(prev, idx))} style={styles.smallBtn}>
+                        ↓
+                      </button>
+                      <button onClick={() => setRoles((prev) => prev.filter((_, i) => i !== idx))} style={styles.smallBtnDanger}>
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+
+                  <div style={styles.grid2}>
+                    <label style={styles.field}>
+                      <div style={styles.label}>Who</div>
+                      <input value={r.who} onChange={(e) => setRoles((prev) => prev.map((x, i) => (i === idx ? { ...x, who: e.target.value } : x)))} style={styles.input} />
+                    </label>
+                    <label style={styles.field}>
+                      <div style={styles.label}>Responsibility</div>
+                      <input
+                        value={r.responsibility}
+                        onChange={(e) => setRoles((prev) => prev.map((x, i) => (i === idx ? { ...x, responsibility: e.target.value } : x)))}
+                        style={styles.input}
+                      />
+                    </label>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <button onClick={() => setRoles((prev) => [...prev, { who: '', responsibility: '' }])} disabled={isDemo} style={styles.secondaryBtn}>
+              + Add role row
+            </button>
+          </section>
+
+          {/* 7) What to do if */}
+          <section style={styles.card}>
+            <div style={styles.sectionHeader}>7. What to do if…</div>
             <div style={styles.mutedSmall}>Ordered scenario/response pairs.</div>
 
             <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
@@ -950,9 +1266,9 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
             </button>
           </section>
 
-          {/* 7) Save */}
+          {/* 8) Save */}
           <section style={styles.card}>
-            <div style={styles.sectionHeader}>7. Save</div>
+            <div style={styles.sectionHeader}>8. Save</div>
             <div style={styles.mutedSmall}>
               Saves the template and all sections to Supabase. (One-click save; writes occur sequentially under the hood.)
             </div>
@@ -1063,6 +1379,8 @@ const styles: Record<string, React.CSSProperties> = {
     background: RCS.white,
     color: RCS.textDark,
     fontFamily: 'inherit',
+    whiteSpace: 'pre-wrap',
+    overflowWrap: 'anywhere',
   },
   rowItem: {
     display: 'flex',

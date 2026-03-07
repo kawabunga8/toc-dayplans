@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 import TocClient from './TocClient';
+import { nextSchoolDayDate } from '@/lib/appRules/dates';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,15 +14,24 @@ function mondayOfWeek(d: Date) {
   return m;
 }
 
-export default async function TocPage({ searchParams }: { searchParams: Promise<{ week?: string }> }) {
+
+export default async function TocPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ week?: string; view?: string }>;
+}) {
   const sp = await searchParams;
   const week = sp.week;
+  const viewParam = (sp.view ?? '').toString();
 
   let weekStart: string;
   if (week && /^\d{4}-\d{2}-\d{2}$/.test(week)) {
     weekStart = week;
   } else {
-    weekStart = mondayOfWeek(new Date()).toISOString().slice(0, 10);
+    const base = nextSchoolDayDate(new Date());
+    // Use local YYYY-MM-DD to avoid UTC date drift.
+    const { yyyyMmDdLocal } = await import('@/lib/appRules/dates');
+    weekStart = yyyyMmDdLocal(mondayOfWeek(base));
   }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -41,5 +51,15 @@ export default async function TocPage({ searchParams }: { searchParams: Promise<
     notFound();
   }
 
-  return <TocClient weekStart={weekStart} plans={(plansData ?? []) as any} classes={(classesData ?? []) as any} />;
+  const initialView = viewParam === 'calendar' ? 'calendar' : 'today';
+
+  return (
+    <TocClient
+      weekStart={weekStart}
+      plans={(plansData ?? []) as any}
+      classes={(classesData ?? []) as any}
+      initialView={initialView}
+    />
+  );
 }
+

@@ -18,7 +18,7 @@ type TemplateTagRow = {
   default_tags: string[] | null;
 };
 
-type Status = 'loading' | 'idle' | 'error';
+type Status = 'loading' | 'idle' | 'saving' | 'error';
 
 export default function CoursesClient() {
   const { isDemo } = useDemo();
@@ -26,6 +26,10 @@ export default function CoursesClient() {
   const [tagsByClassId, setTagsByClassId] = useState<Record<string, string[]>>({});
   const [status, setStatus] = useState<Status>('loading');
   const [error, setError] = useState<string | null>(null);
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draftName, setDraftName] = useState<string>('');
+  const [draftRoom, setDraftRoom] = useState<string>('');
 
   async function load() {
     setStatus('loading');
@@ -76,6 +80,59 @@ export default function CoursesClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  async function startEdit(row: CourseRow) {
+    setEditingId(row.id);
+    setDraftName(row.name ?? '');
+    setDraftRoom(row.room ?? '');
+    setError(null);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setDraftName('');
+    setDraftRoom('');
+  }
+
+  async function saveEdit() {
+    if (!editingId) return;
+    if (isDemo) return;
+
+    setStatus('saving');
+    setError(null);
+
+    try {
+      const supabase = getSupabaseClient();
+      const patch: any = {
+        name: draftName.trim() || '—',
+        room: draftRoom.trim() ? draftRoom.trim() : null,
+        updated_at: new Date().toISOString(),
+      };
+
+      // Some schemas may not have updated_at on classes yet.
+      let { error } = await supabase.from('classes').update(patch).eq('id', editingId);
+      const msg = String((error as any)?.message ?? '');
+      const code = String((error as any)?.code ?? '');
+      const isMissingCol = code === '42703' || /column .* does not exist/i.test(msg) || /Could not find the '.*' column/i.test(msg);
+      if (error && isMissingCol) {
+        delete patch.updated_at;
+        const retry = await supabase.from('classes').update(patch).eq('id', editingId);
+        error = retry.error;
+      }
+
+      if (error) throw error;
+
+      // update local list
+      setItems((prev) => prev.map((r) => (r.id === editingId ? { ...r, name: patch.name, room: patch.room } : r)));
+      setEditingId(null);
+      setDraftName('');
+      setDraftRoom('');
+      setStatus('idle');
+    } catch (e: any) {
+      setStatus('error');
+      setError(humanizeError(e));
+    }
+  }
+
   return (
     <main style={styles.page}>
       <h1 style={styles.h1}>Courses / Rooms</h1>
@@ -113,19 +170,48 @@ export default function CoursesClient() {
                   <th style={styles.th}>Room</th>
                   <th style={styles.th}>#Tags</th>
                   <th style={styles.th}></th>
+                  <th style={styles.th}></th>
                 </tr>
               </thead>
               <tbody>
                 {items.map((c, i) => (
                   <tr key={c.id} style={i % 2 === 0 ? styles.trEven : styles.trOdd}>
                     <td style={styles.tdLabel}>{c.block_label ?? '—'}</td>
-                    <td style={styles.td}>{c.name}</td>
-                    <td style={styles.td}>{c.room || '—'}</td>
+                    <td style={styles.td}>
+                      {editingId === c.id ? (
+                        <input value={draftName} onChange={(e) => setDraftName(e.target.value)} style={styles.inputInline} />
+                      ) : (
+                        c.name
+                      )}
+                    </td>
+                    <td style={styles.td}>
+                      {editingId === c.id ? (
+                        <input value={draftRoom} onChange={(e) => setDraftRoom(e.target.value)} style={styles.inputInline} placeholder="(blank)" />
+                      ) : (
+                        c.room || '—'
+                      )}
+                    </td>
                     <td style={styles.td}> {(tagsByClassId[c.id] ?? []).map((t) => `#${t}`).join(' ')} </td>
                     <td style={styles.tdRight}>
                       <Link href={`/admin/courses/${c.id}/toc-template`} style={styles.primaryLink}>
                         TOC Template
                       </Link>
+                    </td>
+                    <td style={styles.tdRight}>
+                      {editingId === c.id ? (
+                        <div style={{ display: 'inline-flex', gap: 8, flexWrap: 'wrap' }}>
+                          <button onClick={saveEdit} style={styles.primaryBtnSmall} disabled={isDemo || status === 'saving'}>
+                            {status === 'saving' ? 'Saving…' : 'Save'}
+                          </button>
+                          <button onClick={cancelEdit} style={styles.secondaryBtn} disabled={status === 'saving'}>
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button onClick={() => startEdit(c)} style={styles.secondaryBtn} disabled={isDemo || status === 'saving'}>
+                          Edit
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -201,6 +287,24 @@ const styles: Record<string, React.CSSProperties> = {
     color: RCS.deepNavy,
     cursor: 'pointer',
     fontWeight: 800,
+  },
+  primaryBtnSmall: {
+    padding: '8px 10px',
+    borderRadius: 10,
+    border: `1px solid ${RCS.gold}`,
+    background: RCS.deepNavy,
+    color: RCS.white,
+    cursor: 'pointer',
+    fontWeight: 900,
+  },
+  inputInline: {
+    width: '100%',
+    padding: '8px 10px',
+    borderRadius: 10,
+    border: `1px solid ${RCS.deepNavy}`,
+    background: RCS.white,
+    color: RCS.textDark,
+    fontFamily: 'inherit',
   },
   table: { width: '100%', borderCollapse: 'collapse', marginTop: 6 },
   th: {

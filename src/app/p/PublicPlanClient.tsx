@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { getSupabaseClient } from '@/lib/supabaseClient';
 
 type Student = { id: string; first_name: string; last_name: string };
 
@@ -12,8 +13,28 @@ type Block = {
   class_name: string;
   details: string | null;
   class_id: string | null;
+  block_label?: string | null;
   students?: Student[];
 };
+
+type TocOpeningStep = { step_text: string };
+
+type TocLessonFlowPhase = {
+  time_text: string;
+  phase_text: string;
+  activity_text: string;
+  purpose_text: string | null;
+};
+
+type TocActivityOption = {
+  title: string;
+  description: string;
+  details_text: string;
+  toc_role_text: string | null;
+  steps: Array<{ step_text: string }>;
+};
+
+type TocWhatIf = { scenario_text: string; response_text: string };
 
 type PublicPlan = {
   id: string;
@@ -23,9 +44,57 @@ type PublicPlan = {
   title: string;
   notes: string | null;
   blocks: Block[];
+  toc?: {
+    plan_mode: 'lesson_flow' | 'activity_options';
+    teacher_name: string;
+    ta_name: string;
+    ta_role: string;
+    phone_policy: string;
+    note_to_toc: string;
+    opening_routine_steps: TocOpeningStep[];
+    lesson_flow_phases: TocLessonFlowPhase[];
+    activity_options: TocActivityOption[];
+    what_to_do_if_items: TocWhatIf[];
+    class_overview_rows?: Array<{ label: string; value: string }>;
+    division_of_roles_rows?: Array<{ who: string; responsibility: string }>;
+    end_of_class_items?: Array<{ item_text: string }>;
+    attendance_note?: string;
+
+    // Advanced-only (published only when publish_mode='advanced')
+    lesson_overview?: {
+      central_theme?: string;
+      deep_hope?: string;
+      big_idea?: string;
+      learning_target?: string;
+      collaborative_structure?: string;
+      context?: string;
+    };
+    materials_needed?: string[];
+    assessment_touch_points?: string[];
+    pd_goal_connections?: string[];
+    first_peoples_principles?: string[];
+  };
 };
 
-export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
+type LayoutSectionKey =
+  | 'class_overview'
+  | 'division_of_roles'
+  | 'opening_routine'
+  | 'lesson_flow'
+  | 'activity_options'
+  | 'what_to_do_if'
+  | 'end_of_class'
+  | 'lesson_overview'
+  | 'materials_needed'
+  | 'assessment_touch_points'
+  | 'pd_goal_connections'
+  | 'first_peoples_principles';
+
+type PublicPlanLayout = {
+  sections?: Array<{ key: LayoutSectionKey; title?: string; enabled?: boolean }>;
+};
+
+export default function PublicPlanClient({ plan, layout }: { plan: PublicPlan; layout?: PublicPlanLayout | null }) {
   const [rotationBlocks, setRotationBlocks] = useState<string[]>([]);
   const [blockTimesBySlot, setBlockTimesBySlot] = useState<Record<string, { start: string; end: string }>>({});
 
@@ -65,6 +134,15 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
     };
   }, [plan.plan_date, plan.friday_type]);
 
+  const debugEnabled = useMemo(() => {
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      return sp.get('debug') === '1';
+    } catch {
+      return false;
+    }
+  }, []);
+
   // Auto-print support: /p/[id]?print=1 will trigger window.print() on load.
   useEffect(() => {
     try {
@@ -76,6 +154,60 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
       // ignore
     }
   }, []);
+
+  const [debugOk, setDebugOk] = useState(false);
+  const [debugLoading, setDebugLoading] = useState(false);
+  const [debugErr, setDebugErr] = useState<string | null>(null);
+  const [debugPayload, setDebugPayload] = useState<any>(null);
+
+  useEffect(() => {
+    if (!debugEnabled) return;
+
+    let cancelled = false;
+    void (async () => {
+      setDebugLoading(true);
+      setDebugErr(null);
+
+      try {
+        const supabase = getSupabaseClient();
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (!sessionData.session) {
+          if (!cancelled) {
+            setDebugOk(false);
+            setDebugErr('Debug requires admin login (no session).');
+          }
+          return;
+        }
+        const { data: isStaff, error } = await supabase.rpc('is_staff');
+        if (error || !isStaff) {
+          if (!cancelled) {
+            setDebugOk(false);
+            setDebugErr('Debug requires staff permissions.');
+          }
+          return;
+        }
+
+        const res = await fetch(`/api/public/plan?id=${encodeURIComponent(plan.id)}`);
+        const j = await res.json();
+        if (!res.ok) throw new Error(j?.error ?? 'Failed to load public payload');
+        if (!cancelled) {
+          setDebugOk(true);
+          setDebugPayload(j);
+        }
+      } catch (e: any) {
+        if (!cancelled) {
+          setDebugOk(false);
+          setDebugErr(e?.message ?? 'Debug failed');
+        }
+      } finally {
+        if (!cancelled) setDebugLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [debugEnabled, plan.id]);
 
   // Show ONLY the selected plan (one block) when opened from TOC.
   const blocksToShow = useMemo(() => {
@@ -98,6 +230,20 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
     if (!t?.start || !t?.end) return null;
     return { start: t.start, end: t.end, slot };
   }, [plan.plan_date, plan.slot, rotationBlocks, blockTimesBySlot]);
+
+  function resolveTokens(raw: string, block: Block): string {
+    const timeRange =
+      computedRange?.start && computedRange?.end
+        ? `${computedRange.start}–${computedRange.end}`
+        : block.start_time && block.end_time
+          ? `${formatTime(block.start_time)}–${formatTime(block.end_time)}`
+          : '';
+
+    return String(raw ?? '')
+      .replaceAll('{{class_name}}', String(block.class_name ?? ''))
+      .replaceAll('{{room}}', block.room ? `Room ${block.room}` : '')
+      .replaceAll('{{time_range}}', timeRange);
+  }
 
   const allIds = useMemo(() => blocksToShow.map((b) => b.id), [blocksToShow]);
   const [selected, setSelected] = useState<Record<string, boolean>>(() => {
@@ -182,7 +328,9 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
         <header style={styles.header}>
           <div style={styles.titleBlock}>
             <div style={styles.titleLogoWrap}>
-              <img src="/LOGO_Full_Colour_RCS_Landscape.png" alt="RCS" style={styles.titleLogo as any} />
+              <a href="https://myrcs.ca" style={{ display: 'inline-block' }} aria-label="Open myrcs.ca">
+                <img src="/LOGO_Full_Colour_RCS_Landscape.png" alt="RCS" style={styles.titleLogo as any} />
+              </a>
             </div>
             <div style={styles.titleText}>
               <div style={styles.titleTeacher}>Mr. Kawamura</div>
@@ -203,17 +351,74 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
             <a href="/admin" style={styles.secondaryBtn}>
               Staff admin
             </a>
-            <button onClick={() => selectAll(true)} style={styles.secondaryBtn}>
-              Select all
-            </button>
-            <button onClick={() => selectAll(false)} style={styles.secondaryBtn}>
-              Select none
+            <div style={{ flex: 1 }} />
+
+            <div style={{ opacity: 0.9, fontWeight: 700 }}>
+              Selected: <b>{selectedCount}</b> / {blocksToShow.length}
+            </div>
+            <button
+              onClick={() => window.print()}
+              disabled={selectedCount === 0}
+              style={selectedCount === 0 ? styles.primaryBtnDisabled : styles.primaryBtn}
+            >
+              Print Selected
             </button>
           </div>
 
-          {plan.notes?.trim() ? (
+          {debugEnabled ? (
+            <div style={{ ...styles.notesBox, background: '#FDF3DC', borderColor: '#C9A84C' }}>
+              <div style={styles.notesLabel}>Debug (admin-only)</div>
+              {debugLoading ? <div style={{ opacity: 0.85 }}>Loading…</div> : null}
+              {debugErr ? <div style={{ color: '#7F1D1D', whiteSpace: 'pre-wrap' }}>{debugErr}</div> : null}
+
+              {debugOk && debugPayload?.plan ? (
+                <div style={{ display: 'grid', gap: 8 }}>
+                  <div style={{ fontSize: 12, opacity: 0.9 }}>
+                    <b>version</b>: {process.env.NEXT_PUBLIC_APP_VERSION || '—'}
+                  </div>
+                  <div style={{ fontSize: 12, opacity: 0.9 }}>
+                    <b>plan_id</b>: {String(debugPayload.plan.id)}
+                  </div>
+                  <div style={{ fontSize: 12, opacity: 0.9 }}>
+                    <b>slot</b>: {String(debugPayload.plan.slot)}
+                  </div>
+                  <div style={{ fontSize: 12, opacity: 0.9 }}>
+                    <b>blocks returned</b>: {(debugPayload.plan.blocks ?? []).length}
+                  </div>
+                  <pre style={{ margin: 0, fontSize: 11, overflowX: 'auto', whiteSpace: 'pre-wrap' }}>
+{JSON.stringify(
+  {
+    blocks: (debugPayload.plan.blocks ?? []).map((b: any) => ({
+      id: b.id,
+      block_label: b.block_label ?? null,
+      class_name: b.class_name,
+      class_id: b.class_id,
+    })),
+    toc: {
+      plan_mode: debugPayload.plan.toc?.plan_mode ?? null,
+      lesson_flow_count: (debugPayload.plan.toc?.lesson_flow_phases ?? []).length,
+      opening_count: (debugPayload.plan.toc?.opening_routine_steps ?? []).length,
+      what_if_count: (debugPayload.plan.toc?.what_to_do_if_items ?? []).length,
+      activity_options_count: (debugPayload.plan.toc?.activity_options ?? []).length,
+    },
+  },
+  null,
+  2
+)}
+                  </pre>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {plan.toc?.note_to_toc?.trim() ? (
             <div style={styles.notesBox}>
               <div style={styles.notesLabel}>Note to the TOC</div>
+              <div style={styles.notesText}>{plan.toc.note_to_toc}</div>
+            </div>
+          ) : plan.notes?.trim() ? (
+            <div style={styles.notesBox}>
+              <div style={styles.notesLabel}>Teacher Notes</div>
               <div style={styles.notesText}>{plan.notes}</div>
             </div>
           ) : null}
@@ -266,16 +471,310 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
 
                 {b.details?.trim() ? <div style={styles.blockDetails}>{b.details}</div> : null}
 
+                {/* TOC plan content */}
+                {plan.toc ? (
+                  <div style={styles.tocWrap}>
+                    {(() => {
+                      const isLowDetail = /\b(lunch|chapel)\b/i.test(String(b.class_name ?? ''));
+                      return (
+                        <>
+                          <div style={styles.tocMeta}>
+                            {plan.toc.teacher_name ? <span><b>Teacher:</b> {plan.toc.teacher_name}</span> : null}
+                            {plan.toc.ta_name ? <span> • <b>TA:</b> {plan.toc.ta_name}{plan.toc.ta_role ? ` (${plan.toc.ta_role})` : ''}</span> : null}
+                            {plan.toc.phone_policy ? <span> • <b>Phones:</b> {plan.toc.phone_policy}</span> : null}
+                          </div>
+
+                          {isLowDetail ? (
+                            plan.toc.note_to_toc?.trim() ? (
+                              <div style={styles.notesBox}>
+                                <div style={styles.notesLabel}>Note</div>
+                                <div style={styles.notesText}>{plan.toc.note_to_toc}</div>
+                              </div>
+                            ) : null
+                          ) : (
+                            (() => {
+                              const sections: Record<LayoutSectionKey, React.ReactElement | null> = {
+                                class_overview: plan.toc.class_overview_rows?.length ? (
+                                  <div style={styles.tocSection}>
+                                    <div style={styles.tocSectionTitle}>Class Overview</div>
+                                    <table style={styles.printTable as any}>
+                                      <tbody>
+                                        {plan.toc.class_overview_rows
+                                          .filter((r) => {
+                                            const k = String(r.label ?? '').trim().toLowerCase();
+                                            return k !== 'class' && k !== 'room' && k !== 'time';
+                                          })
+                                          .map((r, idx) => {
+                                            const v = resolveTokens(String(r.value ?? ''), b);
+                                            return (
+                                              <tr key={idx} style={idx % 2 === 1 ? (styles.printTrAlt as any) : undefined}>
+                                                <td style={styles.printTd as any}><b>{r.label}</b></td>
+                                                <td style={styles.printTd as any}>{v || ''}</td>
+                                              </tr>
+                                            );
+                                          })}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                ) : null,
+
+                                division_of_roles: plan.toc.division_of_roles_rows?.length ? (
+                                  <div style={styles.tocSection}>
+                                    <div style={styles.tocSectionTitle}>Division of Roles</div>
+                                    <table style={styles.printTable as any}>
+                                      <thead>
+                                        <tr>
+                                          <th style={styles.printTh as any}>WHO</th>
+                                          <th style={styles.printTh as any}>RESPONSIBILITY</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {plan.toc.division_of_roles_rows.map((r, idx) => (
+                                          <tr key={idx} style={idx % 2 === 1 ? (styles.printTrAlt as any) : undefined}>
+                                            <td style={styles.printTd as any}><b>{r.who}</b></td>
+                                            <td style={styles.printTd as any}>{r.responsibility}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                ) : null,
+
+                                opening_routine: plan.toc.opening_routine_steps?.length ? (
+                                  <div style={styles.tocSection}>
+                                    <div style={styles.tocSectionTitle}>Opening routine</div>
+                                    <ol style={styles.tocList as any}>
+                                      {plan.toc.opening_routine_steps.map((s, idx) => (
+                                        <li key={idx} style={{ marginBottom: 4 }}>{s.step_text}</li>
+                                      ))}
+                                    </ol>
+                                  </div>
+                                ) : null,
+
+                                lesson_flow: plan.toc.plan_mode === 'lesson_flow' && plan.toc.lesson_flow_phases?.length ? (
+                                  <div style={{ ...styles.tocSection, background: RCS.lightGold, borderColor: RCS.gold }}>
+                                    <div style={styles.tocSectionTitle}>Lesson flow</div>
+                                    <table style={styles.printTable as any}>
+                                      <thead>
+                                        <tr>
+                                          <th style={styles.printTh as any}>TIME</th>
+                                          <th style={styles.printTh as any}>PHASE</th>
+                                          <th style={styles.printTh as any}>ACTIVITY</th>
+                                          <th style={styles.printTh as any}>PURPOSE</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {plan.toc.lesson_flow_phases.map((p, idx) => (
+                                          <tr key={idx} style={idx % 2 === 1 ? (styles.printTrAlt as any) : undefined}>
+                                            <td style={styles.printTd as any}><b>{p.time_text}</b></td>
+                                            <td style={styles.printTd as any}><b>{p.phase_text}</b></td>
+                                            <td style={{ ...(styles.printTd as any), whiteSpace: 'pre-wrap' } as any}>{p.activity_text}</td>
+                                            <td style={{ ...(styles.printTd as any), fontStyle: 'italic', whiteSpace: 'pre-wrap' } as any}>{p.purpose_text ?? ''}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                ) : null,
+
+                                activity_options: plan.toc.plan_mode === 'activity_options' && plan.toc.activity_options?.length ? (
+                                  <div style={styles.tocSection}>
+                                    <div style={styles.tocSectionTitle}>Activity options</div>
+                                    <div style={{ display: 'grid', gap: 10 }}>
+                                      {plan.toc.activity_options.map((o, idx) => (
+                                        <div key={idx} style={styles.tocCard}>
+                                          <div style={{ fontWeight: 900 }}>{o.title}</div>
+                                          <div style={{ opacity: 0.9 }}>{o.description}</div>
+                                          <div style={{ marginTop: 6 }}>{o.details_text}</div>
+                                          {o.toc_role_text ? <div style={{ fontSize: 12, opacity: 0.85, marginTop: 6 }}><b>TOC role:</b> {o.toc_role_text}</div> : null}
+                                          {o.steps?.length ? (
+                                            <ol style={{ marginTop: 8 }}>
+                                              {o.steps.map((st, j) => (
+                                                <li key={j} style={{ marginBottom: 4 }}>{st.step_text}</li>
+                                              ))}
+                                            </ol>
+                                          ) : null}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ) : null,
+
+                                what_to_do_if: plan.toc.what_to_do_if_items?.length ? (
+                                  <div style={{ ...styles.tocSection, background: RCS.lightBlue, borderColor: RCS.navy }}>
+                                    <div style={styles.tocSectionTitle}>What to Do If…</div>
+                                    <table style={styles.printTable as any}>
+                                      <thead>
+                                        <tr>
+                                          <th style={styles.printTh as any}>IF</th>
+                                          <th style={styles.printTh as any}>THEN</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {plan.toc.what_to_do_if_items.map((w, idx) => (
+                                          <tr key={idx} style={idx % 2 === 1 ? (styles.printTrAlt as any) : undefined}>
+                                            <td style={styles.printTd as any}><b>{w.scenario_text}</b></td>
+                                            <td style={styles.printTd as any}>{w.response_text}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                ) : null,
+
+                                end_of_class: plan.toc.end_of_class_items?.length ? (
+                                  <div style={styles.tocSection}>
+                                    <div style={styles.tocSectionTitle}>End of Class — Room Cleanup</div>
+                                    <ul style={{ margin: 0, paddingLeft: 18 }}>
+                                      {plan.toc.end_of_class_items.map((it, idx) => (
+                                        <li key={idx} style={{ marginBottom: 4, fontSize: 12 }}>{it.item_text}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                ) : null,
+
+                                lesson_overview:
+                                  plan.toc.lesson_overview && Object.values(plan.toc.lesson_overview).some((v) => v?.trim?.()) ? (
+                                    <div style={styles.tocSection}>
+                                      <div style={styles.tocSectionTitle}>Lesson Overview</div>
+                                      <table style={styles.printTable as any}>
+                                        <tbody>
+                                          {plan.toc.lesson_overview.central_theme?.trim() ? (
+                                            <tr><td style={styles.printTd as any}><b>Central Theme</b></td><td style={styles.printTd as any}>{plan.toc.lesson_overview.central_theme}</td></tr>
+                                          ) : null}
+                                          {plan.toc.lesson_overview.deep_hope?.trim() ? (
+                                            <tr style={styles.printTrAlt as any}><td style={styles.printTd as any}><b>Deep Hope</b></td><td style={styles.printTd as any}>{plan.toc.lesson_overview.deep_hope}</td></tr>
+                                          ) : null}
+                                          {plan.toc.lesson_overview.big_idea?.trim() ? (
+                                            <tr><td style={styles.printTd as any}><b>Big Idea</b></td><td style={styles.printTd as any}>{plan.toc.lesson_overview.big_idea}</td></tr>
+                                          ) : null}
+                                          {plan.toc.lesson_overview.learning_target?.trim() ? (
+                                            <tr style={styles.printTrAlt as any}><td style={styles.printTd as any}><b>Learning Target</b></td><td style={styles.printTd as any}>{plan.toc.lesson_overview.learning_target}</td></tr>
+                                          ) : null}
+                                          {plan.toc.lesson_overview.collaborative_structure?.trim() ? (
+                                            <tr><td style={styles.printTd as any}><b>Collaborative Structure</b></td><td style={styles.printTd as any}>{plan.toc.lesson_overview.collaborative_structure}</td></tr>
+                                          ) : null}
+                                          {plan.toc.lesson_overview.context?.trim() ? (
+                                            <tr style={styles.printTrAlt as any}><td style={styles.printTd as any}><b>Context</b></td><td style={styles.printTd as any}>{plan.toc.lesson_overview.context}</td></tr>
+                                          ) : null}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  ) : null,
+
+                                materials_needed: plan.toc.materials_needed?.length ? (
+                                  <div style={styles.tocSection}>
+                                    <div style={styles.tocSectionTitle}>Materials Needed</div>
+                                    <ul style={{ margin: 0, paddingLeft: 18 }}>
+                                      {plan.toc.materials_needed.map((m, idx) => (
+                                        <li key={idx} style={{ marginBottom: 4, fontSize: 12 }}>{m}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                ) : null,
+
+                                assessment_touch_points: plan.toc.assessment_touch_points?.length ? (
+                                  <div style={{ ...styles.tocSection, background: RCS.lightGold, borderColor: RCS.gold }}>
+                                    <div style={styles.tocSectionTitle}>★ Assessment Touch Points</div>
+                                    <ul style={{ margin: 0, paddingLeft: 18 }}>
+                                      {plan.toc.assessment_touch_points.map((t, idx) => (
+                                        <li key={idx} style={{ marginBottom: 4, fontSize: 12 }}>{t}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                ) : null,
+
+                                pd_goal_connections: plan.toc.pd_goal_connections?.length ? (
+                                  <div style={{ ...styles.tocSection, background: RCS.lightBlue, borderColor: RCS.navy }}>
+                                    <div style={styles.tocSectionTitle}>PD Goal Connections</div>
+                                    <ul style={{ margin: 0, paddingLeft: 18 }}>
+                                      {plan.toc.pd_goal_connections.map((g, idx) => (
+                                        <li key={idx} style={{ marginBottom: 4, fontSize: 12 }}>{g}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                ) : null,
+
+                                first_peoples_principles: plan.toc.first_peoples_principles?.length ? (
+                                  <div style={styles.tocSection}>
+                                    <div style={styles.tocSectionTitle}>First Peoples Principles of Learning</div>
+                                    <ul style={{ margin: 0, paddingLeft: 18 }}>
+                                      {plan.toc.first_peoples_principles.map((p2, idx) => (
+                                        <li key={idx} style={{ marginBottom: 4, fontSize: 12 }}>{p2}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                ) : null,
+                              };
+
+                              const defaultLayout: PublicPlanLayout = {
+                                sections: [
+                                  { key: 'class_overview' },
+                                  { key: 'division_of_roles' },
+                                  { key: 'opening_routine' },
+                                  { key: 'lesson_flow' },
+                                  { key: 'activity_options' },
+                                  { key: 'what_to_do_if' },
+                                  { key: 'end_of_class' },
+                                  { key: 'lesson_overview' },
+                                  { key: 'materials_needed' },
+                                  { key: 'assessment_touch_points' },
+                                  { key: 'pd_goal_connections' },
+                                  { key: 'first_peoples_principles' },
+                                ],
+                              };
+
+                              const effective = (layout?.sections?.length ? layout : defaultLayout).sections ?? [];
+
+                              return (
+                                <>
+                                  {effective
+                                    .filter((s) => s && s.enabled !== false)
+                                    .map((s, idx) => {
+                                      const el = sections[s.key];
+                                      if (!el) return null;
+                                      if (s.title && typeof s.title === 'string') {
+                                        return (
+                                          <div key={idx}>
+                                            {React.cloneElement(el as any, {}, (el as any).props.children && Array.isArray((el as any).props.children)
+                                              ? (el as any).props.children.map((child: any) =>
+                                                  child?.props?.style === styles.tocSectionTitle
+                                                    ? React.cloneElement(child, {}, s.title)
+                                                    : child
+                                                )
+                                              : (el as any).props.children)}
+                                          </div>
+                                        );
+                                      }
+                                      return <div key={idx}>{el}</div>;
+                                    })}
+                                </>
+                              );
+                            })()
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
+                ) : null}
+
                 {showAttendance && open && (
                   <div className="attendanceWrap" style={styles.attendanceWrap}>
                     <div style={styles.attendanceHeader}>
-                      <div style={{ fontWeight: 900, color: RCS.navy }}>Attendance List</div>
-                      <button onClick={() => downloadAttendanceDocx(plan.id, b.id)} style={styles.primaryBtn}>
+                      <div style={{ fontWeight: 900, color: RCS.navy }}>Attendance Sheet</div>
+                      <button className="no-print" onClick={() => downloadAttendanceDocx(plan.id, b.id)} style={styles.primaryBtn}>
                         Download Attendance (.docx)
                       </button>
                     </div>
 
-                    <div style={{ display: 'grid', gap: 6 }}>
+                    {plan.toc?.attendance_note?.trim() ? (
+                      <div className="print-only" style={{ ...(styles.printOnly as any), marginBottom: 10, fontSize: 12 }}>
+                        {plan.toc.attendance_note}
+                      </div>
+                    ) : null}
+
+                    {/* Screen attendance checklist (interactive) */}
+                    <div className="no-print" style={{ display: 'grid', gap: 6 }}>
                       {(b.students ?? []).map((s) => {
                         const present = attendance[b.id]?.[s.id] ?? true;
                         return (
@@ -287,6 +786,39 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
                         );
                       })}
                     </div>
+
+                    {/* Print attendance table (RCS-style) */}
+                    <div className="print-only" style={styles.printOnly}>
+                      <table style={styles.printTable as any}>
+                        <thead>
+                          <tr>
+                            <th style={styles.printTh as any}>#</th>
+                            <th style={styles.printTh as any}>Student Name</th>
+                            <th style={styles.printTh as any}>Present</th>
+                            <th style={styles.printTh as any}>Absent</th>
+                            <th style={styles.printTh as any}>Late</th>
+                            <th style={styles.printTh as any}>Notes</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(b.students ?? []).map((s, idx) => (
+                            <tr key={s.id}>
+                              <td style={styles.printTd as any}>{idx + 1}</td>
+                              <td style={styles.printTd as any}>
+                                <b>{s.last_name},</b> {s.first_name}
+                              </td>
+                              <td style={styles.printTd as any}></td>
+                              <td style={styles.printTd as any}></td>
+                              <td style={styles.printTd as any}></td>
+                              <td style={styles.printTd as any}></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      <div style={{ marginTop: 12, fontSize: 12 }}>
+                        <b>TOC Signature:</b> ______________________________
+                      </div>
+                    </div>
                   </div>
                 )}
               </section>
@@ -294,19 +826,13 @@ export default function PublicPlanClient({ plan }: { plan: PublicPlan }) {
           })}
         </div>
 
-        <div className="no-print stickyBar" style={styles.stickyBar}>
-          <div style={{ opacity: 0.9 }}>
-            Selected: <b>{selectedCount}</b> / {blocksToShow.length}
-          </div>
-          <button onClick={() => window.print()} disabled={selectedCount === 0} style={selectedCount === 0 ? styles.primaryBtnDisabled : styles.primaryBtn}>
-            Print Selected
-          </button>
-        </div>
+        {/* Print Selected moved to top */}
 
         <style>{`
         @media print {
           body { background: white !important; }
           .no-print { display: none !important; }
+          .print-only { display: block !important; }
 
           /* Print must match screen */
           html, body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
@@ -365,6 +891,11 @@ const RCS = {
 } as const;
 
 const styles: Record<string, React.CSSProperties> = {
+  printOnly: { display: 'none' },
+  printTable: { width: '100%', borderCollapse: 'collapse' },
+  printTrAlt: { background: 'rgba(0,0,0,0.03)' },
+  printTh: { background: RCS.blue, color: 'white', border: `1px solid ${RCS.midGrey}`, padding: '8px 8px', fontSize: 12, textAlign: 'left' },
+  printTd: { border: `1px solid ${RCS.midGrey}`, padding: '8px 8px', fontSize: 12, verticalAlign: 'top' },
   backdrop: {
     minHeight: '100vh',
     background: '#F0F4F8',
@@ -454,6 +985,14 @@ const styles: Record<string, React.CSSProperties> = {
   blockRoom: { opacity: 0.9, fontSize: 12 },
   checkboxLabel: { display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, color: RCS.text, fontSize: 12 },
   blockDetails: { padding: 12, whiteSpace: 'pre-wrap', fontSize: 14, color: '#222222' },
+
+  tocWrap: { padding: 12, borderTop: `1px solid ${RCS.midGrey}`, background: RCS.white },
+  tocMeta: { fontSize: 12, opacity: 0.9, marginBottom: 10 },
+  tocSection: { marginTop: 12 },
+  tocSectionTitle: { fontWeight: 900, color: RCS.navy, marginBottom: 8 },
+  tocList: { margin: 0, paddingLeft: 18 },
+  tocCard: { border: `1px solid ${RCS.midGrey}`, borderRadius: 10, padding: 10, background: RCS.offWhite },
+
   attendanceWrap: { padding: 12, background: RCS.white },
   attendanceHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 10 },
   studentRow: { display: 'flex', gap: 10, alignItems: 'center' },

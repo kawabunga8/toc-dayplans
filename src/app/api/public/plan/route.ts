@@ -17,11 +17,30 @@ export async function GET(req: Request) {
   }
 
   const supabase = createClient(url, anon, { auth: { persistSession: false, autoRefreshToken: false } });
-  const { data, error } = await supabase.rpc('get_public_day_plan_by_id', { plan_id: id });
+  const { data, error } = await supabase.rpc('get_public_day_plan_from_toc', { plan_id: id });
 
   if (error || !data) {
-    return NextResponse.json({ error: error?.message ?? 'Not found' }, { status: 404 });
+    return NextResponse.json(
+      { error: error?.message ?? 'Not found' },
+      {
+        status: 404,
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          Pragma: 'no-cache',
+          Expires: '0',
+        },
+      }
+    );
   }
 
-  return NextResponse.json({ plan: data });
+  return NextResponse.json(
+    { plan: data },
+    {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        Pragma: 'no-cache',
+        Expires: '0',
+      },
+    }
+  );
 }

@@ -15,11 +15,13 @@ type DayPlanRow = {
   friday_type: 'day1' | 'day2' | null;
   title: string;
   notes: string | null;
+  learning_standard_id?: string | null;
   learning_standard_focus: string | null;
   core_competency_focus: string | null;
   visibility: 'private' | 'link';
   share_expires_at: string | null;
   trashed_at: string | null;
+  published_at?: string | null;
 };
 
 type ClassRow = { id: string; block_label: string | null; name: string; room: string | null };
@@ -44,22 +46,34 @@ type BlockTimeDefaultRow = {
 
 type Status = 'loading' | 'idle' | 'publishing' | 'revoking' | 'saving' | 'generating' | 'error';
 
+type SaveAllStatus = 'idle' | 'saving' | 'saved' | 'error';
+
 export default function DayPlanDetailClient({ id }: { id: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const didAutoRef = useRef(false);
+  const receivedLsFromQueryRef = useRef(false);
+  const receivedCcFromQueryRef = useRef(false);
 
   const [status, setStatus] = useState<Status>('loading');
   const [error, setError] = useState<string | null>(null);
+
+  const [saveAllStatus, setSaveAllStatus] = useState<SaveAllStatus>('idle');
+  const [saveAllError, setSaveAllError] = useState<string | null>(null);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
   const [plan, setPlan] = useState<DayPlanRow | null>(null);
 
   const [draftTitle, setDraftTitle] = useState('');
   const [draftNotes, setDraftNotes] = useState('');
+  const [draftLearningStandardId, setDraftLearningStandardId] = useState<string | null>(null);
   const [draftLearningStandardFocus, setDraftLearningStandardFocus] = useState('');
+  const [lsTitleById, setLsTitleById] = useState<Record<string, { subject: string; title: string }>>({});
   const [draftCoreCompetencyFocus, setDraftCoreCompetencyFocus] = useState('');
 
   const [blocks, setBlocks] = useState<PlanBlockRow[]>([]);
   const [classes, setClasses] = useState<ClassRow[]>([]);
+
+  // Autosave disabled (use Save all)
 
   const publicUrl = useMemo(() => {
     if (typeof window === 'undefined') return null;
@@ -72,6 +86,13 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
     return buildDayplansListHref({ date: isYyyyMmDd(d) ? d : null, fridayType: ft || null });
   }, [searchParams, plan]);
 
+  const headerTags = useMemo(() => {
+    const className = blocks?.[0]?.class_name ?? plan?.title ?? '';
+    const upper = String(className).toUpperCase();
+    const isFa = upper.includes('BAND') || upper.includes('WORSHIP') || upper.includes('ART');
+    return isFa ? ['#FA'] : [];
+  }, [blocks, plan]);
+
   async function load() {
     setStatus('loading');
     setError(null);
@@ -79,13 +100,33 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
     try {
       const supabase = getSupabaseClient();
 
+      // Back-compat: older DBs may not have newly added columns yet.
+      // Try selecting the full set; if it fails due to missing columns, retry with legacy select.
+      const planPromise = (async () => {
+        const full = await supabase
+          .from('day_plans')
+          .select(
+            'id,plan_date,slot,friday_type,title,notes,learning_standard_focus,core_competency_focus,learning_standard_id,tags,visibility,share_expires_at,trashed_at,published_at'
+          )
+          .eq('id', id)
+          .maybeSingle();
+        if (!full.error) return full;
+
+        const msg = String((full.error as any)?.message ?? '');
+        const code = String((full.error as any)?.code ?? '');
+        const isMissingCol = code === '42703' || /column .* does not exist/i.test(msg);
+        if (!isMissingCol) return full;
+
+        return supabase
+          .from('day_plans')
+          .select('id,plan_date,slot,friday_type,title,notes,visibility,share_expires_at,trashed_at')
+          .eq('id', id)
+          .maybeSingle();
+      })();
+
       const [{ data: planData, error: planErr }, { data: blockData, error: blockErr }, { data: classData, error: classErr }] =
         await Promise.all([
-          supabase
-            .from('day_plans')
-            .select('id,plan_date,slot,friday_type,title,notes,learning_standard_focus,core_competency_focus,visibility,share_expires_at,trashed_at')
-            .eq('id', id)
-            .single(),
+          planPromise,
           supabase
             .from('day_plan_blocks')
             .select('id,day_plan_id,start_time,end_time,room,class_name,details,class_id')
@@ -100,13 +141,22 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
       if (planErr) throw planErr;
       if (blockErr) throw blockErr;
       if (classErr) throw classErr;
+      if (!planData) throw new Error('Dayplan not found');
 
       const p = planData as DayPlanRow;
       setPlan(p);
       setDraftTitle(p.title ?? '');
       setDraftNotes(p.notes ?? '');
-      setDraftLearningStandardFocus(p.learning_standard_focus ?? '');
-      setDraftCoreCompetencyFocus(p.core_competency_focus ?? '');
+
+      // If the user just returned from a picker (query params), don't overwrite the specific
+      // draft fields that were provided via query.
+      if (!receivedLsFromQueryRef.current) {
+        setDraftLearningStandardId((p as any).learning_standard_id ?? null);
+        setDraftLearningStandardFocus((p as any).learning_standard_focus ?? '');
+      }
+      if (!receivedCcFromQueryRef.current) {
+        setDraftCoreCompetencyFocus((p as any).core_competency_focus ?? '');
+      }
 
       setBlocks((blockData ?? []).map((b: any) => ({
         id: b.id,
@@ -126,6 +176,31 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
         room: c.room ?? null,
       })) as ClassRow[]);
 
+      // Unpublished TOC changes indicator: compare latest toc_block_plans.updated_at to day_plans.published_at
+      try {
+        const blockIds = (blockData ?? []).map((b: any) => b.id).filter(Boolean);
+        let latestTocEdit: string | null = null;
+        if (blockIds.length) {
+          const { data: tbps, error: tbpErr } = await supabase
+            .from('toc_block_plans')
+            .select('updated_at')
+            .in('day_plan_block_id', blockIds)
+            .order('updated_at', { ascending: false })
+            .limit(1);
+          if (!tbpErr && tbps?.length) latestTocEdit = (tbps[0] as any)?.updated_at ?? null;
+        }
+
+        const pubAt = (p as any)?.published_at ?? null;
+        setHasUnpublishedChanges(() => {
+          if (!latestTocEdit) return false;
+          if (!pubAt) return false; // Never published — don't show "unpublished changes" banner
+          // Allow 5s tolerance so publish+save timing jitter doesn't trigger false positives
+          return new Date(latestTocEdit).getTime() > new Date(pubAt).getTime() + 5000;
+        });
+      } catch {
+        // ignore
+      }
+
       setStatus('idle');
     } catch (e: any) {
       setStatus('error');
@@ -137,6 +212,68 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  // Autosave disabled (use Save all)
+
+  // Allow pickers to return selected values via query params.
+  useEffect(() => {
+    const cc = (searchParams.get('core_competency_focus') ?? '').trim();
+    const lsId = (searchParams.get('learning_standard_id') ?? '').trim();
+    const lsFocus = (searchParams.get('learning_standard_focus') ?? '').trim();
+
+    if (!cc && !lsId && !lsFocus) return;
+
+    if (cc) {
+      receivedCcFromQueryRef.current = true;
+      setDraftCoreCompetencyFocus(cc);
+    }
+    if (lsId || lsFocus) {
+      receivedLsFromQueryRef.current = true;
+      if (lsId) setDraftLearningStandardId(lsId);
+      if (lsFocus) setDraftLearningStandardFocus(lsFocus);
+    }
+
+    // Clean the URL (remove the params) but keep date/friday_type context.
+    const qs = new URLSearchParams(searchParams.toString());
+    qs.delete('core_competency_focus');
+    qs.delete('learning_standard_id');
+    qs.delete('learning_standard_focus');
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    router.replace(`/admin/dayplans/${id}${suffix}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, id]);
+
+  // If we have a learning_standard_id but no focus label, derive it from the standards table.
+  useEffect(() => {
+    const lsId = draftLearningStandardId;
+    if (!lsId) return;
+    if (draftLearningStandardFocus.trim()) return;
+    const cached = lsTitleById[lsId];
+    if (cached) {
+      setDraftLearningStandardFocus(`${cached.subject} > ${cached.title}`);
+      return;
+    }
+
+    void (async () => {
+      try {
+        const supabase = getSupabaseClient();
+        const { data, error } = await supabase
+          .from('learning_standards')
+          .select('id,subject,standard_title')
+          .eq('id', lsId)
+          .maybeSingle();
+        if (error || !data) return;
+        const subject = String((data as any).subject ?? '').trim();
+        const title = String((data as any).standard_title ?? '').trim();
+        if (!subject || !title) return;
+        setLsTitleById((prev) => ({ ...prev, [lsId]: { subject, title } }));
+        setDraftLearningStandardFocus(`${subject} > ${title}`);
+      } catch {
+        // ignore
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftLearningStandardId, draftLearningStandardFocus]);
 
   useEffect(() => {
     const auto = searchParams.get('auto') === '1';
@@ -162,11 +299,55 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, status, plan, blocks.length, id]);
 
+  function requestTocSaveForBlock(dayPlanBlockId: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      try {
+        window.dispatchEvent(
+          new CustomEvent(`toc-save-request:${dayPlanBlockId}`, {
+            detail: {
+              resolve: () => resolve(),
+              reject: (err: any) => reject(err),
+            },
+          })
+        );
+      } catch (e) {
+        reject(e);
+      }
+    });
+  }
+
+  function requestTocPublishForBlock(dayPlanBlockId: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      try {
+        window.dispatchEvent(
+          new CustomEvent(`toc-publish-request:${dayPlanBlockId}`, {
+            detail: {
+              resolve: () => resolve(),
+              reject: (err: any) => reject(err),
+            },
+          })
+        );
+      } catch (e) {
+        reject(e);
+      }
+    });
+  }
+
   async function publish() {
     setStatus('publishing');
     setError(null);
 
     try {
+      // Save-all first so /p always reflects what you just edited.
+      await savePlanMeta();
+      await saveBlocks();
+
+      // Publish should prune legacy TOC overrides (template-first) and save intended day overrides.
+      const ids = (blocks ?? []).map((b) => b.id).filter(Boolean) as string[];
+      for (const bid of ids) {
+        await requestTocPublishForBlock(bid);
+      }
+
       const res = await fetch(`/api/admin/dayplans/${id}/publish`, { method: 'POST' });
       const j = await res.json();
       if (!res.ok) throw new Error(j?.error ?? 'Failed to publish');
@@ -178,29 +359,54 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
     }
   }
 
-  async function savePlanMeta() {
+  async function savePlanMeta(opts?: { reload?: boolean; silent?: boolean }) {
     if (!plan) return;
-    setStatus('saving');
-    setError(null);
+    const reload = opts?.reload ?? true;
+    const silent = opts?.silent ?? false;
+
+    if (!silent) {
+      setStatus('saving');
+      setError(null);
+    }
 
     try {
       const supabase = getSupabaseClient();
-      const { error } = await supabase
-        .from('day_plans')
-        .update({
-          title: draftTitle.trim(),
-          notes: draftNotes.trim() ? draftNotes.trim() : null,
-          learning_standard_focus: draftLearningStandardFocus.trim() ? draftLearningStandardFocus.trim() : null,
-          core_competency_focus: draftCoreCompetencyFocus.trim() ? draftCoreCompetencyFocus.trim() : null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', plan.id);
+
+      const fullPatch: any = {
+        title: draftTitle.trim(),
+        notes: draftNotes.trim() ? draftNotes.trim() : null,
+        learning_standard_id: draftLearningStandardId,
+        learning_standard_focus: draftLearningStandardFocus.trim() ? draftLearningStandardFocus.trim() : null,
+        core_competency_focus: draftCoreCompetencyFocus.trim() ? draftCoreCompetencyFocus.trim() : null,
+        updated_at: new Date().toISOString(),
+      };
+
+      let { error } = await supabase.from('day_plans').update(fullPatch).eq('id', plan.id);
+
+      // Back-compat: if some columns don't exist yet in Supabase, retry with a smaller patch.
+      const msg = String((error as any)?.message ?? '');
+      const code = String((error as any)?.code ?? '');
+      const isMissingCol = code === '42703' || /Could not find the '.*' column/i.test(msg) || /column .* does not exist/i.test(msg);
+
+      if (error && isMissingCol) {
+        const fallbackPatch: any = {
+          title: fullPatch.title,
+          notes: fullPatch.notes,
+          updated_at: fullPatch.updated_at,
+        };
+        const retry = await supabase.from('day_plans').update(fallbackPatch).eq('id', plan.id);
+        error = retry.error;
+      }
+
       if (error) throw error;
-      await load();
-      setStatus('idle');
+      if (reload) await load();
+      if (!silent) setStatus('idle');
     } catch (e: any) {
-      setStatus('error');
-      setError(e?.message ?? 'Failed to save');
+      if (!silent) {
+        setStatus('error');
+        setError(e?.message ?? 'Failed to save');
+      }
+      throw e;
     }
   }
 
@@ -323,36 +529,128 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
     }
   }
 
-  async function saveBlocks() {
+  async function saveBlocks(opts?: { reload?: boolean; silent?: boolean }) {
     if (!plan) return;
-    setStatus('saving');
-    setError(null);
+    const reload = opts?.reload ?? true;
+    const silent = opts?.silent ?? false;
+
+    if (!silent) {
+      setStatus('saving');
+      setError(null);
+    }
 
     try {
       const supabase = getSupabaseClient();
 
-      // Replace all blocks (simple + predictable)
-      const { error: delErr } = await supabase.from('day_plan_blocks').delete().eq('day_plan_id', plan.id);
-      if (delErr) throw delErr;
+      const classRoomById = new Map<string, string>();
+      for (const c of classes) {
+        if (c.id && c.room) classRoomById.set(c.id, c.room);
+      }
 
-      const payload = blocks.map((b) => ({
-        day_plan_id: plan.id,
-        start_time: b.start_time,
-        end_time: b.end_time,
-        room: b.room || '—',
+      const normalized = blocks.map((b) => ({
+        ...b,
+        room: ((b.class_id ? classRoomById.get(b.class_id) : null) ?? b.room ?? '—') as string,
         class_name: b.class_name || '—',
         details: b.details?.trim() ? b.details.trim() : null,
-        class_id: b.class_id,
       }));
 
-      const { error: insErr } = await supabase.from('day_plan_blocks').insert(payload);
-      if (insErr) throw insErr;
+      // Delete rows that are no longer present
+      const keepIds = normalized.map((b) => b.id).filter(Boolean) as string[];
+      if (keepIds.length) {
+        const { error: delErr } = await supabase.from('day_plan_blocks').delete().eq('day_plan_id', plan.id).not('id', 'in', `(${keepIds.map((x) => `"${x}"`).join(',')})`);
+        if (delErr) throw delErr;
+      } else {
+        const { error: delAllErr } = await supabase.from('day_plan_blocks').delete().eq('day_plan_id', plan.id);
+        if (delAllErr) throw delAllErr;
+      }
+
+      // Upsert existing rows (preserve IDs)
+      for (const b of normalized) {
+        const patch = {
+          start_time: b.start_time,
+          end_time: b.end_time,
+          room: b.room,
+          class_name: b.class_name,
+          details: b.details,
+          class_id: b.class_id,
+        };
+
+        if (b.id) {
+          const { error } = await supabase.from('day_plan_blocks').update(patch).eq('id', b.id);
+          if (error) throw error;
+        } else {
+          const { data, error } = await supabase
+            .from('day_plan_blocks')
+            .insert({ day_plan_id: plan.id, ...patch })
+            .select('id')
+            .maybeSingle();
+          if (error) throw error;
+          if (data?.id) {
+            setBlocks((prev) => {
+              const idx = prev.findIndex((x) => !x.id && x.start_time === b.start_time && x.end_time === b.end_time && x.class_name === b.class_name);
+              if (idx < 0) return prev;
+              const next = prev.slice();
+              next[idx] = { ...next[idx]!, id: data.id } as any;
+              return next;
+            });
+          }
+        }
+      }
+
+      if (reload) await load();
+      if (!silent) setStatus('idle');
+    } catch (e: any) {
+      if (!silent) {
+        setStatus('error');
+        setError(e?.message ?? 'Failed to save blocks');
+      }
+      throw e;
+    }
+  }
+
+  async function saveAll() {
+    setStatus('saving');
+    setError(null);
+    setSaveAllStatus('saving');
+    setSaveAllError(null);
+
+    try {
+      // Always save local edits first (WITHOUT reload).
+      // Reloading here can remount TOC editors and reset their "touched" flags,
+      // which would cause republish-time pruning to delete fresh overrides.
+      await savePlanMeta({ reload: false, silent: true });
+      await saveBlocks({ reload: false, silent: true });
+
+      // IMPORTANT: don't rely on local React state for block IDs here.
+      // saveBlocks may insert new rows and setBlocks() is async, so ids can be stale.
+      const supabase = getSupabaseClient();
+      const { data: bidRows, error: bidErr } = await supabase.from('day_plan_blocks').select('id').eq('day_plan_id', plan!.id);
+      if (bidErr) throw bidErr;
+      const ids = (bidRows ?? []).map((r: any) => String(r.id)).filter(Boolean);
+
+      // Save TOC edits.
+      for (const bid of ids) {
+        await requestTocSaveForBlock(bid);
+      }
+
+      // Save = Publish: always publish after saving so /p reflects latest changes.
+      for (const bid of ids) {
+        await requestTocPublishForBlock(bid);
+      }
+
+      const res = await fetch(`/api/admin/dayplans/${id}/publish`, { method: 'POST' });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j?.error ?? 'Failed to publish');
 
       await load();
+      setSavedAt(new Date().toISOString());
+      setSaveAllStatus('saved');
       setStatus('idle');
     } catch (e: any) {
+      setSaveAllStatus('error');
+      setSaveAllError(e?.message ?? 'Failed to save');
       setStatus('error');
-      setError(e?.message ?? 'Failed to save blocks');
+      setError(e?.message ?? 'Failed to save');
     }
   }
 
@@ -476,6 +774,7 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
   }
 
   const [showAllBlocks, setShowAllBlocks] = useState(false);
+  const [hasUnpublishedChanges, setHasUnpublishedChanges] = useState(false);
 
   const published = plan?.visibility === 'link';
   const trashed = !!plan?.trashed_at;
@@ -497,6 +796,19 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
               {isFridayLocal(plan.plan_date) ? ` • Friday ${plan.friday_type ? (plan.friday_type === 'day1' ? 'Day 1' : 'Day 2') : '(type not set)'}` : ''}
               {' • '}
               <b>{plan.title}</b>
+              {headerTags.length ? (
+                <span style={{ marginLeft: 10, display: 'inline-flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                  {headerTags.map((t) => (
+                    <span key={t} style={styles.tag}>
+                      {t}
+                    </span>
+                  ))}
+                </span>
+              ) : null}
+              <span style={{ marginLeft: 12, fontSize: 12, opacity: 0.85 }}>
+                Status: <b>{saveAllStatus === 'saving' ? 'Saving…' : saveAllStatus === 'saved' ? 'Saved' : saveAllStatus === 'error' ? 'Error' : '—'}</b>
+                {savedAt ? <span style={{ marginLeft: 8 }}>({new Date(savedAt).toLocaleTimeString()})</span> : null}
+              </span>
             </div>
           )}
         </div>
@@ -506,16 +818,14 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
       </div>
 
       {!plan && status === 'loading' && <div>Loading…</div>}
+      {!plan && status === 'error' && error && <div style={styles.errorBox}>{error}</div>}
 
       {plan && (
         <>
           <section style={styles.card}>
             <div style={styles.sectionHeader}>Plan info</div>
             <div style={{ display: 'grid', gap: 10 }}>
-              <label style={{ display: 'grid', gap: 6 }}>
-                <span style={styles.label}>Title</span>
-                <input value={draftTitle} onChange={(e) => setDraftTitle(e.target.value)} style={styles.input} />
-              </label>
+              {/* Title is derived from the class/block. Hidden to reduce drift. */}
 
               <label style={{ display: 'grid', gap: 6 }}>
                 <span style={styles.label}>Notes (optional)</span>
@@ -525,10 +835,11 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
               <label style={{ display: 'grid', gap: 6 }}>
                 <span style={styles.label}>Learning Standard Focus (optional)</span>
                 <div style={{ display: 'flex', gap: 10, alignItems: 'stretch', flexWrap: 'wrap' }}>
-                  <input
+                  <textarea
                     value={draftLearningStandardFocus}
                     onChange={(e) => setDraftLearningStandardFocus(e.target.value)}
-                    style={{ ...styles.input, flex: 1, minWidth: 260 }}
+                    rows={2}
+                    style={{ ...styles.textarea, flex: 1, minWidth: 260 }}
                     placeholder="(empty)"
                   />
                   <button
@@ -546,7 +857,13 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                       const qs = new URLSearchParams();
                       if (subject) qs.set('subject', subject);
                       if (grade) qs.set('grade', grade);
-                      qs.set('return', `/admin/dayplans/${id}`);
+
+                      // Preserve any existing Core Competency focus while selecting a Learning Standard.
+                      const retQs = new URLSearchParams();
+                      if (draftCoreCompetencyFocus.trim()) retQs.set('core_competency_focus', draftCoreCompetencyFocus.trim());
+                      const ret = retQs.toString() ? `/admin/dayplans/${id}?${retQs.toString()}` : `/admin/dayplans/${id}`;
+
+                      qs.set('return', ret);
                       window.location.href = `/admin/policies?${qs.toString()}`;
                     }}
                     style={styles.secondaryBtn}
@@ -559,18 +876,26 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
               <label style={{ display: 'grid', gap: 6 }}>
                 <span style={styles.label}>Core Competency Focus (optional)</span>
                 <div style={{ display: 'flex', gap: 10, alignItems: 'stretch', flexWrap: 'wrap' }}>
-                  <input
+                  <textarea
                     value={draftCoreCompetencyFocus}
                     onChange={(e) => setDraftCoreCompetencyFocus(e.target.value)}
-                    style={{ ...styles.input, flex: 1, minWidth: 260 }}
+                    rows={2}
+                    style={{ ...styles.textarea, flex: 1, minWidth: 260 }}
                     placeholder="(empty)"
                   />
                   <button
                     type="button"
                     onClick={() => {
                       const qs = new URLSearchParams();
-                      qs.set('return', `/admin/dayplans/${id}`);
-                      window.location.href = `/admin/policies?${qs.toString()}`;
+
+                      // Preserve any existing Learning Standard focus while selecting Core Competencies.
+                      const retQs = new URLSearchParams();
+                      if (draftLearningStandardId) retQs.set('learning_standard_id', draftLearningStandardId);
+                      if (draftLearningStandardFocus.trim()) retQs.set('learning_standard_focus', draftLearningStandardFocus.trim());
+                      const ret = retQs.toString() ? `/admin/dayplans/${id}?${retQs.toString()}` : `/admin/dayplans/${id}`;
+
+                      qs.set('return', ret);
+                      window.location.href = `/admin/policies/core-competencies?${qs.toString()}`;
                     }}
                     style={styles.secondaryBtn}
                   >
@@ -594,13 +919,8 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                 </label>
               )}
 
-              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                <button onClick={savePlanMeta} disabled={status !== 'idle'} style={styles.primaryBtn}>
-                  {status === 'saving' ? 'Saving…' : 'Save'}
-                </button>
-              </div>
-
-              {error && <div style={styles.errorBox}>{error}</div>}
+              {saveAllStatus === 'error' && saveAllError ? <div style={styles.errorBox}>Save failed: {saveAllError}</div> : null}
+              {error ? <div style={styles.errorBox}>{error}</div> : null}
             </div>
           </section>
 
@@ -647,24 +967,13 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                       </div>
                     </div>
 
-                    <div style={styles.grid2}>
+                    <div style={{ marginTop: 6, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'baseline' }}>
+                      <div style={{ fontWeight: 900, color: RCS.deepNavy }}>{b.class_name}</div>
+                      <div style={{ opacity: 0.8, fontSize: 12 }}>Room {b.room}</div>
+                    </div>
+
+                    <div style={{ marginTop: 10, display: 'grid', gap: 6 }}>
                       <label style={{ display: 'grid', gap: 6 }}>
-                        <span style={styles.label}>Class</span>
-                        <input
-                          value={b.class_name}
-                          onChange={(e) => setBlocks((prev) => prev.map((x, i) => (i === idx ? { ...x, class_name: e.target.value } : x)))}
-                          style={styles.input}
-                        />
-                      </label>
-                      <label style={{ display: 'grid', gap: 6 }}>
-                        <span style={styles.label}>Room</span>
-                        <input
-                          value={b.room}
-                          onChange={(e) => setBlocks((prev) => prev.map((x, i) => (i === idx ? { ...x, room: e.target.value } : x)))}
-                          style={styles.input}
-                        />
-                      </label>
-                      <label style={{ display: 'grid', gap: 6, gridColumn: '1 / -1' }}>
                         <span style={styles.label}>Details (optional)</span>
                         <textarea
                           value={b.details ?? ''}
@@ -687,9 +996,51 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                   </div>
                 ))}
 
-                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                  <button onClick={saveBlocks} disabled={status !== 'idle'} style={styles.primaryBtn}>
-                    {status === 'saving' ? 'Saving…' : 'Save blocks'}
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <button onClick={saveAll} disabled={status !== 'idle'} style={styles.primaryBtn}>
+                    {status === 'saving' ? 'Saving…' : 'Save (publishes to /p)'}
+                  </button>
+                  <div style={{ fontSize: 12, opacity: 0.85 }}>
+                    {saveAllStatus === 'saving'
+                      ? 'Saving…'
+                      : saveAllStatus === 'saved'
+                        ? 'Saved'
+                        : saveAllStatus === 'error'
+                          ? 'Save failed'
+                          : ' '}
+                    <span style={{ marginLeft: 10, opacity: 0.7 }}>
+                      v{process.env.NEXT_PUBLIC_APP_VERSION || '—'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const res = await fetch(`/api/admin/debug/public-plan?id=${encodeURIComponent(id)}`);
+                        const j = await res.json();
+                        alert(JSON.stringify(j, null, 2));
+                      } catch (e: any) {
+                        alert(e?.message ?? 'Debug failed');
+                      }
+                    }}
+                    style={styles.secondaryBtn}
+                  >
+                    Debug public JSON
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const res = await fetch(`/api/admin/debug/public-plan?id=${encodeURIComponent(id)}&only=lesson_flow`);
+                        const j = await res.json();
+                        alert(JSON.stringify(j, null, 2));
+                      } catch (e: any) {
+                        alert(e?.message ?? 'Debug failed');
+                      }
+                    }}
+                    style={styles.secondaryBtn}
+                  >
+                    Debug lesson flow
                   </button>
                   <button onClick={recalcTimesFromDefaults} disabled={status !== 'idle'} style={styles.secondaryBtn}>
                     Fix times from defaults
@@ -707,6 +1058,12 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
               </div>
             )}
             <div style={{ display: 'grid', gap: 8 }}>
+              {hasUnpublishedChanges ? (
+                <div style={{ ...styles.callout, borderColor: '#C9A84C', background: '#FDF3DC' }}>
+                  <b>Unpublished changes</b> — the public page (<code>/p</code>) shows the last published version.
+                </div>
+              ) : null}
+
               <div>
                 <b>Status:</b> {published ? <span>Published</span> : <span>Not published</span>}
               </div>
@@ -724,9 +1081,12 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
             </div>
 
             <div style={{ display: 'flex', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
-              <button onClick={publish} disabled={status !== 'idle' || trashed} style={styles.primaryBtn}>
-                {published ? 'Republish' : 'Publish'}
-              </button>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+                <button onClick={publish} disabled={status !== 'idle' || trashed} style={styles.primaryBtn}>
+                  {status === 'publishing' ? 'Publishing…' : published ? 'Republish' : 'Publish'}
+                </button>
+                {hasUnpublishedChanges ? <span style={{ fontSize: 12, color: '#7F1D1D', fontWeight: 800 }}>Unpublished changes</span> : null}
+              </div>
               <button onClick={revoke} disabled={!published || status !== 'idle'} style={styles.dangerBtn}>
                 Revoke
               </button>
@@ -891,6 +1251,15 @@ const styles: Record<string, React.CSSProperties> = {
   page: { padding: 24, maxWidth: 1000, margin: '0 auto', fontFamily: 'system-ui', background: RCS.white, color: RCS.textDark },
   h1: { margin: 0, color: RCS.deepNavy },
   meta: { marginTop: 6, opacity: 0.9 },
+  tag: {
+    fontSize: 12,
+    fontWeight: 900,
+    padding: '2px 8px',
+    borderRadius: 999,
+    border: `1px solid ${RCS.gold}`,
+    background: RCS.paleGold,
+    color: RCS.deepNavy,
+  },
   rowBetween: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' },
   rowBetweenTight: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' },
   grid2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 },

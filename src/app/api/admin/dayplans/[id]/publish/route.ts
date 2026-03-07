@@ -48,6 +48,12 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
 
   const planDate = plan.plan_date as string; // YYYY-MM-DD
 
+  // Resolve + store a published snapshot. /toc and /p read ONLY this snapshot.
+  const { data: resolved, error: resErr } = await supabase.rpc('resolve_day_plan_payload', { plan_id: id });
+  if (resErr || !resolved) {
+    return NextResponse.json({ error: resErr?.message ?? 'Failed to resolve day plan' }, { status: 400 });
+  }
+
   // No automatic expiry (links only die when explicitly revoked).
   const { error: updErr } = await supabase
     .from('day_plans')
@@ -55,6 +61,8 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
       visibility: 'link',
       share_token_hash: null,
       share_expires_at: null,
+      published_payload: resolved,
+      published_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })
     .eq('id', id);

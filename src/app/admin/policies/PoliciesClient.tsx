@@ -10,20 +10,22 @@ type Level = 'emerging' | 'developing' | 'proficient' | 'extending';
 type StandardRow = {
   id: string;
   subject: string;
-  grade: number;
   standard_key: string;
   standard_title: string;
 };
 
-type LevelRow = {
+type RubricRow = {
   id: string;
   learning_standard_id: string;
+  grade: number;
   level: Level;
   original_text: string;
   edited_text: string | null;
 };
 
 type Status = 'loading' | 'idle' | 'saving' | 'error';
+
+const SUBJECTS = ['ADST', 'FA', 'Bible'] as const;
 
 const LEVELS: Array<{ level: Level; label: string }> = [
   { level: 'emerging', label: 'Emerging' },
@@ -48,22 +50,22 @@ export default function PoliciesClient() {
 
   const initialGrade = useMemo(() => {
     const g = Number(searchParams.get('grade'));
-    return Number.isFinite(g) ? g : null;
+    return [9, 10, 11, 12].includes(g) ? g : 9;
   }, [searchParams]);
 
   const [status, setStatus] = useState<Status>('loading');
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
 
   const [subjects, setSubjects] = useState<string[]>([]);
   const [selectedSubject, setSelectedSubject] = useState<string>('');
 
-  const [grades, setGrades] = useState<number[]>([]);
-  const [selectedGrade, setSelectedGrade] = useState<number | null>(null);
+  const [selectedGrade, setSelectedGrade] = useState<number>(initialGrade);
 
   const [standards, setStandards] = useState<StandardRow[]>([]);
   const [selectedStandardId, setSelectedStandardId] = useState<string>('');
 
-  const [levels, setLevels] = useState<Record<Level, LevelRow | null>>({
+  const [rubrics, setRubrics] = useState<Record<Level, RubricRow | null>>({
     emerging: null,
     developing: null,
     proficient: null,
@@ -82,47 +84,30 @@ export default function PoliciesClient() {
 
   useEffect(() => {
     if (!selectedSubject) return;
-    void loadGrades(selectedSubject);
+    void loadStandards(selectedSubject);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSubject]);
 
   useEffect(() => {
-    if (!selectedSubject || !selectedGrade) return;
-    void loadStandards(selectedSubject, selectedGrade);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedSubject, selectedGrade]);
-
-  useEffect(() => {
     if (!selectedStandardId) {
-      setLevels({ emerging: null, developing: null, proficient: null, extending: null });
+      setRubrics({ emerging: null, developing: null, proficient: null, extending: null });
       return;
     }
-    void loadLevels(selectedStandardId);
+    void loadRubrics(selectedStandardId, selectedGrade);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedStandardId]);
+  }, [selectedStandardId, selectedGrade]);
 
   async function loadSubjects() {
+    // Subjects are canonical + fixed (must always show all 3 options)
     setStatus('loading');
     setError(null);
 
     try {
-      const supabase = getSupabaseClient();
-      const { data, error } = await supabase
-        .from('learning_standards')
-        .select('subject')
-        .order('subject', { ascending: true });
-      if (error) throw error;
+      const fixed = [...SUBJECTS];
+      setSubjects(fixed);
 
-      const distinct = Array.from(new Set((data ?? []).map((r: any) => String(r.subject ?? '').trim()).filter(Boolean)));
-      setSubjects(distinct);
-
-      // Auto-select / deep-link subject
-      if (distinct.length > 0) {
-        const wanted = initialSubject && distinct.includes(initialSubject) ? initialSubject : distinct[0];
-        setSelectedSubject((prev) => prev || wanted);
-      } else {
-        setSelectedSubject('');
-      }
+      const wanted = initialSubject && fixed.includes(initialSubject as any) ? initialSubject : fixed[0];
+      setSelectedSubject((prev) => prev || wanted);
 
       setStatus('idle');
     } catch (e: any) {
@@ -131,7 +116,7 @@ export default function PoliciesClient() {
     }
   }
 
-  async function loadGrades(subject: string) {
+  async function loadStandards(subject: string) {
     setStatus('loading');
     setError(null);
 
@@ -139,43 +124,9 @@ export default function PoliciesClient() {
       const supabase = getSupabaseClient();
       const { data, error } = await supabase
         .from('learning_standards')
-        .select('grade')
+        .select('id,subject,standard_key,standard_title')
         .eq('subject', subject)
-        .order('grade', { ascending: true });
-      if (error) throw error;
-
-      const distinct = Array.from(new Set((data ?? []).map((r: any) => Number(r.grade)).filter((n) => Number.isFinite(n))));
-      setGrades(distinct);
-
-      if (distinct.length > 0) {
-        const wanted = initialGrade && distinct.includes(initialGrade) ? initialGrade : distinct[0];
-        setSelectedGrade((prev) => (prev && distinct.includes(prev) ? prev : wanted));
-      } else {
-        setSelectedGrade(null);
-      }
-
-      setSelectedStandardId('');
-      setStandards([]);
-      setLevels({ emerging: null, developing: null, proficient: null, extending: null });
-
-      setStatus('idle');
-    } catch (e: any) {
-      setStatus('error');
-      setError(e?.message ?? 'Failed to load grades');
-    }
-  }
-
-  async function loadStandards(subject: string, grade: number) {
-    setStatus('loading');
-    setError(null);
-
-    try {
-      const supabase = getSupabaseClient();
-      const { data, error } = await supabase
-        .from('learning_standards')
-        .select('id,subject,grade,standard_key,standard_title')
-        .eq('subject', subject)
-        .eq('grade', grade)
+        .order('standard_key', { ascending: true })
         .order('standard_title', { ascending: true });
       if (error) throw error;
 
@@ -191,38 +142,45 @@ export default function PoliciesClient() {
     }
   }
 
-  async function loadLevels(learningStandardId: string) {
+  async function loadRubrics(learningStandardId: string, grade: number) {
     setStatus('loading');
     setError(null);
+    setWarning(null);
 
     try {
-      const supabase = getSupabaseClient();
-      const { data, error } = await supabase
-        .from('learning_standard_levels')
-        .select('id,learning_standard_id,level,original_text,edited_text')
-        .eq('learning_standard_id', learningStandardId);
-      if (error) throw error;
+      const res = await fetch(
+        `/api/admin/learning-standards/rubric?learning_standard_id=${encodeURIComponent(learningStandardId)}&grade=${encodeURIComponent(String(grade))}`
+      );
+      const j = await res.json();
+      if (!res.ok) throw new Error(j?.error ?? 'Failed to load rubric');
 
-      const map: Record<Level, LevelRow | null> = { emerging: null, developing: null, proficient: null, extending: null };
-      for (const r of data ?? []) {
-        const lvl = String((r as any).level) as Level;
-        if (lvl in map) map[lvl] = r as any;
+      if (j?.missingTable) {
+        setWarning('Rubrics table is not installed in Supabase yet (learning_standard_rubrics). Apply the latest schema to enable rubric text + editing.');
+        setRubrics({ emerging: null, developing: null, proficient: null, extending: null });
+        setStatus('idle');
+        return;
       }
-      setLevels(map);
+
+      const map: Record<Level, RubricRow | null> = { emerging: null, developing: null, proficient: null, extending: null };
+      for (const r of (j?.rows ?? []) as any[]) {
+        const lvl = String(r.level) as Level;
+        if (lvl in map) map[lvl] = r as RubricRow;
+      }
+      setRubrics(map);
       setStatus('idle');
     } catch (e: any) {
       setStatus('error');
-      setError(e?.message ?? 'Failed to load level text');
+      setError(e?.message ?? 'Failed to load rubric');
     }
   }
 
   function displayedText(lvl: Level): string {
-    const r = levels[lvl];
+    const r = rubrics[lvl];
     return (r?.edited_text ?? r?.original_text ?? '').toString();
   }
 
   function setDisplayedText(lvl: Level, next: string) {
-    setLevels((prev) => {
+    setRubrics((prev) => {
       const cur = prev[lvl];
       if (!cur) return prev;
       return { ...prev, [lvl]: { ...cur, edited_text: next } };
@@ -238,18 +196,18 @@ export default function PoliciesClient() {
     try {
       const supabase = getSupabaseClient();
       for (const { level } of LEVELS) {
-        const row = levels[level];
+        const row = rubrics[level];
         if (!row) continue;
         const edited = (row.edited_text ?? '').toString();
-        // If edited matches original, store null to keep the DB clean
         const patch = {
           edited_text: edited.trim() && edited !== row.original_text ? edited : null,
           updated_at: new Date().toISOString(),
         };
-        const { error } = await supabase.from('learning_standard_levels').update(patch).eq('id', row.id);
+        const { error } = await supabase.from('learning_standard_rubrics').update(patch).eq('id', row.id);
         if (error) throw error;
       }
-      await loadLevels(selectedStandardId);
+
+      await loadRubrics(selectedStandardId, selectedGrade);
       setStatus('idle');
     } catch (e: any) {
       setStatus('error');
@@ -259,7 +217,7 @@ export default function PoliciesClient() {
 
   async function resetToOriginal() {
     if (!selectedStandardId) return;
-    const ok = window.confirm('Reset all levels (Emerging/Developing/Proficient/Extending) to the original text?');
+    const ok = window.confirm('Reset all 4 levels for this grade to the original text?');
     if (!ok) return;
 
     setStatus('saving');
@@ -267,15 +225,16 @@ export default function PoliciesClient() {
 
     try {
       const supabase = getSupabaseClient();
-      const ids = LEVELS.map(({ level }) => levels[level]?.id).filter(Boolean) as string[];
+      const ids = LEVELS.map(({ level }) => rubrics[level]?.id).filter(Boolean) as string[];
       if (ids.length > 0) {
         const { error } = await supabase
-          .from('learning_standard_levels')
+          .from('learning_standard_rubrics')
           .update({ edited_text: null, updated_at: new Date().toISOString() })
           .in('id', ids);
         if (error) throw error;
       }
-      await loadLevels(selectedStandardId);
+
+      await loadRubrics(selectedStandardId, selectedGrade);
       setStatus('idle');
     } catch (e: any) {
       setStatus('error');
@@ -286,9 +245,21 @@ export default function PoliciesClient() {
   return (
     <main style={styles.page}>
       <h1 style={styles.h1}>Policies</h1>
-      <p style={styles.muted}>
-        Learning standards lookup (filter by Subject → Grade → Standard). Editable overrides with a Reset to original button.
-      </p>
+      <p style={styles.muted}>Learning standards lookup (Subject → Standard → Grade). Editable overrides with Reset to original.</p>
+      <div style={{ marginTop: -8, marginBottom: 14, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <a href="/admin/policies/import" style={styles.secondaryBtn}>
+          Import Learning Standards CSV…
+        </a>
+        <a href="/admin/policies/core-competencies" style={styles.secondaryBtn}>
+          Core Competencies…
+        </a>
+        <a href="/admin/policies/toc-snippets" style={styles.secondaryBtn}>
+          TOC Snippets…
+        </a>
+        <a href="/admin/policies/pro-dev-goals" style={styles.secondaryBtn}>
+          Pro Dev Goals…
+        </a>
+      </div>
 
       <section style={styles.card}>
         <div style={styles.sectionHeader}>Learning Standards</div>
@@ -302,9 +273,10 @@ export default function PoliciesClient() {
         ) : null}
 
         {status === 'error' && error ? <div style={styles.errorBox}>{error}</div> : null}
+        {warning ? <div style={styles.warnBox}>{warning}</div> : null}
 
         {subjects.length === 0 ? (
-          <div style={{ opacity: 0.85 }}>No learning standards found yet. Import the PDFs into the learning standards tables.</div>
+          <div style={{ opacity: 0.85 }}>No learning standards found yet. Seed learning_standards + learning_standard_rubrics.</div>
         ) : (
           <div style={{ display: 'grid', gap: 12 }}>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
@@ -319,27 +291,23 @@ export default function PoliciesClient() {
                 </select>
               </label>
 
-              <label style={styles.fieldInline}>
-                <div style={styles.label}>Grade</div>
-                <select
-                  value={selectedGrade ?? ''}
-                  onChange={(e) => setSelectedGrade(e.target.value ? Number(e.target.value) : null)}
-                  style={styles.input}
-                >
-                  {grades.map((g) => (
-                    <option key={g} value={g}>
-                      {g}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
               <label style={{ ...styles.fieldInline, minWidth: 320, flex: 1 }}>
                 <div style={styles.label}>Learning Standard</div>
                 <select value={selectedStandardId} onChange={(e) => setSelectedStandardId(e.target.value)} style={styles.input}>
                   {standards.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.standard_title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label style={styles.fieldInline}>
+                <div style={styles.label}>Grade</div>
+                <select value={selectedGrade} onChange={(e) => setSelectedGrade(Number(e.target.value))} style={styles.input}>
+                  {[9, 10, 11, 12].map((g) => (
+                    <option key={g} value={g}>
+                      {g}
                     </option>
                   ))}
                 </select>
@@ -357,10 +325,35 @@ export default function PoliciesClient() {
 
             {selectedStandard ? (
               <div style={styles.callout}>
-                <div style={{ fontWeight: 900, color: RCS.deepNavy }}>
-                  {selectedStandard.subject} Grade {selectedStandard.grade} — {selectedStandard.standard_title}
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontWeight: 900, color: RCS.deepNavy }}>
+                      {selectedStandard.subject} — {selectedStandard.standard_title}
+                    </div>
+                    <div style={{ fontSize: 12, opacity: 0.85 }}>Key: {selectedStandard.standard_key}</div>
+                  </div>
+
+                  {returnHref ? (
+                    <button
+                      type="button"
+                      style={styles.primaryBtn}
+                      onClick={() => {
+                        const label = `${selectedStandard.subject} > ${selectedStandard.standard_title}`;
+                        const qs = new URLSearchParams();
+                        qs.set('learning_standard_id', selectedStandard.id);
+                        qs.set('learning_standard_focus', label);
+                        const glue = returnHref.includes('?') ? '&' : '?';
+                        window.location.href = `${returnHref}${glue}${qs.toString()}`;
+                      }}
+                    >
+                      Use as focus
+                    </button>
+                  ) : null}
                 </div>
-                <div style={{ fontSize: 12, opacity: 0.85 }}>Key: {selectedStandard.standard_key}</div>
+
+                <div style={{ marginTop: 6, fontSize: 12, opacity: 0.85 }}>
+                  Rubric text below is shown for Grade {selectedGrade}.
+                </div>
               </div>
             ) : null}
 
@@ -368,11 +361,11 @@ export default function PoliciesClient() {
               {LEVELS.map(({ level, label }) => (
                 <div key={level} style={styles.levelCard}>
                   <div style={styles.levelHeader}>{label}</div>
-                  {levels[level] ? (
+                  {rubrics[level] ? (
                     <textarea
                       value={displayedText(level)}
                       onChange={(e) => setDisplayedText(level, e.target.value)}
-                      rows={6}
+                      rows={7}
                       style={styles.textarea}
                       disabled={isDemo || status !== 'idle'}
                     />
@@ -396,7 +389,6 @@ const RCS = {
   gold: '#C9A84C',
   paleGold: '#FDF3DC',
   white: '#FFFFFF',
-  lightGray: '#F5F5F5',
   textDark: '#1A1A1A',
 } as const;
 
@@ -419,8 +411,9 @@ const styles: Record<string, React.CSSProperties> = {
   input: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.deepNavy}`, background: RCS.white, color: RCS.textDark },
   textarea: { width: '100%', padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.deepNavy}`, background: RCS.white, color: RCS.textDark, fontFamily: 'inherit' },
   primaryBtn: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.gold}`, background: RCS.deepNavy, color: RCS.white, cursor: 'pointer', fontWeight: 900 },
-  secondaryBtn: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.gold}`, background: 'transparent', color: RCS.deepNavy, cursor: 'pointer', fontWeight: 900 },
+  secondaryBtn: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.gold}`, background: 'transparent', color: RCS.deepNavy, cursor: 'pointer', fontWeight: 900, textDecoration: 'none', display: 'inline-block' },
   errorBox: { marginTop: 10, padding: 12, borderRadius: 10, border: '1px solid #991b1b', background: '#FEE2E2', color: '#7F1D1D' },
+  warnBox: { marginTop: 10, padding: 12, borderRadius: 10, border: `1px solid ${RCS.gold}`, background: RCS.paleGold, color: RCS.deepNavy },
   callout: { border: `1px solid ${RCS.gold}`, borderRadius: 12, padding: 12, background: RCS.paleGold },
   levelCard: { border: `1px solid ${RCS.deepNavy}`, borderRadius: 12, padding: 12, background: RCS.lightBlue },
   levelHeader: { fontWeight: 900, color: RCS.deepNavy, marginBottom: 8 },

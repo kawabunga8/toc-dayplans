@@ -1,15 +1,34 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { ensureDefaultTemplateForClass } from '@/lib/appRules/templates';
 import { useDemo } from '@/app/admin/DemoContext';
+import type { TocSnippetRow } from '@/lib/tocSnippetTypes';
 
 type Status = 'loading' | 'idle' | 'saving' | 'error';
+
+type PlanMode = 'lesson_flow' | 'activity_options';
+
+type AssessmentTouchPoint = {
+  timing_in_lesson: string;
+  learning_standard_focus: string;
+  evidence_to_collect: string;
+  differentiation_strategy: string;
+  cyclical_loop_type: string;
+};
+
+type TemplateRow = {
+  id: string;
+  plan_mode: PlanMode;
+  note_to_toc: string | null;
+  assessment_touch_point?: AssessmentTouchPoint | null;
+};
 
 type OpeningStep = { step_text: string; source_template_step_id: string | null };
 
 type Phase = {
+  client_id: string;
   time_text: string;
   phase_text: string;
   activity_text: string;
@@ -20,6 +39,7 @@ type Phase = {
 type OptionStep = { step_text: string; source_template_option_step_id: string | null };
 
 type ActivityOption = {
+  id?: string;
   title: string;
   description: string;
   details_text: string;
@@ -30,15 +50,12 @@ type ActivityOption = {
 
 type WhatIf = { scenario_text: string; response_text: string; source_template_item_id: string | null };
 
-
 /**
- * Full structured per-instance TOC plan editor.
+ * Dayplans TOC editor (Template-as-Source)
  *
- * Copy-on-open from the active class template:
- * - creates toc_block_plans if missing
- * - if instance has no toc_* child rows, copies template structure into instance tables
- *
- * Saves to toc_* tables only (templates remain untouched).
+ * - Lesson Flow is day-owned and editable by default (initialized from template once).
+ * - Other sections are template previews by default.
+ * - A section becomes editable only after "Create Day Override" clones that section into toc_* tables.
  */
 export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: string; classId: string }) {
   const { isDemo } = useDemo();
@@ -47,21 +64,114 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
   const [status, setStatus] = useState<Status>('loading');
   const [error, setError] = useState<string | null>(null);
 
+  const [unsaved, setUnsaved] = useState(false);
+  const markUnsaved = () => setUnsaved(true);
+  const [saveDebug, setSaveDebug] = useState<string | null>(null);
+
   const [tocBlockPlanId, setTocBlockPlanId] = useState<string | null>(null);
+
+  // Autosave disabled (use Save all / Publish)
   const [templateId, setTemplateId] = useState<string | null>(null);
 
-  const [planMode, setPlanMode] = useState<'lesson_flow' | 'activity_options'>('lesson_flow');
-  const [teacherName, setTeacherName] = useState('');
-  const [taName, setTaName] = useState('');
-  const [taRole, setTaRole] = useState('');
-  const [phonePolicy, setPhonePolicy] = useState('Not permitted');
+  const [planMode, setPlanMode] = useState<PlanMode>('lesson_flow');
+  const [overridePayload, setOverridePayload] = useState<any>(null);
   const [noteTOC, setNoteTOC] = useState('');
+  const [aiNoteOpen, setAiNoteOpen] = useState(false);
+  const [aiNoteLoading, setAiNoteLoading] = useState(false);
+  const [aiNoteError, setAiNoteError] = useState<string | null>(null);
+  const [aiNoteSuggestion, setAiNoteSuggestion] = useState<string>('');
+  const [templateNoteTOC, setTemplateNoteTOC] = useState('');
 
+  // Publish mode + Advanced sections (editable always, but only published when publish_mode='advanced')
+  const [publishMode, setPublishMode] = useState<'toc' | 'advanced'>('toc');
+  const [templateAdvancedPayload, setTemplateAdvancedPayload] = useState<any>(null);
+
+  const [advCentralTheme, setAdvCentralTheme] = useState('');
+  const [advDeepHope, setAdvDeepHope] = useState('');
+  const [advBigIdea, setAdvBigIdea] = useState('');
+  const [advLearningTarget, setAdvLearningTarget] = useState('');
+  const [advCollaborativeStructure, setAdvCollaborativeStructure] = useState('');
+  const [advContext, setAdvContext] = useState('');
+
+  const [advMaterialsNeeded, setAdvMaterialsNeeded] = useState('');
+  const [advAssessmentTouchPoints, setAdvAssessmentTouchPoints] = useState('');
+  const [advPdGoalConnections, setAdvPdGoalConnections] = useState('');
+  const [advFirstPeoplesPrinciples, setAdvFirstPeoplesPrinciples] = useState('');
+
+  // Assessment touch point (template preview + day override)
+  const [templateTouchPoint, setTemplateTouchPoint] = useState<AssessmentTouchPoint | null>(null);
+  const [touchTiming, setTouchTiming] = useState('');
+  const [touchStandard, setTouchStandard] = useState('');
+  const [touchEvidence, setTouchEvidence] = useState('');
+  const [touchDiff, setTouchDiff] = useState('');
+  const [touchCycle, setTouchCycle] = useState('');
+
+  // Template previews
+  const [tplOpeningSteps, setTplOpeningSteps] = useState<Array<{ step_text: string }>>([]);
+  const [tplWhatIf, setTplWhatIf] = useState<Array<{ scenario_text: string; response_text: string }>>([]);
+  const [tplLessonFlow, setTplLessonFlow] = useState<Array<{ time_text: string; phase_text: string; activity_text: string; purpose_text: string | null }>>([]);
+  const [tplActivityOptions, setTplActivityOptions] = useState<ActivityOption[]>([]);
+  const [tplRoles, setTplRoles] = useState<Array<{ who: string; responsibility: string }>>([]);
+
+  // Overrides (instance)
   const [openingSteps, setOpeningSteps] = useState<OpeningStep[]>([]);
+  const [openingOverride, setOpeningOverride] = useState(false);
+  const [openingTouched, setOpeningTouched] = useState(false);
+
+  const newClientId = () => {
+    try {
+      // @ts-ignore
+      if (typeof crypto !== 'undefined' && crypto?.randomUUID) return crypto.randomUUID();
+    } catch {
+      // ignore
+    }
+    return `ph_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  };
+
   const [phases, setPhases] = useState<Phase[]>([]);
+  const phaseFieldRefs = useRef<
+    Record<
+      string,
+      {
+        time?: HTMLInputElement | null;
+        phase?: HTMLInputElement | null;
+        activity?: HTMLTextAreaElement | null;
+        purpose?: HTMLInputElement | null;
+      }
+    >
+  >({});
+
+  const [lessonOverride, setLessonOverride] = useState(false);
+  const [lessonTouched, setLessonTouched] = useState(false);
+
+  const [aiFlowOpen, setAiFlowOpen] = useState(false);
+  const [aiFlowLoading, setAiFlowLoading] = useState(false);
+  const [aiFlowError, setAiFlowError] = useState<string | null>(null);
+  const [aiFlowSuggestion, setAiFlowSuggestion] = useState<Array<{ time_text: string; phase_text: string; activity_text: string; purpose_text: string }> | null>(null);
   const [dragPhaseIdx, setDragPhaseIdx] = useState<number | null>(null);
+
   const [activityOptions, setActivityOptions] = useState<ActivityOption[]>([]);
+  const [activityOverride, setActivityOverride] = useState(false);
+  const [activityTouched, setActivityTouched] = useState(false);
+
   const [whatIfItems, setWhatIfItems] = useState<WhatIf[]>([]);
+  const [whatIfOverride, setWhatIfOverride] = useState(false);
+  const [whatIfTouched, setWhatIfTouched] = useState(false);
+
+  const [roles, setRoles] = useState<Array<{ who: string; responsibility: string }>>([]);
+  const [rolesOverride, setRolesOverride] = useState(false);
+  const [rolesTouched, setRolesTouched] = useState(false);
+  const [showRolesEditor, setShowRolesEditor] = useState(false);
+
+  const [showOpeningEditor, setShowOpeningEditor] = useState(false);
+  const [showWhatIfEditor, setShowWhatIfEditor] = useState(false);
+  const [showActivityEditor, setShowActivityEditor] = useState(false);
+
+  // Snippet Library
+  const [snippetOpen, setSnippetOpen] = useState(false);
+  const [snippets, setSnippets] = useState<TocSnippetRow[]>([]);
+  const [snippetStatus, setSnippetStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [snippetError, setSnippetError] = useState<string | null>(null);
 
   const modeLabel = useMemo(() => (planMode === 'lesson_flow' ? 'Lesson Flow' : 'Activity Options'), [planMode]);
 
@@ -70,6 +180,57 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [blockId, classId]);
 
+  // Allow parent to request a save (no pruning).
+  // Important: the parent may request a save before this editor finished loading.
+  // In that case, ensure the plan exists/loaded before saving.
+  useEffect(() => {
+    const type = `toc-save-request:${blockId}`;
+    const handler = async (e: Event) => {
+      const evt = e as CustomEvent<{ resolve?: (x: any) => void; reject?: (err: any) => void }>;
+      try {
+        // Give React a moment to flush any last onChange() state updates
+        // before we read state for saving (important on mobile).
+        await new Promise((r) => setTimeout(r, 50));
+
+        if (!tocBlockPlanId) {
+          await ensureAndLoad();
+        }
+
+        await saveAll({ reload: false, silent: true });
+        evt.detail?.resolve?.(true);
+      } catch (err) {
+        evt.detail?.reject?.(err);
+      }
+    };
+
+    window.addEventListener(type, handler as any);
+    return () => window.removeEventListener(type, handler as any);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [blockId, tocBlockPlanId, classId]);
+
+  // Allow parent to request publish-time save.
+  // NOTE: We no longer prune overrides here, because pruning based on in-session
+  // "touched" flags can accidentally delete intentional day overrides.
+  useEffect(() => {
+    const type = `toc-publish-request:${blockId}`;
+    const handler = async (e: Event) => {
+      const evt = e as CustomEvent<{ resolve?: (x: any) => void; reject?: (err: any) => void }>;
+      try {
+        // Give React a moment to flush any last onChange() state updates
+        await new Promise((r) => setTimeout(r, 50));
+
+        await saveAll({ reload: false, silent: true });
+        evt.detail?.resolve?.(true);
+      } catch (err) {
+        evt.detail?.reject?.(err);
+      }
+    };
+
+    window.addEventListener(type, handler as any);
+    return () => window.removeEventListener(type, handler as any);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [blockId, tocBlockPlanId]);
+
   async function ensureAndLoad() {
     setStatus('loading');
     setError(null);
@@ -77,7 +238,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
     try {
       const supabase = getSupabaseClient();
 
-      // 1) Load or create toc_block_plans
+      // 1) Ensure toc_block_plans exists
       let { data: plan, error: planErr } = await supabase
         .from('toc_block_plans')
         .select('*')
@@ -86,10 +247,9 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
       if (planErr) throw planErr;
 
       if (!plan) {
-        // Active template (newest updated)
         const { data: tpl, error: tplErr } = await supabase
           .from('class_toc_templates')
-          .select('*')
+          .select('id,plan_mode,note_to_toc')
           .eq('class_id', classId)
           .eq('is_active', true)
           .order('updated_at', { ascending: false })
@@ -97,7 +257,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
           .maybeSingle();
         if (tplErr) throw tplErr;
 
-        const inferredMode: 'lesson_flow' | 'activity_options' = (tpl?.plan_mode as any) ?? 'lesson_flow';
+        const inferredMode: PlanMode = (tpl?.plan_mode as any) ?? 'lesson_flow';
 
         const { data: created, error: createErr } = await supabase
           .from('toc_block_plans')
@@ -106,11 +266,12 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
             class_id: classId,
             template_id: tpl?.id ?? null,
             plan_mode: inferredMode,
+            override_note_to_toc: null,
+            // legacy overrides kept in DB, but not used in this UI
             override_teacher_name: null,
             override_ta_name: null,
             override_ta_role: null,
             override_phone_policy: null,
-            override_note_to_toc: null,
           })
           .select('*')
           .single();
@@ -121,21 +282,38 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
       setTocBlockPlanId(plan.id);
       setTemplateId(plan.template_id ?? null);
 
-      // 2) If instance is empty, copy from template
-      const { data: stepRows } = await supabase
-        .from('toc_opening_routine_steps')
-        .select('id')
-        .eq('toc_block_plan_id', plan.id)
-        .limit(1);
-      const hasAny = (stepRows?.length ?? 0) > 0;
+      // 2) Ensure we point at the latest active template for this class.
+      // If a newer template exists, we should use it as the source immediately
+      // (day overrides are stored separately and remain intact).
+      const { data: latestTpl, error: latestErr } = await supabase
+        .from('class_toc_templates')
+        .select('id,plan_mode,note_to_toc')
+        .eq('class_id', classId)
+        .eq('is_active', true)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (latestErr) throw latestErr;
 
-      if (!hasAny) {
-        await copyTemplateIntoInstance(supabase, plan.id, classId);
+      if (latestTpl?.id && latestTpl.id !== plan.template_id) {
+        await supabase.from('toc_block_plans').update({ template_id: latestTpl.id }).eq('id', plan.id);
+        plan.template_id = latestTpl.id;
+        setTemplateId(latestTpl.id);
       }
 
-      // 3) Load instance for editing
-      await loadInstance(supabase, plan.id);
+      // If no template exists yet, create a default.
+      if (!plan.template_id) {
+        const created = await ensureDefaultTemplateForClass(supabase, classId);
+        if (created?.id) {
+          await supabase.from('toc_block_plans').update({ template_id: created.id }).eq('id', plan.id);
+          plan.template_id = created.id;
+          setTemplateId(created.id);
+        }
+      }
 
+      // 3) Load template previews + instance overrides
+      await loadAll(supabase, plan.id, plan.template_id ?? null);
+      setUnsaved(false);
       setStatus('idle');
     } catch (e: any) {
       setStatus('error');
@@ -143,186 +321,439 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
     }
   }
 
-  async function copyTemplateIntoInstance(supabase: ReturnType<typeof getSupabaseClient>, tocPlanId: string, classId: string) {
-    // Active template (newest updated)
-    let { data: tpl, error: tplErr } = await supabase
-      .from('class_toc_templates')
-      .select('*')
-      .eq('class_id', classId)
-      .eq('is_active', true)
-      .order('updated_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (tplErr) throw tplErr;
-
-    // If the teacher hasn't created/saved a template yet, auto-create one with sensible defaults.
-    if (!tpl) {
-      tpl = await ensureDefaultTemplateForClass(supabase, classId);
-    }
-    if (!tpl) return;
-
-    // Update instance plan header to link template + plan_mode
-    await supabase
-      .from('toc_block_plans')
-      .update({ template_id: tpl.id, plan_mode: tpl.plan_mode })
-      .eq('id', tocPlanId);
-
-    // Opening routine
-    const { data: tSteps, error: tStepsErr } = await supabase
-      .from('class_opening_routine_steps')
-      .select('id,sort_order,step_text')
-      .eq('template_id', tpl.id)
-      .order('sort_order', { ascending: true });
-    if (tStepsErr) throw tStepsErr;
-    if ((tSteps?.length ?? 0) > 0) {
-      const rows = (tSteps ?? []).map((r: any) => ({
-        toc_block_plan_id: tocPlanId,
-        sort_order: r.sort_order,
-        step_text: r.step_text,
-        source_template_step_id: r.id,
-      }));
-      const { error } = await supabase.from('toc_opening_routine_steps').insert(rows);
+  async function loadSnippets() {
+    setSnippetStatus('loading');
+    setSnippetError(null);
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('toc_snippets')
+        .select('id,title,description,tags,payload,updated_at')
+        .order('title', { ascending: true });
       if (error) throw error;
-    }
-
-    // Lesson flow phases
-    const { data: tPhases, error: tPhErr } = await supabase
-      .from('class_lesson_flow_phases')
-      .select('id,sort_order,time_text,phase_text,activity_text,purpose_text')
-      .eq('template_id', tpl.id)
-      .order('sort_order', { ascending: true });
-    if (tPhErr) throw tPhErr;
-    if ((tPhases?.length ?? 0) > 0) {
-      const rows = (tPhases ?? []).map((r: any) => ({
-        toc_block_plan_id: tocPlanId,
-        sort_order: r.sort_order,
-        time_text: r.time_text,
-        phase_text: r.phase_text,
-        activity_text: r.activity_text,
-        purpose_text: r.purpose_text,
-        source_template_phase_id: r.id,
-      }));
-      const { error } = await supabase.from('toc_lesson_flow_phases').insert(rows);
-      if (error) throw error;
-    }
-
-    // Activity options + nested steps
-    const { data: tOpts, error: tOptErr } = await supabase
-      .from('class_activity_options')
-      .select('id,sort_order,title,description,details_text,toc_role_text')
-      .eq('template_id', tpl.id)
-      .order('sort_order', { ascending: true });
-    if (tOptErr) throw tOptErr;
-
-    const optIdMap = new Map<string, string>();
-    if ((tOpts?.length ?? 0) > 0) {
-      const rows = (tOpts ?? []).map((r: any) => ({
-        toc_block_plan_id: tocPlanId,
-        sort_order: r.sort_order,
-        title: r.title,
-        description: r.description,
-        details_text: r.details_text,
-        toc_role_text: r.toc_role_text,
-        source_template_option_id: r.id,
-      }));
-      const { data: inserted, error: insErr } = await supabase
-        .from('toc_activity_options')
-        .insert(rows)
-        .select('id,source_template_option_id');
-      if (insErr) throw insErr;
-      for (const r of inserted ?? []) {
-        if (r.source_template_option_id) optIdMap.set(r.source_template_option_id, r.id);
-      }
-
-      // Steps per option
-      for (const tOpt of tOpts ?? []) {
-        const newOptId = optIdMap.get(tOpt.id);
-        if (!newOptId) continue;
-        const { data: tSteps2, error: tSteps2Err } = await supabase
-          .from('class_activity_option_steps')
-          .select('id,sort_order,step_text')
-          .eq('activity_option_id', tOpt.id)
-          .order('sort_order', { ascending: true });
-        if (tSteps2Err) throw tSteps2Err;
-        if ((tSteps2?.length ?? 0) > 0) {
-          const rows2 = (tSteps2 ?? []).map((r: any) => ({
-            toc_activity_option_id: newOptId,
-            sort_order: r.sort_order,
-            step_text: r.step_text,
-            source_template_option_step_id: r.id,
-          }));
-          const { error: ins2Err } = await supabase.from('toc_activity_option_steps').insert(rows2);
-          if (ins2Err) throw ins2Err;
-        }
-      }
-    }
-
-    // What-to-do-if
-    const { data: tWhatIf, error: tWhatIfErr } = await supabase
-      .from('class_what_to_do_if_items')
-      .select('id,sort_order,scenario_text,response_text')
-      .eq('template_id', tpl.id)
-      .order('sort_order', { ascending: true });
-    if (tWhatIfErr) throw tWhatIfErr;
-    if ((tWhatIf?.length ?? 0) > 0) {
-      const rows = (tWhatIf ?? []).map((r: any) => ({
-        toc_block_plan_id: tocPlanId,
-        sort_order: r.sort_order,
-        scenario_text: r.scenario_text,
-        response_text: r.response_text,
-        source_template_item_id: r.id,
-      }));
-      const { error } = await supabase.from('toc_what_to_do_if_items').insert(rows);
-      if (error) throw error;
+      setSnippets((data ?? []) as any);
+      setSnippetStatus('idle');
+    } catch (e: any) {
+      setSnippetStatus('error');
+      setSnippetError(e?.message ?? 'Failed to load snippet library');
+      setSnippets([]);
     }
   }
 
-  async function loadInstance(supabase: ReturnType<typeof getSupabaseClient>, tocPlanId: string) {
-    const { data: plan, error: pErr } = await supabase.from('toc_block_plans').select('*').eq('id', tocPlanId).single();
+  async function applySnippet(snippet: TocSnippetRow) {
+    if (!tocBlockPlanId) return;
+    if (isDemo) return;
+
+    const payload = snippet.payload ?? ({} as any);
+
+    const ok = window.confirm(
+      `Insert “${snippet.title}” into this day plan override? This will replace any existing day overrides in the affected sections.`
+    );
+    if (!ok) return;
+
+    setStatus('saving');
+    setError(null);
+
+    try {
+      const supabase = getSupabaseClient();
+      const pid = tocBlockPlanId;
+
+      // Opening steps
+      if (Array.isArray(payload.opening_steps) && payload.opening_steps.length > 0) {
+        await supabase.from('toc_opening_routine_steps').delete().eq('toc_block_plan_id', pid);
+        const rows = payload.opening_steps.map((step_text, idx) => ({
+          toc_block_plan_id: pid,
+          sort_order: idx + 1,
+          step_text,
+          source_template_step_id: null,
+        }));
+        const { error } = await supabase.from('toc_opening_routine_steps').insert(rows);
+        if (error) throw error;
+        setOpeningOverride(true);
+        setOpeningTouched(true);
+        setShowOpeningEditor(true);
+      }
+
+      // Lesson flow phases
+      if (Array.isArray(payload.lesson_flow_phases) && payload.lesson_flow_phases.length > 0) {
+        await supabase.from('toc_lesson_flow_phases').delete().eq('toc_block_plan_id', pid);
+        const rows = payload.lesson_flow_phases.map((p, idx) => ({
+          toc_block_plan_id: pid,
+          sort_order: idx + 1,
+          time_text: String(p.time_text ?? ''),
+          phase_text: String(p.phase_text ?? ''),
+          activity_text: String(p.activity_text ?? ''),
+          purpose_text: p.purpose_text ? String(p.purpose_text) : null,
+          source_template_phase_id: null,
+        }));
+        const { error } = await supabase.from('toc_lesson_flow_phases').insert(rows);
+        if (error) throw error;
+        setLessonOverride(true);
+        setLessonTouched(true);
+      }
+
+      // What-if
+      if (Array.isArray(payload.what_if_items) && payload.what_if_items.length > 0) {
+        await supabase.from('toc_what_to_do_if_items').delete().eq('toc_block_plan_id', pid);
+        const rows = payload.what_if_items.map((w, idx) => ({
+          toc_block_plan_id: pid,
+          sort_order: idx + 1,
+          scenario_text: String(w.scenario_text ?? ''),
+          response_text: String(w.response_text ?? ''),
+          source_template_item_id: null,
+        }));
+        const { error } = await supabase.from('toc_what_to_do_if_items').insert(rows);
+        if (error) throw error;
+        setWhatIfOverride(true);
+        setWhatIfTouched(true);
+        setShowWhatIfEditor(true);
+      }
+
+      // Roles
+      if (Array.isArray(payload.roles) && payload.roles.length > 0) {
+        await supabase.from('toc_role_rows').delete().eq('toc_block_plan_id', pid);
+        const rows = payload.roles.map((r, idx) => ({
+          toc_block_plan_id: pid,
+          sort_order: idx + 1,
+          who: String(r.who ?? ''),
+          responsibility: String(r.responsibility ?? ''),
+        }));
+        const { error } = await supabase.from('toc_role_rows').insert(rows);
+        if (error) throw error;
+        setRolesOverride(true);
+        setRolesTouched(true);
+        setShowRolesEditor(true);
+      }
+
+      // Activity options
+      if (Array.isArray(payload.activity_options) && payload.activity_options.length > 0) {
+        // delete steps first, then options
+        const { data: existing, error: exErr } = await supabase.from('toc_activity_options').select('id').eq('toc_block_plan_id', pid);
+        if (exErr) throw exErr;
+        const ids = (existing ?? []).map((r: any) => r.id);
+        if (ids.length) {
+          const { error } = await supabase.from('toc_activity_option_steps').delete().in('toc_activity_option_id', ids);
+          if (error) throw error;
+        }
+        await supabase.from('toc_activity_options').delete().eq('toc_block_plan_id', pid);
+
+        const optRows = payload.activity_options.map((o, idx) => ({
+          toc_block_plan_id: pid,
+          sort_order: idx + 1,
+          title: String(o.title ?? ''),
+          description: String(o.description ?? ''),
+          details_text: String(o.details_text ?? ''),
+          toc_role_text: o.toc_role_text ? String(o.toc_role_text) : null,
+          source_template_option_id: null,
+        }));
+
+        const { data: inserted, error: insErr } = await supabase.from('toc_activity_options').insert(optRows).select('id,sort_order');
+        if (insErr) throw insErr;
+
+        const bySort = new Map<number, string>();
+        for (const r of inserted ?? []) bySort.set((r as any).sort_order, (r as any).id);
+
+        const stepRows: any[] = [];
+        for (let i = 0; i < payload.activity_options.length; i++) {
+          const o = payload.activity_options[i]!;
+          const optId = bySort.get(i + 1);
+          if (!optId) continue;
+          const steps = Array.isArray(o.steps) ? o.steps : [];
+          for (let j = 0; j < steps.length; j++) {
+            const st = steps[j]!;
+            stepRows.push({
+              toc_activity_option_id: optId,
+              sort_order: j + 1,
+              step_text: String((st as any).step_text ?? ''),
+              source_template_option_step_id: null,
+            });
+          }
+        }
+        if (stepRows.length) {
+          const { error } = await supabase.from('toc_activity_option_steps').insert(stepRows);
+          if (error) throw error;
+        }
+
+        setActivityOverride(true);
+        setActivityTouched(true);
+        setShowActivityEditor(true);
+      }
+
+      await loadAll(supabase, pid, templateId);
+      setUnsaved(false);
+      setSnippetOpen(false);
+      setStatus('idle');
+    } catch (e: any) {
+      setStatus('error');
+      setError(e?.message ?? 'Failed to apply snippet');
+    }
+  }
+
+  async function loadAll(supabase: ReturnType<typeof getSupabaseClient>, tocPlanId: string, tplId: string | null) {
+    const { data: plan, error: pErr } = await supabase
+      .from('toc_block_plans')
+      .select('template_id,plan_mode,override_note_to_toc,override_assessment_touch_point,override_payload,seeded_at')
+      .eq('id', tocPlanId)
+      .single();
     if (pErr) throw pErr;
 
-    setTemplateId(plan.template_id ?? null);
-    setPlanMode(plan.plan_mode);
-    setTeacherName(plan.override_teacher_name ?? '');
-    setTaName(plan.override_ta_name ?? '');
-    setTaRole(plan.override_ta_role ?? '');
-    setPhonePolicy(plan.override_phone_policy ?? 'Not permitted');
-    setNoteTOC(plan.override_note_to_toc ?? '');
+    // Always prefer the latest active template for this class (in case it changed since plan creation).
+    let effectiveTplId = tplId ?? plan.template_id ?? null;
+    try {
+      const { data: latestTpl, error: latestErr } = await supabase
+        .from('class_toc_templates')
+        .select('id')
+        .eq('class_id', classId)
+        .eq('is_active', true)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!latestErr && latestTpl?.id) effectiveTplId = latestTpl.id;
+    } catch {
+      // ignore
+    }
 
-    const { data: oSteps, error: oErr } = await supabase
-      .from('toc_opening_routine_steps')
-      .select('sort_order,step_text,source_template_step_id')
-      .eq('toc_block_plan_id', tocPlanId)
-      .order('sort_order', { ascending: true });
-    if (oErr) throw oErr;
-    setOpeningSteps((oSteps ?? []).map((r: any) => ({ step_text: r.step_text, source_template_step_id: r.source_template_step_id ?? null })));
+    if (effectiveTplId && effectiveTplId !== plan.template_id) {
+      await supabase.from('toc_block_plans').update({ template_id: effectiveTplId }).eq('id', tocPlanId);
+    }
 
-    const { data: lPh, error: lErr } = await supabase
-      .from('toc_lesson_flow_phases')
-      .select('sort_order,time_text,phase_text,activity_text,purpose_text,source_template_phase_id')
-      .eq('toc_block_plan_id', tocPlanId)
-      .order('sort_order', { ascending: true });
-    if (lErr) throw lErr;
-    setPhases(
-      (lPh ?? []).map((r: any) => ({
-        time_text: r.time_text,
-        phase_text: r.phase_text,
-        activity_text: r.activity_text,
-        purpose_text: r.purpose_text ?? '',
+    // New architecture: copy template content into TOC instance cards once.
+    // /p reads ONLY from toc_* instance tables, so we must seed before public use.
+    try {
+      if (!((plan as any).seeded_at) && effectiveTplId) {
+        await supabase.rpc('seed_toc_block_plan_from_template', { p_toc_block_plan_id: tocPlanId });
+        // Reload plan row after seeding so subsequent reads use instance tables.
+        const { data: plan2, error: p2Err } = await supabase
+          .from('toc_block_plans')
+          .select('template_id,plan_mode,override_note_to_toc,override_assessment_touch_point,override_payload,seeded_at')
+          .eq('id', tocPlanId)
+          .single();
+        if (!p2Err && plan2) {
+          (plan as any).override_payload = (plan2 as any).override_payload;
+          (plan as any).seeded_at = (plan2 as any).seeded_at;
+        }
+      }
+    } catch {
+      // seeding is best-effort; editor can still function
+    }
+
+    setTemplateId(effectiveTplId);
+    setPlanMode(plan.plan_mode as PlanMode);
+    setOverridePayload((plan as any).override_payload ?? null);
+    setUnsaved(false);
+
+    let tplNote = '';
+    let tplTouch: any = null;
+    let tplAdvPayload: any = null;
+    if (effectiveTplId) {
+      const { data: tplRow, error: tErr } = await supabase
+        .from('class_toc_templates')
+        .select('note_to_toc,assessment_touch_point,advanced_payload')
+        .eq('id', effectiveTplId)
+        .maybeSingle();
+      if (tErr) throw tErr;
+      tplNote = (tplRow?.note_to_toc ?? '').toString();
+      tplTouch = (tplRow as any)?.assessment_touch_point ?? null;
+      tplAdvPayload = (tplRow as any)?.advanced_payload ?? null;
+      setTemplateAdvancedPayload(tplAdvPayload);
+    } else {
+      setTemplateAdvancedPayload(null);
+    }
+    setTemplateNoteTOC(tplNote);
+    setTemplateTouchPoint(tplTouch);
+    const override = (plan.override_note_to_toc ?? '').toString();
+    setNoteTOC(override || tplNote);
+
+    // publish mode + advanced fields (effective = template defaults overridden by instance override_payload.advanced)
+    const raw = (plan as any)?.override_payload ?? null;
+    const pm = String(raw?.publish_mode ?? '').trim();
+    setPublishMode(pm === 'advanced' ? 'advanced' : 'toc');
+
+    const templateAdv = (tplAdvPayload && typeof tplAdvPayload === 'object' ? tplAdvPayload : {}) as any;
+    let overrideAdv = (raw?.advanced && typeof raw.advanced === 'object' ? raw.advanced : {}) as any;
+
+    // If the override advanced payload is completely blank (common when created by older Save flows),
+    // ignore it so template advanced areas show up.
+    const isAllBlankAdv = (a: any) => {
+      if (!a || typeof a !== 'object') return true;
+      const s = (x: any) => String(x ?? '').trim();
+      const arrLen = (x: any) => (Array.isArray(x) ? x.length : 0);
+      return (
+        !s(a.central_theme) &&
+        !s(a.deep_hope) &&
+        !s(a.big_idea) &&
+        !s(a.learning_target) &&
+        !s(a.collaborative_structure) &&
+        !s(a.context) &&
+        arrLen(a.materials_needed) === 0 &&
+        arrLen(a.assessment_touch_points) === 0 &&
+        arrLen(a.pd_goal_connections) === 0 &&
+        arrLen(a.first_peoples_principles) === 0
+      );
+    };
+    if (isAllBlankAdv(overrideAdv)) overrideAdv = {};
+
+    const effAdv = { ...templateAdv, ...overrideAdv };
+
+    setAdvCentralTheme(String(effAdv?.central_theme ?? ''));
+    setAdvDeepHope(String(effAdv?.deep_hope ?? ''));
+    setAdvBigIdea(String(effAdv?.big_idea ?? ''));
+    setAdvLearningTarget(String(effAdv?.learning_target ?? ''));
+    setAdvCollaborativeStructure(String(effAdv?.collaborative_structure ?? ''));
+    setAdvContext(String(effAdv?.context ?? ''));
+
+    const toLines = (arr: any) => (Array.isArray(arr) ? arr.map((x) => String(x ?? '').trim()).filter(Boolean).join('\n') : '');
+    setAdvMaterialsNeeded(toLines(effAdv?.materials_needed));
+    setAdvAssessmentTouchPoints(toLines(effAdv?.assessment_touch_points));
+    setAdvPdGoalConnections(toLines(effAdv?.pd_goal_connections));
+    setAdvFirstPeoplesPrinciples(toLines(effAdv?.first_peoples_principles));
+
+    const tp = ((plan as any).override_assessment_touch_point ?? null) as any;
+    const baseTp = tplTouch ?? null;
+    const effectiveTp = tp && Object.keys(tp).length ? tp : baseTp;
+    setTouchTiming(String(effectiveTp?.timing_in_lesson ?? ''));
+    setTouchStandard(String(effectiveTp?.learning_standard_focus ?? ''));
+    setTouchEvidence(String(effectiveTp?.evidence_to_collect ?? ''));
+    setTouchDiff(String(effectiveTp?.differentiation_strategy ?? ''));
+    setTouchCycle(String(effectiveTp?.cyclical_loop_type ?? ''));
+
+    // template previews
+    if (effectiveTplId) {
+      const [orRes, wiRes, lfRes, optRes, roleRes] = await Promise.all([
+        supabase.from('class_opening_routine_steps').select('sort_order,step_text').eq('template_id', effectiveTplId).order('sort_order', { ascending: true }),
+        supabase.from('class_what_to_do_if_items').select('sort_order,scenario_text,response_text').eq('template_id', effectiveTplId).order('sort_order', { ascending: true }),
+        supabase.from('class_lesson_flow_phases').select('sort_order,time_text,phase_text,activity_text,purpose_text').eq('template_id', effectiveTplId).order('sort_order', { ascending: true }),
+        supabase.from('class_activity_options').select('id,sort_order,title,description,details_text,toc_role_text').eq('template_id', effectiveTplId).order('sort_order', { ascending: true }),
+        supabase.from('class_role_rows').select('sort_order,who,responsibility').eq('template_id', effectiveTplId).order('sort_order', { ascending: true }),
+      ]);
+      if (orRes.error) throw orRes.error;
+      if (wiRes.error) throw wiRes.error;
+      if (lfRes.error) throw lfRes.error;
+      if (optRes.error) throw optRes.error;
+      if (roleRes.error) throw roleRes.error;
+
+      setTplOpeningSteps((orRes.data ?? []).map((r: any) => ({ step_text: r.step_text })));
+      setTplWhatIf((wiRes.data ?? []).map((r: any) => ({ scenario_text: r.scenario_text, response_text: r.response_text })));
+      setTplLessonFlow((lfRes.data ?? []).map((r: any) => ({ time_text: r.time_text, phase_text: r.phase_text, activity_text: r.activity_text, purpose_text: r.purpose_text ?? null })));
+
+      const tOpts = optRes.data ?? [];
+      const optIds = tOpts.map((o: any) => o.id);
+      let tStepsByOpt: Record<string, any[]> = {};
+      if (optIds.length) {
+        const { data: st, error: stErr } = await supabase
+          .from('class_activity_option_steps')
+          .select('activity_option_id,sort_order,step_text')
+          .in('activity_option_id', optIds)
+          .order('sort_order', { ascending: true });
+        if (stErr) throw stErr;
+        for (const r of st ?? []) {
+          const arr = tStepsByOpt[r.activity_option_id] ?? [];
+          arr.push(r);
+          tStepsByOpt[r.activity_option_id] = arr;
+        }
+      }
+      setTplActivityOptions(
+        tOpts.map((o: any) => ({
+          title: o.title,
+          description: o.description,
+          details_text: o.details_text,
+          toc_role_text: o.toc_role_text ?? '',
+          source_template_option_id: o.id,
+          steps: (tStepsByOpt[o.id] ?? []).map((s: any) => ({ step_text: s.step_text, source_template_option_step_id: null })),
+        }))
+      );
+
+      setTplRoles((roleRes.data ?? []).map((r: any) => ({ who: r.who, responsibility: r.responsibility })));
+    } else {
+      setTplOpeningSteps([]);
+      setTplWhatIf([]);
+      setTplLessonFlow([]);
+      setTplActivityOptions([]);
+      setTplRoles([]);
+    }
+
+    // overrides (instance)
+    const [or2, lf2, wi2, opt2, role2] = await Promise.all([
+      supabase
+        .from('toc_opening_routine_steps')
+        .select('sort_order,step_text,source_template_step_id')
+        .eq('toc_block_plan_id', tocPlanId)
+        .order('sort_order', { ascending: true }),
+      supabase
+        .from('toc_lesson_flow_phases')
+        .select('sort_order,time_text,phase_text,activity_text,purpose_text,source_template_phase_id')
+        .eq('toc_block_plan_id', tocPlanId)
+        .order('sort_order', { ascending: true }),
+      supabase
+        .from('toc_what_to_do_if_items')
+        .select('sort_order,scenario_text,response_text,source_template_item_id')
+        .eq('toc_block_plan_id', tocPlanId)
+        .order('sort_order', { ascending: true }),
+      supabase
+        .from('toc_activity_options')
+        .select('id,sort_order,title,description,details_text,toc_role_text,source_template_option_id')
+        .eq('toc_block_plan_id', tocPlanId)
+        .order('sort_order', { ascending: true }),
+      supabase
+        .from('toc_role_rows')
+        .select('sort_order,who,responsibility')
+        .eq('toc_block_plan_id', tocPlanId)
+        .order('sort_order', { ascending: true }),
+    ]);
+    if (or2.error) throw or2.error;
+    if (lf2.error) throw lf2.error;
+    if (wi2.error) throw wi2.error;
+    if (opt2.error) throw opt2.error;
+    if (role2.error) throw role2.error;
+
+    setOpeningSteps((or2.data ?? []).map((r: any) => ({ step_text: r.step_text, source_template_step_id: r.source_template_step_id ?? null })));
+    setOpeningOverride((or2.data ?? []).length > 0);
+
+    const payloadLf = (plan as any)?.override_payload?.lesson_flow_phases;
+    const payloadLfArr = Array.isArray(payloadLf) ? payloadLf : null;
+
+    if (payloadLfArr && payloadLfArr.length) {
+      const nextPhases: Phase[] = payloadLfArr.map((r: any) => ({
+        client_id: newClientId(),
+        time_text: String(r?.time_text ?? ''),
+        phase_text: String(r?.phase_text ?? ''),
+        activity_text: String(r?.activity_text ?? ''),
+        purpose_text: String(r?.purpose_text ?? ''),
+        source_template_phase_id: null,
+      }));
+      setPhases(nextPhases);
+      setLessonOverride(true);
+    } else {
+      const legacyPhases: Phase[] = (lf2.data ?? []).map((r: any) => ({
+        client_id: newClientId(),
+        time_text: String(r.time_text ?? ''),
+        phase_text: String(r.phase_text ?? ''),
+        activity_text: String(r.activity_text ?? ''),
+        purpose_text: String(r.purpose_text ?? ''),
         source_template_phase_id: r.source_template_phase_id ?? null,
-      }))
-    );
+      }));
 
-    const { data: opts, error: optErr } = await supabase
-      .from('toc_activity_options')
-      .select('id,sort_order,title,description,details_text,toc_role_text,source_template_option_id')
-      .eq('toc_block_plan_id', tocPlanId)
-      .order('sort_order', { ascending: true });
-    if (optErr) throw optErr;
+      const seededFromTemplate: Phase[] = (tplLessonFlow ?? []).map((r: any) => ({
+        client_id: newClientId(),
+        time_text: String(r.time_text ?? ''),
+        phase_text: String(r.phase_text ?? ''),
+        activity_text: String(r.activity_text ?? ''),
+        purpose_text: String(r.purpose_text ?? ''),
+        source_template_phase_id: null,
+      }));
 
-    const optIds = (opts ?? []).map((o: any) => o.id);
+      const nextPhases = legacyPhases.length ? legacyPhases : seededFromTemplate;
+      setPhases(nextPhases);
+      setLessonOverride(nextPhases.length > 0);
+    }
+
+    setWhatIfItems((wi2.data ?? []).map((r: any) => ({ scenario_text: r.scenario_text, response_text: r.response_text, source_template_item_id: r.source_template_item_id ?? null })));
+    setWhatIfOverride((wi2.data ?? []).length > 0);
+
+    const opts = opt2.data ?? [];
+    const optIds = opts.map((o: any) => o.id);
     let stepsByOpt: Record<string, any[]> = {};
-    if (optIds.length > 0) {
+    if (optIds.length) {
       const { data: s2, error: s2Err } = await supabase
         .from('toc_activity_option_steps')
         .select('toc_activity_option_id,sort_order,step_text,source_template_option_step_id')
@@ -336,9 +767,8 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         stepsByOpt[key] = arr;
       }
     }
-
     setActivityOptions(
-      (opts ?? []).map((o: any) => ({
+      opts.map((o: any) => ({
         title: o.title,
         description: o.description,
         details_text: o.details_text,
@@ -347,130 +777,530 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         steps: (stepsByOpt[o.id] ?? []).map((s: any) => ({ step_text: s.step_text, source_template_option_step_id: s.source_template_option_step_id ?? null })),
       }))
     );
+    setActivityOverride(opts.length > 0);
 
-    const { data: wi, error: wiErr } = await supabase
-      .from('toc_what_to_do_if_items')
-      .select('sort_order,scenario_text,response_text,source_template_item_id')
-      .eq('toc_block_plan_id', tocPlanId)
-      .order('sort_order', { ascending: true });
-    if (wiErr) throw wiErr;
-    setWhatIfItems((wi ?? []).map((r: any) => ({ scenario_text: r.scenario_text, response_text: r.response_text, source_template_item_id: r.source_template_item_id ?? null })));
+    setRoles((role2.data ?? []).map((r: any) => ({ who: r.who, responsibility: r.responsibility })));
+    setRolesOverride((role2.data ?? []).length > 0);
   }
 
-  async function saveAll() {
-    if (!tocBlockPlanId) return;
-    if (isDemo) return;
-
+  async function createOpeningOverride() {
+    if (!tocBlockPlanId || !templateId || isDemo) return;
     setStatus('saving');
     setError(null);
-
     try {
       const supabase = getSupabaseClient();
+      const { data: tSteps, error: tErr } = await supabase
+        .from('class_opening_routine_steps')
+        .select('id,sort_order,step_text')
+        .eq('template_id', templateId)
+        .order('sort_order', { ascending: true });
+      if (tErr) throw tErr;
 
-      // 1) header
-      const headerPayload = {
-        plan_mode: planMode,
-        override_teacher_name: teacherName.trim() ? teacherName.trim() : null,
-        override_ta_name: taName.trim() ? taName.trim() : null,
-        override_ta_role: taRole.trim() ? taRole.trim() : null,
-        override_phone_policy: phonePolicy || null,
-        override_note_to_toc: noteTOC.trim() ? noteTOC.trim() : null,
-      };
-      const { error: upErr } = await supabase.from('toc_block_plans').update(headerPayload).eq('id', tocBlockPlanId);
-      if (upErr) throw upErr;
-
-      // 2) Replace child tables (simple + robust)
       await supabase.from('toc_opening_routine_steps').delete().eq('toc_block_plan_id', tocBlockPlanId);
-      await supabase.from('toc_lesson_flow_phases').delete().eq('toc_block_plan_id', tocBlockPlanId);
-      await supabase.from('toc_activity_options').delete().eq('toc_block_plan_id', tocBlockPlanId);
-      // steps are cascade-deleted from options; still delete orphan steps safely
-      // (ignore errors if none)
-      await supabase.from('toc_what_to_do_if_items').delete().eq('toc_block_plan_id', tocBlockPlanId);
-
-      if (openingSteps.length > 0) {
-        const rows = openingSteps.map((s, i) => ({
+      if ((tSteps?.length ?? 0) > 0) {
+        const rows = (tSteps ?? []).map((r: any) => ({
           toc_block_plan_id: tocBlockPlanId,
-          sort_order: i + 1,
-          step_text: s.step_text,
-          source_template_step_id: s.source_template_step_id,
+          sort_order: r.sort_order,
+          step_text: r.step_text,
+          source_template_step_id: r.id,
         }));
         const { error } = await supabase.from('toc_opening_routine_steps').insert(rows);
         if (error) throw error;
       }
 
-      if (phases.length > 0) {
-        const rows = phases.map((p, i) => ({
+      await loadAll(supabase, tocBlockPlanId, templateId);
+      setOpeningOverride(true);
+      setOpeningTouched(true);
+      setShowOpeningEditor(true);
+      setStatus('idle');
+    } catch (e: any) {
+      setStatus('error');
+      setError(e?.message ?? 'Failed to create override');
+    }
+  }
+
+  async function createWhatIfOverride() {
+    if (!tocBlockPlanId || !templateId || isDemo) return;
+    setStatus('saving');
+    setError(null);
+    try {
+      const supabase = getSupabaseClient();
+      const { data: rows0, error: tErr } = await supabase
+        .from('class_what_to_do_if_items')
+        .select('id,sort_order,scenario_text,response_text')
+        .eq('template_id', templateId)
+        .order('sort_order', { ascending: true });
+      if (tErr) throw tErr;
+
+      await supabase.from('toc_what_to_do_if_items').delete().eq('toc_block_plan_id', tocBlockPlanId);
+      if ((rows0?.length ?? 0) > 0) {
+        const rows = (rows0 ?? []).map((r: any) => ({
           toc_block_plan_id: tocBlockPlanId,
-          sort_order: i + 1,
-          time_text: p.time_text,
-          phase_text: p.phase_text,
-          activity_text: p.activity_text,
-          purpose_text: p.purpose_text || null,
-          source_template_phase_id: p.source_template_phase_id,
-        }));
-        const { error } = await supabase.from('toc_lesson_flow_phases').insert(rows);
-        if (error) throw error;
-      }
-
-      // Options + nested steps
-      if (activityOptions.length > 0) {
-        const optRows = activityOptions.map((o, i) => ({
-          toc_block_plan_id: tocBlockPlanId,
-          sort_order: i + 1,
-          title: o.title,
-          description: o.description,
-          details_text: o.details_text,
-          toc_role_text: o.toc_role_text || null,
-          source_template_option_id: o.source_template_option_id,
-        }));
-
-        const { data: insertedOpts, error: insOptErr } = await supabase
-          .from('toc_activity_options')
-          .insert(optRows)
-          .select('id,sort_order');
-        if (insOptErr) throw insOptErr;
-
-        // Insert steps using returned order
-        const bySort = new Map<number, string>();
-        for (const r of insertedOpts ?? []) bySort.set(r.sort_order, r.id);
-
-        const stepRows: any[] = [];
-        for (let i = 0; i < activityOptions.length; i++) {
-          const opt = activityOptions[i]!;
-          const newOptId = bySort.get(i + 1);
-          if (!newOptId) continue;
-          for (let j = 0; j < (opt.steps ?? []).length; j++) {
-            const st = opt.steps[j]!;
-            stepRows.push({
-              toc_activity_option_id: newOptId,
-              sort_order: j + 1,
-              step_text: st.step_text,
-              source_template_option_step_id: st.source_template_option_step_id,
-            });
-          }
-        }
-        if (stepRows.length > 0) {
-          const { error: insStepsErr } = await supabase.from('toc_activity_option_steps').insert(stepRows);
-          if (insStepsErr) throw insStepsErr;
-        }
-      }
-
-      if (whatIfItems.length > 0) {
-        const rows = whatIfItems.map((w, i) => ({
-          toc_block_plan_id: tocBlockPlanId,
-          sort_order: i + 1,
-          scenario_text: w.scenario_text,
-          response_text: w.response_text,
-          source_template_item_id: w.source_template_item_id,
+          sort_order: r.sort_order,
+          scenario_text: r.scenario_text,
+          response_text: r.response_text,
+          source_template_item_id: r.id,
         }));
         const { error } = await supabase.from('toc_what_to_do_if_items').insert(rows);
         if (error) throw error;
       }
 
+      await loadAll(supabase, tocBlockPlanId, templateId);
+      setWhatIfOverride(true);
+      setWhatIfTouched(true);
+      setShowWhatIfEditor(true);
       setStatus('idle');
     } catch (e: any) {
       setStatus('error');
-      setError(e?.message ?? 'Failed to save');
+      setError(e?.message ?? 'Failed to create override');
+    }
+  }
+
+  async function createRolesOverride() {
+    if (!tocBlockPlanId || !templateId || isDemo) return;
+    setStatus('saving');
+    setError(null);
+    try {
+      const supabase = getSupabaseClient();
+      const { data: rows0, error: tErr } = await supabase
+        .from('class_role_rows')
+        .select('id,sort_order,who,responsibility')
+        .eq('template_id', templateId)
+        .order('sort_order', { ascending: true });
+      if (tErr) throw tErr;
+
+      await supabase.from('toc_role_rows').delete().eq('toc_block_plan_id', tocBlockPlanId);
+      if ((rows0?.length ?? 0) > 0) {
+        const rows = (rows0 ?? []).map((r: any) => ({
+          toc_block_plan_id: tocBlockPlanId,
+          sort_order: r.sort_order,
+          who: r.who,
+          responsibility: r.responsibility,
+        }));
+        const { error } = await supabase.from('toc_role_rows').insert(rows);
+        if (error) throw error;
+      }
+
+      await loadAll(supabase, tocBlockPlanId, templateId);
+      setRolesOverride(true);
+      setRolesTouched(true);
+      setShowRolesEditor(true);
+      setStatus('idle');
+    } catch (e: any) {
+      setStatus('error');
+      setError(e?.message ?? 'Failed to create override');
+    }
+  }
+
+  async function createActivityOverride() {
+    if (!tocBlockPlanId || !templateId || isDemo) return;
+    setStatus('saving');
+    setError(null);
+    try {
+      const supabase = getSupabaseClient();
+
+      const { data: tOpts, error: tOptErr } = await supabase
+        .from('class_activity_options')
+        .select('id,sort_order,title,description,details_text,toc_role_text')
+        .eq('template_id', templateId)
+        .order('sort_order', { ascending: true });
+      if (tOptErr) throw tOptErr;
+
+      // wipe existing
+      const { data: existingOpts, error: exErr } = await supabase
+        .from('toc_activity_options')
+        .select('id')
+        .eq('toc_block_plan_id', tocBlockPlanId);
+      if (exErr) throw exErr;
+      const ids = (existingOpts ?? []).map((r: any) => r.id);
+      if (ids.length) await supabase.from('toc_activity_option_steps').delete().in('toc_activity_option_id', ids);
+      await supabase.from('toc_activity_options').delete().eq('toc_block_plan_id', tocBlockPlanId);
+
+      if ((tOpts?.length ?? 0) > 0) {
+        const insRows = (tOpts ?? []).map((r: any) => ({
+          toc_block_plan_id: tocBlockPlanId,
+          sort_order: r.sort_order,
+          title: r.title,
+          description: r.description,
+          details_text: r.details_text,
+          toc_role_text: r.toc_role_text,
+          source_template_option_id: r.id,
+        }));
+
+        const { data: inserted, error: insErr } = await supabase
+          .from('toc_activity_options')
+          .insert(insRows)
+          .select('id,source_template_option_id');
+        if (insErr) throw insErr;
+
+        const idBySource = new Map<string, string>();
+        for (const r of inserted ?? []) {
+          if (r.source_template_option_id) idBySource.set(r.source_template_option_id, r.id);
+        }
+
+        const { data: tSteps, error: tStepsErr } = await supabase
+          .from('class_activity_option_steps')
+          .select('id,activity_option_id,sort_order,step_text')
+          .in(
+            'activity_option_id',
+            (tOpts ?? []).map((o: any) => o.id)
+          )
+          .order('sort_order', { ascending: true });
+        if (tStepsErr) throw tStepsErr;
+
+        const stepRows = (tSteps ?? [])
+          .map((s: any) => ({
+            toc_activity_option_id: idBySource.get(s.activity_option_id) ?? null,
+            sort_order: s.sort_order,
+            step_text: s.step_text,
+            source_template_option_step_id: s.id,
+          }))
+          .filter((r: any) => !!r.toc_activity_option_id);
+
+        if (stepRows.length) {
+          const { error } = await supabase.from('toc_activity_option_steps').insert(stepRows);
+          if (error) throw error;
+        }
+      }
+
+      await loadAll(supabase, tocBlockPlanId, templateId);
+      setActivityOverride(true);
+      setActivityTouched(true);
+      setShowActivityEditor(true);
+      setStatus('idle');
+    } catch (e: any) {
+      setStatus('error');
+      setError(e?.message ?? 'Failed to create override');
+    }
+  }
+
+  // Lesson Flow is always day-owned; no need for a "seed on first edit" helper.
+
+  async function saveAll(opts?: { reload?: boolean; silent?: boolean }) {
+    if (!tocBlockPlanId) return;
+    if (isDemo) return;
+
+    const reload = opts?.reload ?? true;
+    const silent = opts?.silent ?? false;
+
+    if (!silent) {
+      setStatus('saving');
+      setError(null);
+    }
+
+    // Refactor note: Lesson Flow inputs are now treated as the source of truth on save,
+    // so we no longer need blur/timing workarounds here.
+
+    try {
+      const supabase = getSupabaseClient();
+
+      // header
+      const { error: upErr } = await supabase
+        .from('toc_block_plans')
+        .update({
+          plan_mode: planMode,
+          override_note_to_toc: (() => {
+            const v = noteTOC.trim() ? noteTOC.trim() : null;
+            const base = templateNoteTOC.trim() ? templateNoteTOC.trim() : null;
+            if (v && base && v === base) return null;
+            return v;
+          })(),
+          override_assessment_touch_point: {
+            timing_in_lesson: touchTiming.trim(),
+            learning_standard_focus: touchStandard.trim(),
+            evidence_to_collect: touchEvidence.trim(),
+            differentiation_strategy: touchDiff.trim(),
+            cyclical_loop_type: touchCycle.trim(),
+          },
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', tocBlockPlanId);
+      if (upErr) throw upErr;
+
+      // Lesson flow: write into toc_block_plans.override_payload.lesson_flow_phases (atomic).
+      // We do this whenever the plan mode is lesson_flow so that /p never silently falls
+      // back to the template due to missing rows.
+      if (planMode === 'lesson_flow') {
+        // Source of truth: current input values (uncontrolled inputs + refs).
+        // This avoids browser timing issues with controlled textareas.
+        let effective: Phase[] = [];
+
+        const fromDom = (): Phase[] =>
+          phases.map((p, pIdx) => {
+            const r = phaseFieldRefs.current[p.client_id] ?? {};
+
+            const q = (field: string) => {
+              if (typeof document === 'undefined') return null;
+              // Prefer deterministic id-based lookup (most robust), then idx selector, then fallbacks.
+              const byId = document.getElementById(`lessonflow-${field}-${pIdx}`) as any;
+              if (byId && typeof byId.value !== 'undefined') return byId;
+
+              const byIdx = document.querySelector<HTMLInputElement | HTMLTextAreaElement>(
+                `[data-phase-idx="${pIdx}"][data-phase-field="${field}"]`
+              );
+              if (byIdx) return byIdx;
+
+              const all = Array.from(
+                document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(`[data-phase-field="${field}"]`)
+              );
+              const byList = all[pIdx] ?? null;
+              if (byList) return byList;
+
+              return document.querySelector<HTMLInputElement | HTMLTextAreaElement>(
+                `[data-phase-client-id="${p.client_id}"][data-phase-field="${field}"]`
+              );
+            };
+
+            const timeEl = q('time') ?? r.time;
+            const phaseEl = q('phase') ?? r.phase;
+            const actEl = q('activity') ?? r.activity;
+            const purpEl = q('purpose') ?? r.purpose;
+
+            return {
+              ...p,
+              time_text: (timeEl?.value ?? p.time_text ?? '').toString(),
+              phase_text: (phaseEl?.value ?? p.phase_text ?? '').toString(),
+              activity_text: (actEl?.value ?? p.activity_text ?? '').toString(),
+              purpose_text: (purpEl?.value ?? p.purpose_text ?? '').toString(),
+            };
+          });
+
+        if (phases.length) {
+          effective = fromDom();
+        } else if ((tplLessonFlow ?? []).length) {
+          effective = (tplLessonFlow ?? []).map((r: any) => ({
+            client_id: newClientId(),
+            time_text: String(r.time_text ?? ''),
+            phase_text: String(r.phase_text ?? ''),
+            activity_text: String(r.activity_text ?? ''),
+            purpose_text: String(r.purpose_text ?? ''),
+            source_template_phase_id: null,
+          }));
+        } else if (templateId) {
+          const { data: lfRes, error: lfErr } = await supabase
+            .from('class_lesson_flow_phases')
+            .select('sort_order,time_text,phase_text,activity_text,purpose_text')
+            .eq('template_id', templateId)
+            .order('sort_order', { ascending: true });
+          if (lfErr) throw lfErr;
+          effective = (lfRes ?? []).map((r: any) => ({
+            client_id: newClientId(),
+            time_text: String(r.time_text ?? ''),
+            phase_text: String(r.phase_text ?? ''),
+            activity_text: String(r.activity_text ?? ''),
+            purpose_text: String(r.purpose_text ?? ''),
+            source_template_phase_id: null,
+          }));
+        }
+
+        // DEBUG: show what we are about to persist (helps diagnose browser DOM-read issues)
+        try {
+          const core = (effective?.[1] as any)?.activity_text ?? '';
+          setSaveDebug(`LessonFlow[1].activity_text → ${String(core).slice(0, 120)}`);
+        } catch {
+          setSaveDebug(null);
+        }
+
+        const nextPayload = {
+          ...(overridePayload && typeof overridePayload === 'object' ? overridePayload : {}),
+          lesson_flow_phases: effective.map((p) => ({
+            time_text: p.time_text,
+            phase_text: p.phase_text,
+            activity_text: p.activity_text,
+            purpose_text: p.purpose_text ? p.purpose_text : null,
+          })),
+        };
+
+        const { data: saved, error } = await supabase
+          .from('toc_block_plans')
+          .update({ override_payload: nextPayload, updated_at: new Date().toISOString() })
+          .eq('id', tocBlockPlanId)
+          .select('override_payload')
+          .maybeSingle();
+        if (error) throw error;
+        const persisted = (saved as any)?.override_payload ?? null;
+        if (!persisted || !Array.isArray((persisted as any)?.lesson_flow_phases)) {
+          throw new Error('override_payload did not persist (missing lesson_flow_phases). Check RLS / deployment version.');
+        }
+
+        setOverridePayload(persisted);
+
+        // Legacy table cleanup (optional): keep empty so public RPC uses JSON override.
+        await supabase.from('toc_lesson_flow_phases').delete().eq('toc_block_plan_id', tocBlockPlanId);
+      }
+
+      // Persist publish_mode + advanced sections (JSON override payload)
+      const normalizeLines = (raw: string) =>
+        raw
+          .split('\n')
+          .map((l) => l.trim())
+          .filter(Boolean);
+
+      const nextAdvanced = {
+        central_theme: advCentralTheme.trim(),
+        deep_hope: advDeepHope.trim(),
+        big_idea: advBigIdea.trim(),
+        learning_target: advLearningTarget.trim(),
+        collaborative_structure: advCollaborativeStructure.trim(),
+        context: advContext.trim(),
+        materials_needed: normalizeLines(advMaterialsNeeded),
+        assessment_touch_points: normalizeLines(advAssessmentTouchPoints),
+        pd_goal_connections: normalizeLines(advPdGoalConnections),
+        first_peoples_principles: normalizeLines(advFirstPeoplesPrinciples),
+      };
+
+      const allBlankAdvanced =
+        !nextAdvanced.central_theme &&
+        !nextAdvanced.deep_hope &&
+        !nextAdvanced.big_idea &&
+        !nextAdvanced.learning_target &&
+        !nextAdvanced.collaborative_structure &&
+        !nextAdvanced.context &&
+        nextAdvanced.materials_needed.length === 0 &&
+        nextAdvanced.assessment_touch_points.length === 0 &&
+        nextAdvanced.pd_goal_connections.length === 0 &&
+        nextAdvanced.first_peoples_principles.length === 0;
+
+      const base = (overridePayload && typeof overridePayload === 'object' ? { ...(overridePayload as any) } : {}) as any;
+      const nextPayload2 = {
+        ...base,
+        publish_mode: publishMode,
+        ...(allBlankAdvanced && publishMode === 'toc' ? { advanced: undefined } : { advanced: nextAdvanced }),
+      };
+      if (allBlankAdvanced && publishMode === 'toc') {
+        // Remove key entirely so template advanced areas can shine through.
+        delete (nextPayload2 as any).advanced;
+      }
+
+      const { data: saved2, error: up2Err } = await supabase
+        .from('toc_block_plans')
+        .update({ override_payload: nextPayload2, updated_at: new Date().toISOString() })
+        .eq('id', tocBlockPlanId)
+        .select('override_payload')
+        .maybeSingle();
+      if (up2Err) throw up2Err;
+      setOverridePayload((saved2 as any)?.override_payload ?? nextPayload2);
+
+      // Opening routine overrides only if created
+      if (openingOverride) {
+        await supabase.from('toc_opening_routine_steps').delete().eq('toc_block_plan_id', tocBlockPlanId);
+        if (openingSteps.length > 0) {
+          const rows = openingSteps.map((s, i) => ({
+            toc_block_plan_id: tocBlockPlanId,
+            sort_order: i + 1,
+            step_text: s.step_text,
+            source_template_step_id: s.source_template_step_id,
+          }));
+          const { error } = await supabase.from('toc_opening_routine_steps').insert(rows);
+          if (error) throw error;
+        }
+      }
+
+      // What-if overrides only if created
+      if (whatIfOverride) {
+        await supabase.from('toc_what_to_do_if_items').delete().eq('toc_block_plan_id', tocBlockPlanId);
+        if (whatIfItems.length > 0) {
+          const rows = whatIfItems.map((w, i) => ({
+            toc_block_plan_id: tocBlockPlanId,
+            sort_order: i + 1,
+            scenario_text: w.scenario_text,
+            response_text: w.response_text,
+            source_template_item_id: w.source_template_item_id,
+          }));
+          const { error } = await supabase.from('toc_what_to_do_if_items').insert(rows);
+          if (error) throw error;
+        }
+      }
+
+      // Roles overrides only if created
+      if (rolesOverride) {
+        await supabase.from('toc_role_rows').delete().eq('toc_block_plan_id', tocBlockPlanId);
+        if (roles.length > 0) {
+          const rows = roles.map((r, i) => ({
+            toc_block_plan_id: tocBlockPlanId,
+            sort_order: i + 1,
+            who: r.who,
+            responsibility: r.responsibility,
+          }));
+          const { error } = await supabase.from('toc_role_rows').insert(rows);
+          if (error) throw error;
+        }
+      }
+
+      // Activity options overrides only if created
+      if (activityOverride) {
+        // Delete steps first, then options
+        const { data: existingOpts, error: loadOptErr } = await supabase
+          .from('toc_activity_options')
+          .select('id')
+          .eq('toc_block_plan_id', tocBlockPlanId);
+        if (loadOptErr) throw loadOptErr;
+        const optIds = (existingOpts ?? []).map((r: any) => r.id);
+        if (optIds.length) {
+          const { error } = await supabase.from('toc_activity_option_steps').delete().in('toc_activity_option_id', optIds);
+          if (error) throw error;
+        }
+        await supabase.from('toc_activity_options').delete().eq('toc_block_plan_id', tocBlockPlanId);
+
+        if (activityOptions.length > 0) {
+          const optRows = activityOptions.map((o, i) => ({
+            toc_block_plan_id: tocBlockPlanId,
+            sort_order: i + 1,
+            title: o.title,
+            description: o.description,
+            details_text: o.details_text,
+            toc_role_text: o.toc_role_text || null,
+            source_template_option_id: o.source_template_option_id,
+          }));
+
+          const { data: insertedOpts, error: insOptErr } = await supabase
+            .from('toc_activity_options')
+            .insert(optRows)
+            .select('id,sort_order');
+          if (insOptErr) throw insOptErr;
+
+          const bySort = new Map<number, string>();
+          for (const r of insertedOpts ?? []) bySort.set(r.sort_order, r.id);
+
+          const stepRows: any[] = [];
+          for (let i = 0; i < activityOptions.length; i++) {
+            const opt = activityOptions[i]!;
+            const newOptId = bySort.get(i + 1);
+            if (!newOptId) continue;
+            for (let j = 0; j < (opt.steps ?? []).length; j++) {
+              const st = opt.steps[j]!;
+              stepRows.push({
+                toc_activity_option_id: newOptId,
+                sort_order: j + 1,
+                step_text: st.step_text,
+                source_template_option_step_id: st.source_template_option_step_id,
+              });
+            }
+          }
+          if (stepRows.length > 0) {
+            const { error: insStepsErr } = await supabase.from('toc_activity_option_steps').insert(stepRows);
+            if (insStepsErr) throw insStepsErr;
+          }
+        }
+      }
+
+      // Materialize the live render into toc_block_plans.public_payload for /p.
+      // Do NOT swallow errors here; if this fails then /p will appear blank.
+      {
+        const { error: pubErr } = await supabase.rpc('resolve_toc_block_plan_public_payload', { p_toc_block_plan_id: tocBlockPlanId });
+        if (pubErr) throw pubErr;
+      }
+
+      // Reload state (optional)
+      if (reload) await loadAll(supabase, tocBlockPlanId, templateId);
+      setUnsaved(false);
+      if (!silent) setStatus('idle');
+    } catch (e: any) {
+      if (!silent) {
+        setStatus('error');
+        setError(e?.message ?? 'Failed to save');
+      }
+      throw e;
     }
   }
 
@@ -480,71 +1310,600 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
     <section style={styles.wrap}>
       <div style={styles.topRow}>
         <div>
-          <div style={{ fontWeight: 900 }}>TOC Plan (instance)</div>
+          <div style={{ fontWeight: 900 }}>TOC Plan (dayplan)</div>
           <div style={{ fontSize: 12, opacity: 0.8 }}>
-            Mode: <b>{modeLabel}</b> {templateId ? '• copied from active template' : '• no template found'}
+            Mode: <b>{modeLabel}</b> {templateId ? '• template-driven' : '• no template'}
           </div>
         </div>
 
-        <button onClick={saveAll} disabled={isDemo || status === 'saving'} style={styles.primaryBtn}>
-          {isDemo ? 'Demo' : status === 'saving' ? 'Saving…' : 'Save TOC plan'}
-        </button>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {unsaved ? <div style={styles.unsavedPill}>Unsaved changes</div> : null}
+          <div style={{ fontSize: 12, opacity: 0.85 }}>
+            {status === 'saving' ? 'Saving…' : status === 'error' ? 'Not saved' : unsaved ? 'Unsaved changes (use Save all)' : 'Saved'}
+          </div>
+          {saveDebug ? (
+            <div style={{ fontSize: 11, opacity: 0.75, maxWidth: 420 }} title={saveDebug}>
+              {saveDebug}
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      <div style={styles.templateHint}>
+        <div style={{ fontWeight: 900, color: '#1F4E79' }}>Most content comes from the Class Template.</div>
+        <div style={{ fontSize: 12, opacity: 0.85 }}>Change defaults once in the template. Day overrides are optional.</div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <a href={`/admin/courses/${classId}/toc-template`} style={styles.templateLink}>
+            Edit class template →
+          </a>
+          <button
+            type="button"
+            style={styles.secondaryBtn}
+            disabled={isDemo}
+            onClick={() => {
+              setSnippetOpen(true);
+              if (snippets.length === 0 && snippetStatus !== 'loading') void loadSnippets();
+            }}
+          >
+            Insert from Library…
+          </button>
+        </div>
       </div>
 
       {error ? <div style={styles.errorBox}>{error}</div> : null}
 
+      {snippetOpen ? (
+        <div style={styles.snippetBackdrop} onClick={(e) => {
+          if (e.target === e.currentTarget) setSnippetOpen(false);
+        }}>
+          <div style={styles.snippetModal}>
+            <div style={styles.snippetHeader}>
+              <div>
+                <div style={{ fontWeight: 900, color: RCS.deepNavy }}>Snippet Library</div>
+                <div style={{ fontSize: 12, opacity: 0.85 }}>Insert structured routines into this day override.</div>
+              </div>
+              <button type="button" style={styles.secondaryBtn} onClick={() => setSnippetOpen(false)}>
+                Close
+              </button>
+            </div>
+
+            {snippetStatus === 'loading' ? <div style={{ opacity: 0.8 }}>Loading…</div> : null}
+            {snippetStatus === 'error' && snippetError ? <div style={styles.errorBox}>{snippetError}</div> : null}
+
+            <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
+              {snippets.length ? (
+                snippets.map((s) => (
+                  <div key={s.id} style={styles.snippetRow}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 900 }}>{s.title}</div>
+                      {s.description ? <div style={{ fontSize: 12, opacity: 0.85 }}>{s.description}</div> : null}
+                      {Array.isArray(s.tags) && s.tags.length ? (
+                        <div style={{ marginTop: 6, fontSize: 12, opacity: 0.85 }}>
+                          {s.tags.map((t) => `#${t}`).join(' ')}
+                        </div>
+                      ) : null}
+                    </div>
+                    <button type="button" style={styles.primaryBtn} onClick={() => void applySnippet(s)} disabled={isDemo || status === 'saving'}>
+                      Insert
+                    </button>
+                  </div>
+                ))
+              ) : (
+                <div style={{ opacity: 0.8 }}>No snippets found. (Run supabase/schema_toc_snippets.sql)</div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <div style={styles.grid2}>
         <label style={styles.field}>
           <span style={styles.label}>Plan Mode</span>
-          <select value={planMode} onChange={(e) => setPlanMode(e.target.value as any)} style={styles.input} disabled={isDemo}>
+          <select value={planMode} onChange={(e) => { setPlanMode(e.target.value as any); markUnsaved(); }} style={styles.input} disabled={isDemo}>
             <option value="lesson_flow">Lesson Flow</option>
             <option value="activity_options">Activity Options</option>
           </select>
         </label>
 
-        <label style={styles.field}>
-          <span style={styles.label}>Phone Policy</span>
-          <select value={phonePolicy} onChange={(e) => setPhonePolicy(e.target.value)} style={styles.input} disabled={isDemo}>
-            <option value="Not permitted">Not permitted</option>
-            <option value="Allowed in back">Allowed in back</option>
-            <option value="Allowed with permission">Allowed with permission</option>
-          </select>
-        </label>
-
         <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
-          <span style={styles.label}>Teacher Name (override)</span>
-          <input value={teacherName} onChange={(e) => setTeacherName(e.target.value)} style={styles.input} disabled={isDemo} />
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={styles.label}>Note to TOC (blank = use template)</span>
+            <button
+              type="button"
+              disabled={isDemo || aiNoteLoading}
+              onClick={async () => {
+                setAiNoteOpen(true);
+                setAiNoteLoading(true);
+                setAiNoteError(null);
+                setAiNoteSuggestion('');
+                try {
+                  const res = await fetch('/api/ai/suggest', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      section: 'note_to_toc_rewrite',
+                      input: {
+                        current_note_to_toc: noteTOC.trim() || templateNoteTOC || '',
+                        class_name: '',
+                        plan_date: '',
+                        slot: '',
+                        audience: 'toc',
+                      },
+                    }),
+                  });
+                  const j = await res.json();
+                  if (!res.ok) throw new Error(j?.error ?? 'AI suggest failed');
+                  setAiNoteSuggestion(String(j?.suggestion?.note_to_toc ?? ''));
+                } catch (e: any) {
+                  setAiNoteError(e?.message ?? 'AI suggest failed');
+                } finally {
+                  setAiNoteLoading(false);
+                }
+              }}
+              style={styles.secondaryBtn}
+            >
+              {aiNoteLoading ? 'Suggesting…' : 'AI: Rewrite'}
+            </button>
+          </div>
+
+          <textarea
+            value={noteTOC}
+            placeholder={templateNoteTOC || ''}
+            onChange={(e) => { setNoteTOC(e.target.value); markUnsaved(); }}
+            rows={3}
+            style={styles.textarea}
+            disabled={isDemo}
+          />
+
+          {aiNoteOpen ? (
+            <div style={{ marginTop: 10, border: `1px solid ${RCS.gold}`, borderRadius: 12, padding: 10, background: '#fffdf2' }}>
+              <div style={{ fontWeight: 900, marginBottom: 6 }}>AI suggestion (preview)</div>
+              {aiNoteError ? <div style={{ color: '#B00020', fontWeight: 700, fontSize: 12 }}>{aiNoteError}</div> : null}
+              {!aiNoteError && !aiNoteSuggestion && aiNoteLoading ? <div style={{ fontSize: 12, opacity: 0.8 }}>Working…</div> : null}
+              {aiNoteSuggestion ? (
+                <div style={{ whiteSpace: 'pre-wrap', fontSize: 12, marginTop: 6 }}>{aiNoteSuggestion}</div>
+              ) : null}
+
+              <div style={{ display: 'flex', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  disabled={!aiNoteSuggestion}
+                  onClick={() => {
+                    setNoteTOC(aiNoteSuggestion);
+                    markUnsaved();
+                    setAiNoteOpen(false);
+                  }}
+                  style={styles.primaryBtn}
+                >
+                  Apply
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAiNoteOpen(false)}
+                  style={styles.secondaryBtn}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          ) : null}
         </label>
 
-        <label style={styles.field}>
-          <span style={styles.label}>TA Name (override)</span>
-          <input value={taName} onChange={(e) => setTaName(e.target.value)} style={styles.input} disabled={isDemo} />
-        </label>
+        <div style={{ gridColumn: '1 / -1', ...styles.touchCard }}>
+          <div style={{ ...styles.sectionHeader, marginBottom: 8 }}>Standards-Based Assessment Touch Point</div>
+          <div style={{ fontSize: 12, opacity: 0.85, marginBottom: 10 }}>
+            A quick check-in embedded in your lesson (evidence + differentiation). Saved as a day override.
+          </div>
 
-        <label style={styles.field}>
-          <span style={styles.label}>TA Role (override)</span>
-          <input value={taRole} onChange={(e) => setTaRole(e.target.value)} style={styles.input} disabled={isDemo} />
-        </label>
+          <div style={styles.grid2}>
+            <label style={styles.field}>
+              <span style={styles.label}>Timing in lesson</span>
+              <input value={touchTiming} onChange={(e) => { setTouchTiming(e.target.value); markUnsaved(); }} style={styles.input} placeholder="e.g., 15 minutes into flow" />
+            </label>
+            <label style={styles.field}>
+              <span style={styles.label}>Cyclical loop type</span>
+              <input value={touchCycle} onChange={(e) => { setTouchCycle(e.target.value); markUnsaved(); }} style={styles.input} placeholder="design / rehearsal / refinement" />
+            </label>
+            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+              <span style={styles.label}>Learning Standard focus (reference)</span>
+              <input value={touchStandard} onChange={(e) => { setTouchStandard(e.target.value); markUnsaved(); }} style={styles.input} placeholder="e.g., ADST > Define and Ideate" />
+            </label>
+            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+              <span style={styles.label}>Evidence to collect</span>
+              <input value={touchEvidence} onChange={(e) => { setTouchEvidence(e.target.value); markUnsaved(); }} style={styles.input} placeholder="e.g., verbal articulation of…" />
+            </label>
+            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+              <span style={styles.label}>Differentiation strategy (UDL / IEP)</span>
+              <input value={touchDiff} onChange={(e) => { setTouchDiff(e.target.value); markUnsaved(); }} style={styles.input} placeholder="e.g., chunking, sentence starters, extended time…" />
+            </label>
+          </div>
 
-        <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
-          <span style={styles.label}>Note to TOC (override)</span>
-          <textarea value={noteTOC} onChange={(e) => setNoteTOC(e.target.value)} rows={3} style={styles.textarea} disabled={isDemo} />
-        </label>
+          {templateTouchPoint ? (
+            <div style={{ marginTop: 10, fontSize: 12, opacity: 0.8 }}>
+              Template baseline: {String((templateTouchPoint as any)?.timing_in_lesson ?? '').trim() ? 'set' : '—'}
+            </div>
+          ) : null}
+        </div>
+
+        <div style={{ gridColumn: '1 / -1', ...styles.touchCard }}>
+          <div style={{ ...styles.sectionHeader, marginBottom: 8, display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+            <div>Publishing Mode</div>
+            <div
+              role="switch"
+              aria-checked={publishMode === 'advanced'}
+              tabIndex={0}
+              onClick={() => { if (!isDemo) { setPublishMode(publishMode === 'advanced' ? 'toc' : 'advanced'); markUnsaved(); } }}
+              onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); if (!isDemo) { setPublishMode(publishMode === 'advanced' ? 'toc' : 'advanced'); markUnsaved(); } } }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 10,
+                cursor: isDemo ? 'default' : 'pointer',
+                userSelect: 'none',
+                fontSize: 12,
+              }}
+            >
+              <span style={{ opacity: publishMode === 'toc' ? 1 : 0.5, fontWeight: publishMode === 'toc' ? 800 : 400 }}>Standard (TOC)</span>
+              <div style={{
+                width: 44,
+                height: 24,
+                borderRadius: 12,
+                background: publishMode === 'advanced' ? RCS.deepNavy : '#ccc',
+                position: 'relative',
+                transition: 'background 0.2s',
+                flexShrink: 0,
+              }}>
+                <div style={{
+                  width: 20,
+                  height: 20,
+                  borderRadius: 10,
+                  background: '#fff',
+                  position: 'absolute',
+                  top: 2,
+                  left: publishMode === 'advanced' ? 22 : 2,
+                  transition: 'left 0.2s',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+                }} />
+              </div>
+              <span style={{ opacity: publishMode === 'advanced' ? 1 : 0.5, fontWeight: publishMode === 'advanced' ? 800 : 400 }}>Advanced (Everything)</span>
+            </div>
+          </div>
+          <div style={{ fontSize: 12, opacity: 0.85 }}>
+            Standard mode publishes core TOC sections + Materials Needed. Advanced mode publishes everything (blank sections are hidden).
+          </div>
+        </div>
+
+        <div style={{ gridColumn: '1 / -1', ...styles.touchCard }}>
+          <div style={{ ...styles.sectionHeader, marginBottom: 8 }}>Advanced Sections (editable; published only in Advanced mode)</div>
+
+          <div style={styles.grid2}>
+            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+              <span style={styles.label}>Materials Needed (one per line) — <em>included in Standard + Advanced</em></span>
+              <textarea value={advMaterialsNeeded} onChange={(e) => { setAdvMaterialsNeeded(e.target.value); markUnsaved(); }} rows={5} style={styles.textarea} disabled={isDemo} />
+            </label>
+
+            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+              <span style={styles.label}>Central Theme</span>
+              <textarea value={advCentralTheme} onChange={(e) => { setAdvCentralTheme(e.target.value); markUnsaved(); }} rows={2} style={styles.textarea} disabled={isDemo} />
+            </label>
+            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+              <span style={styles.label}>Deep Hope</span>
+              <textarea value={advDeepHope} onChange={(e) => { setAdvDeepHope(e.target.value); markUnsaved(); }} rows={2} style={styles.textarea} disabled={isDemo} />
+            </label>
+            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+              <span style={styles.label}>Big Idea</span>
+              <textarea value={advBigIdea} onChange={(e) => { setAdvBigIdea(e.target.value); markUnsaved(); }} rows={2} style={styles.textarea} disabled={isDemo} />
+            </label>
+            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+              <span style={styles.label}>Learning Target</span>
+              <textarea value={advLearningTarget} onChange={(e) => { setAdvLearningTarget(e.target.value); markUnsaved(); }} rows={2} style={styles.textarea} disabled={isDemo} />
+            </label>
+            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+              <span style={styles.label}>Collaborative Structure</span>
+              <textarea value={advCollaborativeStructure} onChange={(e) => { setAdvCollaborativeStructure(e.target.value); markUnsaved(); }} rows={2} style={styles.textarea} disabled={isDemo} />
+            </label>
+            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+              <span style={styles.label}>Context</span>
+              <textarea value={advContext} onChange={(e) => { setAdvContext(e.target.value); markUnsaved(); }} rows={3} style={styles.textarea} disabled={isDemo} />
+            </label>
+
+            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+              <span style={styles.label}>Assessment Touch Points (one per line)</span>
+              <textarea value={advAssessmentTouchPoints} onChange={(e) => { setAdvAssessmentTouchPoints(e.target.value); markUnsaved(); }} rows={5} style={styles.textarea} disabled={isDemo} />
+            </label>
+
+            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+              <span style={styles.label}>PD Goal Connections (one per line)</span>
+              <textarea value={advPdGoalConnections} onChange={(e) => { setAdvPdGoalConnections(e.target.value); markUnsaved(); }} rows={5} style={styles.textarea} disabled={isDemo} />
+            </label>
+
+            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+              <span style={styles.label}>First Peoples Principles of Learning (one per line)</span>
+              <textarea value={advFirstPeoplesPrinciples} onChange={(e) => { setAdvFirstPeoplesPrinciples(e.target.value); markUnsaved(); }} rows={5} style={styles.textarea} disabled={isDemo} />
+            </label>
+          </div>
+        </div>
       </div>
 
+      {/* Lesson flow: template-first; first edit creates a day override */}
       <div style={styles.section}>
-        <div style={styles.sectionHeader}>Opening Routine</div>
+        <div style={{ ...styles.sectionHeader, display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <div>Lesson Flow {lessonOverride ? '(overridden for this day)' : '(using template)'}</div>
+
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              disabled={isDemo || aiFlowLoading}
+              onClick={async () => {
+                setAiFlowOpen(true);
+                setAiFlowLoading(true);
+                setAiFlowError(null);
+                setAiFlowSuggestion(null);
+
+                try {
+                  // Build a snapshot of current phase values (prefer DOM values).
+                  const current = phases.map((p, pIdx) => {
+                    const q = (field: string) => {
+                      if (typeof document === 'undefined') return null;
+                      return document.querySelector<HTMLInputElement | HTMLTextAreaElement>(
+                        `[data-phase-idx="${pIdx}"][data-phase-field="${field}"]`
+                      );
+                    };
+                    const timeEl = q('time');
+                    const phaseEl = q('phase');
+                    const actEl = q('activity');
+                    const purpEl = q('purpose');
+                    return {
+                      time_text: String(timeEl?.value ?? p.time_text ?? ''),
+                      phase_text: String(phaseEl?.value ?? p.phase_text ?? ''),
+                      activity_text: String(actEl?.value ?? p.activity_text ?? ''),
+                      purpose_text: String(purpEl?.value ?? p.purpose_text ?? ''),
+                    };
+                  });
+
+                  const res = await fetch('/api/ai/suggest', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      section: 'lesson_flow_phases',
+                      input: {
+                        class_name: '',
+                        plan_date: '',
+                        slot: '',
+                        current_phases: current,
+                      },
+                    }),
+                  });
+                  const j = await res.json();
+                  if (!res.ok) throw new Error(j?.error ?? 'AI suggest failed');
+                  setAiFlowSuggestion((j?.suggestion?.lesson_flow_phases ?? null) as any);
+                } catch (e: any) {
+                  setAiFlowError(e?.message ?? 'AI suggest failed');
+                } finally {
+                  setAiFlowLoading(false);
+                }
+              }}
+              style={styles.secondaryBtn}
+            >
+              {aiFlowLoading ? 'Suggesting…' : 'AI: Suggest flow'}
+            </button>
+
+            {lessonOverride ? (
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!tocBlockPlanId) return;
+                  if (isDemo) return;
+                  const ok = window.confirm('Revert lesson flow to the class template? This will delete day-specific overrides.');
+                  if (!ok) return;
+                  try {
+                    setStatus('saving');
+                    const supabase = getSupabaseClient();
+                    await supabase.from('toc_lesson_flow_phases').delete().eq('toc_block_plan_id', tocBlockPlanId);
+
+                    const nextPayload = (() => {
+                      const base = overridePayload && typeof overridePayload === 'object' ? { ...overridePayload } : {};
+                      delete (base as any).lesson_flow_phases;
+                      return Object.keys(base).length ? base : null;
+                    })();
+
+                    const { error: clrErr } = await supabase
+                      .from('toc_block_plans')
+                      .update({ override_payload: nextPayload, updated_at: new Date().toISOString() })
+                      .eq('id', tocBlockPlanId);
+                    if (clrErr) throw clrErr;
+
+                    setOverridePayload(nextPayload);
+                    setLessonOverride(false);
+                    setLessonTouched(false);
+                    setPhases([]);
+                    await loadAll(supabase, tocBlockPlanId, templateId);
+                    setStatus('idle');
+                  } catch (e: any) {
+                    setStatus('error');
+                    setError(e?.message ?? 'Failed to revert');
+                  }
+                }}
+                style={styles.secondaryBtn}
+                disabled={isDemo || status === 'saving'}
+              >
+                Revert to template
+              </button>
+            ) : null}
+          </div>
+        </div>
+
+        {aiFlowOpen ? (
+          <div style={{ marginTop: 10, border: `1px solid ${RCS.gold}`, borderRadius: 12, padding: 10, background: '#fffdf2' }}>
+            <div style={{ fontWeight: 900, marginBottom: 6 }}>AI lesson flow (preview)</div>
+            {aiFlowError ? <div style={{ color: '#B00020', fontWeight: 700, fontSize: 12 }}>{aiFlowError}</div> : null}
+            {!aiFlowError && !aiFlowSuggestion && aiFlowLoading ? <div style={{ fontSize: 12, opacity: 0.8 }}>Working…</div> : null}
+            {aiFlowSuggestion ? (
+              <div style={{ display: 'grid', gap: 6, fontSize: 12 }}>
+                {aiFlowSuggestion.map((p, idx) => (
+                  <div key={idx} style={{ borderTop: idx ? '1px solid rgba(0,0,0,0.08)' : 'none', paddingTop: idx ? 6 : 0 }}>
+                    <b>{p.time_text || `Phase ${idx + 1}`}</b> — {p.phase_text}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                disabled={!aiFlowSuggestion}
+                onClick={() => {
+                  const sug = aiFlowSuggestion ?? [];
+                  setPhases(
+                    sug.map((p: any) => ({
+                      client_id: newClientId(),
+                      time_text: String(p.time_text ?? ''),
+                      phase_text: String(p.phase_text ?? ''),
+                      activity_text: String(p.activity_text ?? ''),
+                      purpose_text: String(p.purpose_text ?? ''),
+                      source_template_phase_id: null,
+                    }))
+                  );
+                  setLessonOverride(true);
+                  setLessonTouched(true);
+                  markUnsaved();
+                  setAiFlowOpen(false);
+                }}
+                style={styles.primaryBtn}
+              >
+                Apply
+              </button>
+              <button type="button" onClick={() => setAiFlowOpen(false)} style={styles.secondaryBtn}>
+                Close
+              </button>
+            </div>
+          </div>
+        ) : null}
+
         <div style={{ display: 'grid', gap: 8 }}>
-          {openingSteps.map((s, idx) => (
-            <div key={idx} style={styles.row3}>
+          {phases.map((p: Phase, idx: number) => (
+            <div
+              key={p.client_id}
+              style={{
+                ...styles.phaseRow,
+                opacity: dragPhaseIdx === idx ? 0.6 : 1,
+                borderStyle: dragPhaseIdx !== null && dragPhaseIdx !== idx ? 'dashed' : (styles.phaseRow as any).borderStyle,
+              }}
+              draggable={!isDemo && lessonOverride}
+              onDragStart={() => {
+                if (isDemo) return;
+                if (!lessonOverride) return;
+                setDragPhaseIdx(idx);
+              }}
+              onDragEnd={() => setDragPhaseIdx(null)}
+              onDragOver={(e) => {
+                if (isDemo) return;
+                if (!lessonOverride) return;
+                e.preventDefault();
+              }}
+              onDrop={() => {
+                if (isDemo) return;
+                if (!lessonOverride) return;
+                if (dragPhaseIdx === null || dragPhaseIdx === idx) return;
+                setPhases((prev) => {
+                  const copy = [...prev];
+                  const [moved] = copy.splice(dragPhaseIdx, 1);
+                  copy.splice(idx, 0, moved);
+                  return copy;
+                });
+                setDragPhaseIdx(null);
+              }}
+            >
+              <div style={styles.dragHandle} title={lessonOverride ? 'Drag to reorder' : 'Template row'}>
+                ⋮⋮
+              </div>
               <input
-                value={s.step_text}
-                onChange={(e) => setOpeningSteps((prev) => prev.map((x, i) => (i === idx ? { ...x, step_text: e.target.value } : x)))}
+                id={`lessonflow-time-${idx}`}
+                name={`lessonflow-time-${idx}`}
+                data-phase-idx={idx}
+                data-phase-client-id={p.client_id}
+                data-phase-field="time"
+                defaultValue={String(p.time_text ?? '')}
+                ref={(el) => {
+                  const rec = phaseFieldRefs.current[p.client_id] ?? {};
+                  rec.time = el;
+                  phaseFieldRefs.current[p.client_id] = rec;
+                }}
+                onChange={() => {
+                  setLessonTouched(true);
+                  markUnsaved();
+                }}
                 style={styles.input}
                 disabled={isDemo}
+                placeholder="Time"
+              />
+              <input
+                id={`lessonflow-phase-${idx}`}
+                name={`lessonflow-phase-${idx}`}
+                data-phase-idx={idx}
+                data-phase-client-id={p.client_id}
+                data-phase-field="phase"
+                defaultValue={String(p.phase_text ?? '')}
+                ref={(el) => {
+                  const rec = phaseFieldRefs.current[p.client_id] ?? {};
+                  rec.phase = el;
+                  phaseFieldRefs.current[p.client_id] = rec;
+                }}
+                onChange={() => {
+                  setLessonTouched(true);
+                  markUnsaved();
+                }}
+                style={styles.input}
+                disabled={isDemo}
+                placeholder="Phase"
+              />
+              <textarea
+                id={`lessonflow-activity-${idx}`}
+                name={`lessonflow-activity-${idx}`}
+                data-phase-idx={idx}
+                data-phase-client-id={p.client_id}
+                data-phase-field="activity"
+                defaultValue={String(p.activity_text ?? '')}
+                ref={(el) => {
+                  const rec = phaseFieldRefs.current[p.client_id] ?? {};
+                  rec.activity = el;
+                  phaseFieldRefs.current[p.client_id] = rec;
+                }}
+                onChange={() => {
+                  setLessonTouched(true);
+                  markUnsaved();
+                }}
+                style={{ ...styles.textarea, resize: 'vertical' }}
+                disabled={isDemo}
+                placeholder="Activity"
+                rows={2}
+              />
+              <input
+                id={`lessonflow-purpose-${idx}`}
+                name={`lessonflow-purpose-${idx}`}
+                data-phase-idx={idx}
+                data-phase-client-id={p.client_id}
+                data-phase-field="purpose"
+                defaultValue={String(p.purpose_text ?? '')}
+                ref={(el) => {
+                  const rec = phaseFieldRefs.current[p.client_id] ?? {};
+                  rec.purpose = el;
+                  phaseFieldRefs.current[p.client_id] = rec;
+                }}
+                onChange={() => {
+                  setLessonTouched(true);
+                  markUnsaved();
+                }}
+                style={styles.input}
+                disabled={isDemo}
+                placeholder="Purpose (optional)"
               />
               <button
-                onClick={() => setOpeningSteps((prev) => prev.filter((_, i) => i !== idx))}
+                onClick={() => {
+                  setLessonTouched(true);
+                  markUnsaved();
+                  setPhases((prev) => prev.filter((_, i) => i !== idx));
+                }}
                 style={styles.dangerBtn}
                 disabled={isDemo}
               >
@@ -552,193 +1911,326 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
               </button>
             </div>
           ))}
-          <button onClick={() => setOpeningSteps((p) => [...p, { step_text: '', source_template_step_id: null }])} style={styles.secondaryBtn} disabled={isDemo}>
-            + Add step
+
+          <button
+            onClick={() => {
+              setLessonTouched(true);
+              markUnsaved();
+              setPhases((prev) => [
+                ...prev,
+                { client_id: newClientId(), time_text: '', phase_text: '', activity_text: '', purpose_text: '', source_template_phase_id: null },
+              ]);
+            }}
+            style={styles.secondaryBtn}
+            disabled={isDemo}
+          >
+            + Add phase
           </button>
+
+          {!lessonOverride && tplLessonFlow.length === 0 ? (
+            <div style={{ fontSize: 12, opacity: 0.8 }}>No lesson flow rows in template.</div>
+          ) : null}
         </div>
       </div>
 
-      {planMode === 'lesson_flow' ? (
-        <div style={styles.section}>
-          <div style={styles.sectionHeader}>Lesson Flow</div>
-          <div style={{ display: 'grid', gap: 8 }}>
-            {phases.map((p, idx) => (
-              <div
-                key={idx}
-                style={{
-                  ...styles.phaseRow,
-                  opacity: dragPhaseIdx === idx ? 0.6 : 1,
-                  borderStyle: dragPhaseIdx !== null && dragPhaseIdx !== idx ? 'dashed' : (styles.phaseRow as any).borderStyle,
-                }}
-                draggable={!isDemo}
-                onDragStart={() => {
-                  if (isDemo) return;
-                  setDragPhaseIdx(idx);
-                }}
-                onDragEnd={() => setDragPhaseIdx(null)}
-                onDragOver={(e) => {
-                  if (isDemo) return;
-                  e.preventDefault();
-                }}
-                onDrop={() => {
-                  if (isDemo) return;
-                  if (dragPhaseIdx === null || dragPhaseIdx === idx) return;
-                  setPhases((prev) => {
-                    const copy = [...prev];
-                    const [moved] = copy.splice(dragPhaseIdx, 1);
-                    copy.splice(idx, 0, moved);
-                    return copy;
-                  });
-                  setDragPhaseIdx(null);
-                }}
-              >
-                <div style={styles.dragHandle} title="Drag to reorder">⋮⋮</div>
-                <input value={p.time_text} onChange={(e) => setPhases((prev) => prev.map((x, i) => (i === idx ? { ...x, time_text: e.target.value } : x)))} style={styles.input} disabled={isDemo} placeholder="Time" />
-                <input value={p.phase_text} onChange={(e) => setPhases((prev) => prev.map((x, i) => (i === idx ? { ...x, phase_text: e.target.value } : x)))} style={styles.input} disabled={isDemo} placeholder="Phase" />
-                <input value={p.activity_text} onChange={(e) => setPhases((prev) => prev.map((x, i) => (i === idx ? { ...x, activity_text: e.target.value } : x)))} style={styles.input} disabled={isDemo} placeholder="Activity" />
-                <input value={p.purpose_text} onChange={(e) => setPhases((prev) => prev.map((x, i) => (i === idx ? { ...x, purpose_text: e.target.value } : x)))} style={styles.input} disabled={isDemo} placeholder="Purpose (optional)" />
-                <button onClick={() => setPhases((prev) => prev.filter((_, i) => i !== idx))} style={styles.dangerBtn} disabled={isDemo}>
+      {/* Opening routine: template preview unless override */}
+      <div style={styles.previewCard}>
+        <div style={styles.previewHeader}>
+          <div style={{ fontWeight: 900 }}>Opening Routine</div>
+          {!openingOverride ? (
+            <button onClick={createOpeningOverride} style={styles.secondaryBtn} disabled={isDemo || status === 'saving'}>
+              Create Day Override
+            </button>
+          ) : (
+            <button
+              onClick={() => {
+                setOpeningTouched(true);
+                setShowOpeningEditor((x) => !x);
+              }}
+              style={styles.secondaryBtn}
+              disabled={isDemo}
+            >
+              {showOpeningEditor ? 'Hide editor' : 'Edit override'}
+            </button>
+          )}
+        </div>
+
+        {!openingOverride ? (
+          <ol style={{ margin: 0, paddingLeft: 18 }}>
+            {(tplOpeningSteps.length ? tplOpeningSteps : [{ step_text: '—' }]).map((s, i) => (
+              <li key={i} style={{ marginBottom: 4, opacity: s.step_text === '—' ? 0.6 : 1 }}>
+                {s.step_text}
+              </li>
+            ))}
+          </ol>
+        ) : showOpeningEditor ? (
+          <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
+            {openingSteps.map((s, idx) => (
+              <div key={idx} style={styles.row3}>
+                <input
+                  value={s.step_text}
+                  onChange={(e) => setOpeningSteps((prev) => prev.map((x, i) => (i === idx ? { ...x, step_text: e.target.value } : x)))}
+                  style={styles.input}
+                  disabled={isDemo}
+                />
+                <button onClick={() => setOpeningSteps((prev) => prev.filter((_, i) => i !== idx))} style={styles.dangerBtn} disabled={isDemo}>
                   Remove
                 </button>
               </div>
             ))}
+            <button onClick={() => setOpeningSteps((p) => [...p, { step_text: '', source_template_step_id: null }])} style={styles.secondaryBtn} disabled={isDemo}>
+              + Add step
+            </button>
+          </div>
+        ) : (
+          <div style={{ fontSize: 12, opacity: 0.8 }}>Override exists. Click “Edit override” to change it.</div>
+        )}
+      </div>
+
+      {/* Division of Roles: template preview unless override */}
+      <div style={styles.previewCard}>
+        <div style={styles.previewHeader}>
+          <div style={{ fontWeight: 900 }}>Division of Roles</div>
+          {!rolesOverride ? (
+            <button onClick={createRolesOverride} style={styles.secondaryBtn} disabled={isDemo || status === 'saving'}>
+              Create Day Override
+            </button>
+          ) : (
             <button
-              onClick={() =>
-                setPhases((p) => [
-                  ...p,
-                  { time_text: '', phase_text: '', activity_text: '', purpose_text: '', source_template_phase_id: null },
-                ])
-              }
+              onClick={() => {
+                setRolesTouched(true);
+                setShowRolesEditor((x) => !x);
+              }}
               style={styles.secondaryBtn}
               disabled={isDemo}
             >
-              + Add phase
+              {showRolesEditor ? 'Hide editor' : 'Edit override'}
             </button>
-          </div>
+          )}
         </div>
-      ) : (
-        <div style={styles.section}>
-          <div style={styles.sectionHeader}>Activity Options</div>
-          <div style={{ display: 'grid', gap: 12 }}>
-            {activityOptions.map((o, idx) => (
-              <div key={idx} style={styles.optionCard}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-                  <div style={{ fontWeight: 900 }}>Option {idx + 1}</div>
-                  <button onClick={() => setActivityOptions((prev) => prev.filter((_, i) => i !== idx))} style={styles.dangerBtn} disabled={isDemo}>
-                    Remove option
-                  </button>
-                </div>
 
-                <div style={styles.grid2}>
-                  <label style={styles.field}>
-                    <span style={styles.label}>Title</span>
-                    <input value={o.title} onChange={(e) => setActivityOptions((prev) => prev.map((x, i) => (i === idx ? { ...x, title: e.target.value } : x)))} style={styles.input} disabled={isDemo} />
-                  </label>
-                  <label style={styles.field}>
-                    <span style={styles.label}>TOC role text (optional)</span>
-                    <input value={o.toc_role_text} onChange={(e) => setActivityOptions((prev) => prev.map((x, i) => (i === idx ? { ...x, toc_role_text: e.target.value } : x)))} style={styles.input} disabled={isDemo} />
-                  </label>
-                  <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
-                    <span style={styles.label}>Description</span>
-                    <textarea value={o.description} onChange={(e) => setActivityOptions((prev) => prev.map((x, i) => (i === idx ? { ...x, description: e.target.value } : x)))} rows={2} style={styles.textarea} disabled={isDemo} />
-                  </label>
-                  <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
-                    <span style={styles.label}>Details</span>
-                    <textarea value={o.details_text} onChange={(e) => setActivityOptions((prev) => prev.map((x, i) => (i === idx ? { ...x, details_text: e.target.value } : x)))} rows={3} style={styles.textarea} disabled={isDemo} />
-                  </label>
-                </div>
-
-                <div style={{ marginTop: 10 }}>
-                  <div style={{ fontWeight: 900, color: '#1F4E79', marginBottom: 6 }}>Steps</div>
-                  <div style={{ display: 'grid', gap: 8 }}>
-                    {o.steps.map((s, sIdx) => (
-                      <div key={sIdx} style={styles.row3}>
-                        <input
-                          value={s.step_text}
-                          onChange={(e) =>
-                            setActivityOptions((prev) =>
-                              prev.map((x, i) =>
-                                i === idx
-                                  ? {
-                                      ...x,
-                                      steps: x.steps.map((st, j) => (j === sIdx ? { ...st, step_text: e.target.value } : st)),
-                                    }
-                                  : x
-                              )
-                            )
-                          }
-                          style={styles.input}
-                          disabled={isDemo}
-                        />
-                        <button
-                          onClick={() =>
-                            setActivityOptions((prev) =>
-                              prev.map((x, i) => (i === idx ? { ...x, steps: x.steps.filter((_, j) => j !== sIdx) } : x))
-                            )
-                          }
-                          style={styles.dangerBtn}
-                          disabled={isDemo}
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    ))}
-                    <button
-                      onClick={() =>
-                        setActivityOptions((prev) =>
-                          prev.map((x, i) => (i === idx ? { ...x, steps: [...x.steps, { step_text: '', source_template_option_step_id: null }] } : x))
-                        )
-                      }
-                      style={styles.secondaryBtn}
-                      disabled={isDemo}
-                    >
-                      + Add step
-                    </button>
-                  </div>
-                </div>
+        {!rolesOverride ? (
+          <div style={{ display: 'grid', gap: 6 }}>
+            {(tplRoles.length ? tplRoles : [{ who: '—', responsibility: '' }]).map((r, i) => (
+              <div key={i} style={{ opacity: r.who === '—' ? 0.6 : 1 }}>
+                <b>{r.who}:</b> {r.responsibility}
               </div>
             ))}
+          </div>
+        ) : showRolesEditor ? (
+          <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
+            {roles.map((r, idx) => (
+              <div key={idx} style={styles.whatIfRow}>
+                <input value={r.who} onChange={(e) => setRoles((prev) => prev.map((x, i) => (i === idx ? { ...x, who: e.target.value } : x)))} style={styles.input} disabled={isDemo} placeholder="Who" />
+                <input
+                  value={r.responsibility}
+                  onChange={(e) => setRoles((prev) => prev.map((x, i) => (i === idx ? { ...x, responsibility: e.target.value } : x)))}
+                  style={styles.input}
+                  disabled={isDemo}
+                  placeholder="Responsibility"
+                />
+                <button onClick={() => setRoles((prev) => prev.filter((_, i) => i !== idx))} style={styles.dangerBtn} disabled={isDemo}>
+                  Remove
+                </button>
+              </div>
+            ))}
+            <button onClick={() => setRoles((p) => [...p, { who: '', responsibility: '' }])} style={styles.secondaryBtn} disabled={isDemo}>
+              + Add role row
+            </button>
+          </div>
+        ) : (
+          <div style={{ fontSize: 12, opacity: 0.8 }}>Override exists. Click “Edit override” to change it.</div>
+        )}
+      </div>
 
+      {/* What to do if: template preview unless override */}
+      <div style={styles.previewCard}>
+        <div style={styles.previewHeader}>
+          <div style={{ fontWeight: 900 }}>What to do if…</div>
+          {!whatIfOverride ? (
+            <button onClick={createWhatIfOverride} style={styles.secondaryBtn} disabled={isDemo || status === 'saving'}>
+              Create Day Override
+            </button>
+          ) : (
             <button
-              onClick={() =>
-                setActivityOptions((p) => [
-                  ...p,
-                  {
-                    title: '',
-                    description: '',
-                    details_text: '',
-                    toc_role_text: '',
-                    source_template_option_id: null,
-                    steps: [],
-                  },
-                ])
-              }
+              onClick={() => {
+                setWhatIfTouched(true);
+                setShowWhatIfEditor((x) => !x);
+              }}
               style={styles.secondaryBtn}
               disabled={isDemo}
             >
-              + Add activity option
+              {showWhatIfEditor ? 'Hide editor' : 'Edit override'}
+            </button>
+          )}
+        </div>
+
+        {!whatIfOverride ? (
+          <div style={{ display: 'grid', gap: 6 }}>
+            {(tplWhatIf.length ? tplWhatIf : [{ scenario_text: '—', response_text: '' }]).map((w, i) => (
+              <div key={i} style={{ fontSize: 13, opacity: w.scenario_text === '—' ? 0.6 : 1 }}>
+                <div>
+                  <b>If:</b> {w.scenario_text}
+                </div>
+                {w.response_text ? (
+                  <div>
+                    <b>Then:</b> {w.response_text}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : showWhatIfEditor ? (
+          <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
+            {whatIfItems.map((w, idx) => (
+              <div key={idx} style={styles.whatIfRow}>
+                <input value={w.scenario_text} onChange={(e) => setWhatIfItems((prev) => prev.map((x, i) => (i === idx ? { ...x, scenario_text: e.target.value } : x)))} style={styles.input} disabled={isDemo} placeholder="Scenario" />
+                <input value={w.response_text} onChange={(e) => setWhatIfItems((prev) => prev.map((x, i) => (i === idx ? { ...x, response_text: e.target.value } : x)))} style={styles.input} disabled={isDemo} placeholder="Response" />
+                <button onClick={() => setWhatIfItems((prev) => prev.filter((_, i) => i !== idx))} style={styles.dangerBtn} disabled={isDemo}>
+                  Remove
+                </button>
+              </div>
+            ))}
+            <button onClick={() => setWhatIfItems((p) => [...p, { scenario_text: '', response_text: '', source_template_item_id: null }])} style={styles.secondaryBtn} disabled={isDemo}>
+              + Add what-if
             </button>
           </div>
-        </div>
-      )}
+        ) : (
+          <div style={{ fontSize: 12, opacity: 0.8 }}>Override exists. Click “Edit override” to change it.</div>
+        )}
+      </div>
 
-      <div style={styles.section}>
-        <div style={styles.sectionHeader}>What to do if…</div>
-        <div style={{ display: 'grid', gap: 8 }}>
-          {whatIfItems.map((w, idx) => (
-            <div key={idx} style={styles.whatIfRow}>
-              <input value={w.scenario_text} onChange={(e) => setWhatIfItems((prev) => prev.map((x, i) => (i === idx ? { ...x, scenario_text: e.target.value } : x)))} style={styles.input} disabled={isDemo} placeholder="Scenario" />
-              <input value={w.response_text} onChange={(e) => setWhatIfItems((prev) => prev.map((x, i) => (i === idx ? { ...x, response_text: e.target.value } : x)))} style={styles.input} disabled={isDemo} placeholder="Response" />
-              <button onClick={() => setWhatIfItems((prev) => prev.filter((_, i) => i !== idx))} style={styles.dangerBtn} disabled={isDemo}>
-                Remove
+      {/* Activity options: template preview unless override (only relevant if user switches mode) */}
+      {planMode === 'activity_options' ? (
+        <div style={styles.previewCard}>
+          <div style={styles.previewHeader}>
+            <div style={{ fontWeight: 900 }}>Activity Options</div>
+            {!activityOverride ? (
+              <button onClick={createActivityOverride} style={styles.secondaryBtn} disabled={isDemo || status === 'saving'}>
+                Create Day Override
+              </button>
+            ) : (
+              <button
+              onClick={() => {
+                setActivityTouched(true);
+                setShowActivityEditor((x) => !x);
+              }}
+              style={styles.secondaryBtn}
+              disabled={isDemo}
+            >
+              {showActivityEditor ? 'Hide editor' : 'Edit override'}
+            </button>
+            )}
+          </div>
+
+          {!activityOverride ? (
+            <div style={{ display: 'grid', gap: 10 }}>
+              {(tplActivityOptions.length ? tplActivityOptions : [{ title: '—', description: '', details_text: '', toc_role_text: '', source_template_option_id: null, steps: [] }]).map((o, i) => (
+                <div key={i} style={{ borderTop: i ? '1px solid rgba(0,0,0,0.08)' : 'none', paddingTop: i ? 10 : 0, opacity: o.title === '—' ? 0.6 : 1 }}>
+                  <div style={{ fontWeight: 900 }}>{o.title}</div>
+                  {o.description ? <div style={{ opacity: 0.9 }}>{o.description}</div> : null}
+                </div>
+              ))}
+            </div>
+          ) : showActivityEditor ? (
+            <div style={{ display: 'grid', gap: 12, marginTop: 10 }}>
+              {activityOptions.map((o, idx) => (
+                <div key={idx} style={styles.optionCard}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                    <div style={{ fontWeight: 900 }}>Option {idx + 1}</div>
+                    <button onClick={() => setActivityOptions((prev) => prev.filter((_, i) => i !== idx))} style={styles.dangerBtn} disabled={isDemo}>
+                      Remove option
+                    </button>
+                  </div>
+
+                  <div style={styles.grid2}>
+                    <label style={styles.field}>
+                      <span style={styles.label}>Title</span>
+                      <input value={o.title} onChange={(e) => setActivityOptions((prev) => prev.map((x, i) => (i === idx ? { ...x, title: e.target.value } : x)))} style={styles.input} disabled={isDemo} />
+                    </label>
+                    <label style={styles.field}>
+                      <span style={styles.label}>TOC role text (optional)</span>
+                      <input value={o.toc_role_text} onChange={(e) => setActivityOptions((prev) => prev.map((x, i) => (i === idx ? { ...x, toc_role_text: e.target.value } : x)))} style={styles.input} disabled={isDemo} />
+                    </label>
+                    <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                      <span style={styles.label}>Description</span>
+                      <textarea value={o.description} onChange={(e) => setActivityOptions((prev) => prev.map((x, i) => (i === idx ? { ...x, description: e.target.value } : x)))} rows={2} style={styles.textarea} disabled={isDemo} />
+                    </label>
+                    <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                      <span style={styles.label}>Details</span>
+                      <textarea value={o.details_text} onChange={(e) => setActivityOptions((prev) => prev.map((x, i) => (i === idx ? { ...x, details_text: e.target.value } : x)))} rows={3} style={styles.textarea} disabled={isDemo} />
+                    </label>
+                  </div>
+
+                  <div style={{ marginTop: 10 }}>
+                    <div style={{ fontWeight: 900, color: '#1F4E79', marginBottom: 6 }}>Steps</div>
+                    <div style={{ display: 'grid', gap: 8 }}>
+                      {o.steps.map((s, sIdx) => (
+                        <div key={sIdx} style={styles.row3}>
+                          <input
+                            value={s.step_text}
+                            onChange={(e) =>
+                              setActivityOptions((prev) =>
+                                prev.map((x, i) =>
+                                  i === idx
+                                    ? {
+                                        ...x,
+                                        steps: x.steps.map((st, j) => (j === sIdx ? { ...st, step_text: e.target.value } : st)),
+                                      }
+                                    : x
+                                )
+                              )
+                            }
+                            style={styles.input}
+                            disabled={isDemo}
+                          />
+                          <button
+                            onClick={() =>
+                              setActivityOptions((prev) =>
+                                prev.map((x, i) => (i === idx ? { ...x, steps: x.steps.filter((_, j) => j !== sIdx) } : x))
+                              )
+                            }
+                            style={styles.dangerBtn}
+                            disabled={isDemo}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        onClick={() =>
+                          setActivityOptions((prev) =>
+                            prev.map((x, i) => (i === idx ? { ...x, steps: [...x.steps, { step_text: '', source_template_option_step_id: null }] } : x))
+                          )
+                        }
+                        style={styles.secondaryBtn}
+                        disabled={isDemo}
+                      >
+                        + Add step
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              <button
+                onClick={() =>
+                  setActivityOptions((p) => [
+                    ...p,
+                    { title: '', description: '', details_text: '', toc_role_text: '', source_template_option_id: null, steps: [] },
+                  ])
+                }
+                style={styles.secondaryBtn}
+                disabled={isDemo}
+              >
+                + Add activity option
               </button>
             </div>
-          ))}
-          <button onClick={() => setWhatIfItems((p) => [...p, { scenario_text: '', response_text: '', source_template_item_id: null }])} style={styles.secondaryBtn} disabled={isDemo}>
-            + Add what-if
-          </button>
+          ) : (
+            <div style={{ fontSize: 12, opacity: 0.8 }}>Override exists. Click “Edit override” to change it.</div>
+          )}
         </div>
-      </div>
+      ) : null}
     </section>
   );
 }
@@ -748,28 +2240,84 @@ const RCS = {
   midBlue: '#2E75B6',
   lightBlue: '#D6E4F0',
   gold: '#C9A84C',
+  paleGold: '#FDF3DC',
   white: '#FFFFFF',
-  lightGray: '#F5F5F5',
   textDark: '#1A1A1A',
 } as const;
 
 const styles: Record<string, React.CSSProperties> = {
   wrap: { marginTop: 12, borderTop: `1px solid rgba(0,0,0,0.12)`, paddingTop: 12 },
   topRow: { display: 'flex', gap: 12, justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' },
+
+  templateHint: {
+    marginTop: 10,
+    padding: 12,
+    borderRadius: 12,
+    border: `1px solid ${RCS.deepNavy}`,
+    background: RCS.lightBlue,
+    display: 'flex',
+    gap: 12,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
+  templateLink: {
+    padding: '8px 10px',
+    borderRadius: 10,
+    border: `1px solid ${RCS.gold}`,
+    background: RCS.deepNavy,
+    color: RCS.white,
+    textDecoration: 'none',
+    fontWeight: 900,
+    whiteSpace: 'nowrap',
+  },
+
   grid2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 10 },
   field: { display: 'grid', gap: 6 },
   label: { fontWeight: 900, fontSize: 12, color: RCS.midBlue },
   input: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.deepNavy}`, background: RCS.white, color: RCS.textDark },
   textarea: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.deepNavy}`, background: RCS.white, color: RCS.textDark, fontFamily: 'inherit' },
+
   primaryBtn: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.gold}`, background: RCS.deepNavy, color: RCS.white, cursor: 'pointer', fontWeight: 900 },
-  secondaryBtn: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.gold}`, background: 'transparent', color: RCS.deepNavy, cursor: 'pointer', fontWeight: 900 },
+  primaryBtnDisabled: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.gold}`, background: 'rgba(31,78,121,0.35)', color: RCS.white, cursor: 'not-allowed', fontWeight: 900 },
+  secondaryBtn: { padding: '8px 10px', borderRadius: 10, border: `1px solid ${RCS.gold}`, background: 'transparent', color: RCS.deepNavy, cursor: 'pointer', fontWeight: 900 },
+  unsavedPill: { padding: '4px 10px', borderRadius: 999, border: `1px solid ${RCS.gold}`, background: RCS.paleGold, color: RCS.deepNavy, fontWeight: 900, fontSize: 12 },
   dangerBtn: { padding: '8px 10px', borderRadius: 10, border: '1px solid #991b1b', background: '#FEE2E2', color: '#7F1D1D', cursor: 'pointer', fontWeight: 900, whiteSpace: 'nowrap' },
   errorBox: { marginTop: 10, padding: 10, borderRadius: 10, background: '#FEE2E2', border: '1px solid #991b1b', color: '#7F1D1D', whiteSpace: 'pre-wrap' },
+
   section: { marginTop: 14, border: `1px solid ${RCS.deepNavy}`, borderRadius: 12, padding: 12, background: RCS.lightBlue },
   sectionHeader: { fontWeight: 900, color: RCS.deepNavy, borderLeft: `6px solid ${RCS.gold}`, paddingLeft: 10, marginBottom: 10 },
   row3: { display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'center' },
-  phaseRow: { display: 'grid', gridTemplateColumns: '28px 110px 1fr 1fr 1fr auto', gap: 10, alignItems: 'center', border: `1px solid rgba(31,78,121,0.35)`, borderRadius: 12, padding: 8, background: 'rgba(255,255,255,0.9)' },
+  phaseRow: { display: 'grid', gridTemplateColumns: '28px 110px 1fr 1fr 1fr auto', gap: 10, alignItems: 'start', border: `1px solid rgba(31,78,121,0.35)`, borderRadius: 12, padding: 8, background: 'rgba(255,255,255,0.9)' },
   dragHandle: { cursor: 'grab', userSelect: 'none', fontWeight: 900, opacity: 0.75, textAlign: 'center' },
+
+  previewCard: { marginTop: 14, border: `1px solid ${RCS.deepNavy}`, borderRadius: 12, padding: 12, background: RCS.white },
+  previewHeader: { display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 },
+
+  touchCard: { border: `1px solid ${RCS.deepNavy}`, borderRadius: 12, padding: 12, background: RCS.white },
+
   optionCard: { border: `1px solid ${RCS.deepNavy}`, borderRadius: 12, padding: 12, background: RCS.white },
   whatIfRow: { display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 10, alignItems: 'center' },
+
+  snippetBackdrop: {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0,0,0,0.35)',
+    display: 'flex',
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    padding: 24,
+    zIndex: 50,
+  },
+  snippetModal: {
+    width: '100%',
+    maxWidth: 900,
+    background: RCS.white,
+    borderRadius: 14,
+    border: `1px solid ${RCS.deepNavy}`,
+    padding: 14,
+    boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
+  },
+  snippetHeader: { display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' },
+  snippetRow: { display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', border: `1px solid ${RCS.deepNavy}`, borderRadius: 12, padding: 12, background: RCS.lightBlue },
 };

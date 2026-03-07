@@ -36,9 +36,13 @@ alter table day_plans add column if not exists visibility text not null default 
 alter table day_plans add column if not exists share_token_hash text;
 alter table day_plans add column if not exists share_expires_at timestamptz;
 alter table day_plans add column if not exists trashed_at timestamptz;
+-- Published snapshot for TOC (resolved at publish time; /toc reads only this)
+alter table day_plans add column if not exists published_payload jsonb;
+alter table day_plans add column if not exists published_at timestamptz;
 alter table day_plans add column if not exists learning_standard_focus text;
 alter table day_plans add column if not exists core_competency_focus text;
 alter table day_plans add column if not exists tags text[];
+alter table day_plans add column if not exists learning_standard_id uuid;
 
 -- Allow multiple plans per day; prevent duplicates per (date, slot, friday_type)
 -- Use COALESCE so non-Friday (null friday_type) still participates in uniqueness.
@@ -119,32 +123,38 @@ create index if not exists classes_block_label_idx on classes(block_label);
 -- ----------------------
 -- POLICIES: LEARNING STANDARDS (structured)
 -- ----------------------
+-- Learning standards catalog (titles shared across grades within a subject)
 create table if not exists learning_standards (
   id uuid primary key default gen_random_uuid(),
   subject text not null,
-  grade int not null,
   standard_key text not null,
   standard_title text not null,
+  sort_order int,
+  source_pdf_path text,
+  page_ref text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  constraint learning_standards_grade_check check (grade in (9,10,11,12)),
-  constraint learning_standards_unique unique(subject, grade, standard_key)
+  constraint learning_standards_unique unique(subject, standard_key)
 );
 
-create table if not exists learning_standard_levels (
+create index if not exists learning_standards_subject_idx on learning_standards(subject);
+
+-- Rubric leaf nodes (grade x level) with editable override + reset-to-original
+create table if not exists learning_standard_rubrics (
   id uuid primary key default gen_random_uuid(),
   learning_standard_id uuid not null references learning_standards(id) on delete cascade,
+  grade int not null,
   level text not null,
   original_text text not null default '',
   edited_text text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  constraint learning_standard_levels_level_check check (level in ('emerging','developing','proficient','extending')),
-  constraint learning_standard_levels_unique unique(learning_standard_id, level)
+  constraint learning_standard_rubrics_grade_check check (grade in (9,10,11,12)),
+  constraint learning_standard_rubrics_level_check check (level in ('emerging','developing','proficient','extending')),
+  constraint learning_standard_rubrics_unique unique(learning_standard_id, grade, level)
 );
 
-create index if not exists learning_standards_subject_grade_idx on learning_standards(subject, grade);
-create index if not exists learning_standard_levels_std_idx on learning_standard_levels(learning_standard_id);
+create index if not exists learning_standard_rubrics_std_grade_idx on learning_standard_rubrics(learning_standard_id, grade);
 
 -- ----------------------
 -- ROW LEVEL SECURITY
@@ -191,42 +201,51 @@ $$;
 
 -- Staff profiles: allow users to read their own row
 -- (Do NOT depend on is_staff() here, or you can create a circular dependency.)
+drop policy if exists "staff_profiles_self_read" on staff_profiles;
 create policy "staff_profiles_self_read" on staff_profiles
 for select
 using (auth.uid() = user_id);
 
 -- day_plans: staff CRUD
+drop policy if exists "day_plans_staff_select" on day_plans;
 create policy "day_plans_staff_select" on day_plans
 for select
 using (is_staff());
 
+drop policy if exists "day_plans_staff_insert" on day_plans;
 create policy "day_plans_staff_insert" on day_plans
 for insert
 with check (can_write());
 
+drop policy if exists "day_plans_staff_update" on day_plans;
 create policy "day_plans_staff_update" on day_plans
 for update
 using (can_write())
 with check (can_write());
 
+drop policy if exists "day_plans_staff_delete" on day_plans;
 create policy "day_plans_staff_delete" on day_plans
 for delete
 using (can_write());
 
 -- day_plan_blocks: staff CRUD
+drop policy if exists "blocks_staff_select" on day_plan_blocks;
 create policy "blocks_staff_select" on day_plan_blocks
 for select
 using (is_staff());
 
+drop policy if exists "blocks_staff_insert" on day_plan_blocks;
 create policy "blocks_staff_insert" on day_plan_blocks
 for insert
 with check (can_write());
 
+drop policy if exists "blocks_staff_update" on day_plan_blocks;
 create policy "blocks_staff_update" on day_plan_blocks
 for update
 using (can_write())
 with check (can_write());
 
+drop policy if exists "blocks_staff_delete" on day_plan_blocks;
 create policy "blocks_staff_delete" on day_plan_blocks
 for delete
 using (can_write());
@@ -235,44 +254,55 @@ using (can_write());
 
 -- students
 drop policy if exists "students_staff_all" on students;
+drop policy if exists "students_staff_select" on students;
 create policy "students_staff_select" on students
 for select
 using (is_staff());
+drop policy if exists "students_staff_insert" on students;
 create policy "students_staff_insert" on students
 for insert
 with check (can_write());
+drop policy if exists "students_staff_update" on students;
 create policy "students_staff_update" on students
 for update
 using (can_write())
 with check (can_write());
+drop policy if exists "students_staff_delete" on students;
 create policy "students_staff_delete" on students
 for delete
 using (can_write());
 
 -- classes
 drop policy if exists "classes_staff_all" on classes;
+drop policy if exists "classes_staff_select" on classes;
 create policy "classes_staff_select" on classes
 for select
 using (is_staff());
+drop policy if exists "classes_staff_insert" on classes;
 create policy "classes_staff_insert" on classes
 for insert
 with check (can_write());
+drop policy if exists "classes_staff_update" on classes;
 create policy "classes_staff_update" on classes
 for update
 using (can_write())
 with check (can_write());
+drop policy if exists "classes_staff_delete" on classes;
 create policy "classes_staff_delete" on classes
 for delete
 using (can_write());
 
 -- enrollments
 drop policy if exists "enrollments_staff_all" on enrollments;
+drop policy if exists "enrollments_staff_select" on enrollments;
 create policy "enrollments_staff_select" on enrollments
 for select
 using (is_staff());
+drop policy if exists "enrollments_staff_insert" on enrollments;
 create policy "enrollments_staff_insert" on enrollments
 for insert
 with check (can_write());
+drop policy if exists "enrollments_staff_delete" on enrollments;
 create policy "enrollments_staff_delete" on enrollments
 for delete
 using (can_write());
@@ -306,12 +336,16 @@ create unique index if not exists rotation_defaults_unique_row_idx
 alter table rotation_defaults enable row level security;
 
 drop policy if exists "rotation_defaults_staff_all" on rotation_defaults;
+drop policy if exists "rotation_defaults_staff_select" on rotation_defaults;
 create policy "rotation_defaults_staff_select" on rotation_defaults
 for select using (is_staff());
+drop policy if exists "rotation_defaults_staff_insert" on rotation_defaults;
 create policy "rotation_defaults_staff_insert" on rotation_defaults
 for insert with check (can_write());
+drop policy if exists "rotation_defaults_staff_update" on rotation_defaults;
 create policy "rotation_defaults_staff_update" on rotation_defaults
 for update using (can_write()) with check (can_write());
+drop policy if exists "rotation_defaults_staff_delete" on rotation_defaults;
 create policy "rotation_defaults_staff_delete" on rotation_defaults
 for delete using (can_write());
 
@@ -430,22 +464,97 @@ create table if not exists block_time_defaults (
 alter table block_time_defaults enable row level security;
 
 drop policy if exists "block_time_defaults_staff_all" on block_time_defaults;
+drop policy if exists "block_time_defaults_staff_select" on block_time_defaults;
 create policy "block_time_defaults_staff_select" on block_time_defaults
 for select
 using (is_staff());
+drop policy if exists "block_time_defaults_staff_insert" on block_time_defaults;
 create policy "block_time_defaults_staff_insert" on block_time_defaults
 for insert
 with check (can_write());
+drop policy if exists "block_time_defaults_staff_update" on block_time_defaults;
 create policy "block_time_defaults_staff_update" on block_time_defaults
 for update
 using (can_write())
 with check (can_write());
+drop policy if exists "block_time_defaults_staff_delete" on block_time_defaults;
 create policy "block_time_defaults_staff_delete" on block_time_defaults
 for delete
 using (can_write());
 
 create unique index if not exists block_time_defaults_uq
   on block_time_defaults(template_key, effective_from, slot);
+
+-- =====================================================================
+-- PUBLIC PAGE LAYOUTS (global, admin-editable)
+-- =====================================================================
+
+create table if not exists public_page_layouts (
+  layout_id text primary key,
+  layout jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+
+alter table public_page_layouts enable row level security;
+
+drop policy if exists "public_page_layouts_staff_select" on public_page_layouts;
+create policy "public_page_layouts_staff_select" on public_page_layouts
+for select using (is_staff());
+
+drop policy if exists "public_page_layouts_staff_insert" on public_page_layouts;
+create policy "public_page_layouts_staff_insert" on public_page_layouts
+for insert with check (can_write());
+
+drop policy if exists "public_page_layouts_staff_update" on public_page_layouts;
+create policy "public_page_layouts_staff_update" on public_page_layouts
+for update using (can_write()) with check (can_write());
+
+drop policy if exists "public_page_layouts_staff_delete" on public_page_layouts;
+create policy "public_page_layouts_staff_delete" on public_page_layouts
+for delete using (can_write());
+
+-- Public read of layout (anon). SECURITY DEFINER so we don't have to open RLS.
+create or replace function public.get_public_page_layout(layout_id text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  out jsonb;
+begin
+  select l.layout into out
+  from public_page_layouts l
+  where l.layout_id = get_public_page_layout.layout_id
+  limit 1;
+
+  return coalesce(out, '{}'::jsonb);
+end;
+$$;
+revoke all on function public.get_public_page_layout(text) from public;
+grant execute on function public.get_public_page_layout(text) to anon;
+
+-- Default layout seed
+insert into public_page_layouts (layout_id, layout)
+select
+  'public_plan',
+  jsonb_build_object(
+    'sections', jsonb_build_array(
+      jsonb_build_object('key','class_overview','title','Class Overview','enabled',true),
+      jsonb_build_object('key','division_of_roles','title','Division of Roles','enabled',true),
+      jsonb_build_object('key','opening_routine','title','Opening routine','enabled',true),
+      jsonb_build_object('key','lesson_flow','title','Lesson flow','enabled',true),
+      jsonb_build_object('key','activity_options','title','Activity options','enabled',true),
+      jsonb_build_object('key','what_to_do_if','title','What to Do If…','enabled',true),
+      jsonb_build_object('key','end_of_class','title','End of Class — Room Cleanup','enabled',true),
+      jsonb_build_object('key','lesson_overview','title','Lesson Overview','enabled',true),
+      jsonb_build_object('key','materials_needed','title','Materials Needed','enabled',true),
+      jsonb_build_object('key','assessment_touch_points','title','★ Assessment Touch Points','enabled',true),
+      jsonb_build_object('key','pd_goal_connections','title','PD Goal Connections','enabled',true),
+      jsonb_build_object('key','first_peoples_principles','title','First Peoples Principles of Learning','enabled',true)
+    )
+  )
+where not exists (select 1 from public_page_layouts where layout_id = 'public_plan');
 
 -- =====================================================================
 -- TOC BLOCK PLAN CONTENT (standing templates + per-block instances)
@@ -462,12 +571,17 @@ create table if not exists class_toc_templates (
   ta_role text,
   phone_policy text not null default 'Not permitted',
   note_to_toc text not null,
+  attendance_note text,
   plan_mode text not null,
   default_tags text[],
+  assessment_touch_point jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint class_toc_templates_plan_mode_check check (plan_mode in ('lesson_flow','activity_options'))
 );
+
+-- Advanced TOC content (template-level JSON payload)
+alter table class_toc_templates add column if not exists advanced_payload jsonb;
 
 create index if not exists class_toc_templates_class_id_idx on class_toc_templates(class_id);
 
@@ -523,6 +637,33 @@ create table if not exists class_what_to_do_if_items (
 
 create index if not exists class_what_to_do_if_items_template_id_idx on class_what_to_do_if_items(template_id);
 
+-- Rich RCS output sections (overview/roles/end-of-class)
+create table if not exists class_overview_rows (
+  id uuid primary key default gen_random_uuid(),
+  template_id uuid not null references class_toc_templates(id) on delete cascade,
+  sort_order int not null,
+  label text not null,
+  value text not null
+);
+create index if not exists class_overview_rows_template_id_idx on class_overview_rows(template_id);
+
+create table if not exists class_role_rows (
+  id uuid primary key default gen_random_uuid(),
+  template_id uuid not null references class_toc_templates(id) on delete cascade,
+  sort_order int not null,
+  who text not null,
+  responsibility text not null
+);
+create index if not exists class_role_rows_template_id_idx on class_role_rows(template_id);
+
+create table if not exists class_end_of_class_items (
+  id uuid primary key default gen_random_uuid(),
+  template_id uuid not null references class_toc_templates(id) on delete cascade,
+  sort_order int not null,
+  item_text text not null
+);
+create index if not exists class_end_of_class_items_template_id_idx on class_end_of_class_items(template_id);
+
 -- Per scheduled block (plan instance). Copy-on-create from template is recommended.
 create table if not exists toc_block_plans (
   id uuid primary key default gen_random_uuid(),
@@ -535,6 +676,8 @@ create table if not exists toc_block_plans (
   override_ta_role text,
   override_phone_policy text,
   override_note_to_toc text,
+  override_attendance_note text,
+  override_assessment_touch_point jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint toc_block_plans_plan_mode_check check (plan_mode in ('lesson_flow','activity_options'))
@@ -544,6 +687,13 @@ create table if not exists toc_block_plans (
 create unique index if not exists toc_block_plans_day_plan_block_id_uq on toc_block_plans(day_plan_block_id);
 create index if not exists toc_block_plans_class_id_idx on toc_block_plans(class_id);
 create index if not exists toc_block_plans_template_id_idx on toc_block_plans(template_id);
+
+-- Make TOC instances self-contained for public rendering.
+alter table public.toc_block_plans
+  add column if not exists override_payload jsonb,
+  add column if not exists seeded_at timestamptz,
+  add column if not exists public_payload jsonb,
+  add column if not exists public_updated_at timestamptz;
 
 create table if not exists toc_opening_routine_steps (
   id uuid primary key default gen_random_uuid(),
@@ -607,6 +757,33 @@ create table if not exists toc_what_to_do_if_items (
 create index if not exists toc_what_to_do_if_items_plan_id_idx on toc_what_to_do_if_items(toc_block_plan_id);
 create index if not exists toc_what_to_do_if_items_source_idx on toc_what_to_do_if_items(source_template_item_id);
 
+-- Rich RCS output section overrides (overrides-only)
+create table if not exists toc_overview_rows (
+  id uuid primary key default gen_random_uuid(),
+  toc_block_plan_id uuid not null references toc_block_plans(id) on delete cascade,
+  sort_order int not null,
+  label text not null,
+  value text not null
+);
+create index if not exists toc_overview_rows_plan_id_idx on toc_overview_rows(toc_block_plan_id);
+
+create table if not exists toc_role_rows (
+  id uuid primary key default gen_random_uuid(),
+  toc_block_plan_id uuid not null references toc_block_plans(id) on delete cascade,
+  sort_order int not null,
+  who text not null,
+  responsibility text not null
+);
+create index if not exists toc_role_rows_plan_id_idx on toc_role_rows(toc_block_plan_id);
+
+create table if not exists toc_end_of_class_items (
+  id uuid primary key default gen_random_uuid(),
+  toc_block_plan_id uuid not null references toc_block_plans(id) on delete cascade,
+  sort_order int not null,
+  item_text text not null
+);
+create index if not exists toc_end_of_class_items_plan_id_idx on toc_end_of_class_items(toc_block_plan_id);
+
 -- RLS for new content tables
 alter table class_toc_templates enable row level security;
 alter table class_opening_routine_steps enable row level security;
@@ -614,6 +791,9 @@ alter table class_lesson_flow_phases enable row level security;
 alter table class_activity_options enable row level security;
 alter table class_activity_option_steps enable row level security;
 alter table class_what_to_do_if_items enable row level security;
+alter table class_overview_rows enable row level security;
+alter table class_role_rows enable row level security;
+alter table class_end_of_class_items enable row level security;
 
 alter table toc_block_plans enable row level security;
 alter table toc_opening_routine_steps enable row level security;
@@ -621,141 +801,282 @@ alter table toc_lesson_flow_phases enable row level security;
 alter table toc_activity_options enable row level security;
 alter table toc_activity_option_steps enable row level security;
 alter table toc_what_to_do_if_items enable row level security;
+alter table toc_overview_rows enable row level security;
+alter table toc_role_rows enable row level security;
+alter table toc_end_of_class_items enable row level security;
 alter table learning_standards enable row level security;
-alter table learning_standard_levels enable row level security;
+alter table learning_standard_rubrics enable row level security;
 
 -- Template + instance content: staff can read; demo cannot write.
 
 -- class_toc_templates
  drop policy if exists "class_toc_templates_staff_all" on class_toc_templates;
+drop policy if exists "class_toc_templates_staff_select" on class_toc_templates;
  create policy "class_toc_templates_staff_select" on class_toc_templates
  for select using (is_staff());
+drop policy if exists "class_toc_templates_staff_insert" on class_toc_templates;
  create policy "class_toc_templates_staff_insert" on class_toc_templates
  for insert with check (can_write());
+drop policy if exists "class_toc_templates_staff_update" on class_toc_templates;
  create policy "class_toc_templates_staff_update" on class_toc_templates
  for update using (can_write()) with check (can_write());
+drop policy if exists "class_toc_templates_staff_delete" on class_toc_templates;
  create policy "class_toc_templates_staff_delete" on class_toc_templates
  for delete using (can_write());
 
 -- class_opening_routine_steps
  drop policy if exists "class_opening_routine_steps_staff_all" on class_opening_routine_steps;
+drop policy if exists "class_opening_routine_steps_staff_select" on class_opening_routine_steps;
  create policy "class_opening_routine_steps_staff_select" on class_opening_routine_steps
  for select using (is_staff());
+drop policy if exists "class_opening_routine_steps_staff_insert" on class_opening_routine_steps;
  create policy "class_opening_routine_steps_staff_insert" on class_opening_routine_steps
  for insert with check (can_write());
+drop policy if exists "class_opening_routine_steps_staff_update" on class_opening_routine_steps;
  create policy "class_opening_routine_steps_staff_update" on class_opening_routine_steps
  for update using (can_write()) with check (can_write());
+drop policy if exists "class_opening_routine_steps_staff_delete" on class_opening_routine_steps;
  create policy "class_opening_routine_steps_staff_delete" on class_opening_routine_steps
  for delete using (can_write());
 
 -- class_lesson_flow_phases
  drop policy if exists "class_lesson_flow_phases_staff_all" on class_lesson_flow_phases;
+drop policy if exists "class_lesson_flow_phases_staff_select" on class_lesson_flow_phases;
  create policy "class_lesson_flow_phases_staff_select" on class_lesson_flow_phases
  for select using (is_staff());
+drop policy if exists "class_lesson_flow_phases_staff_insert" on class_lesson_flow_phases;
  create policy "class_lesson_flow_phases_staff_insert" on class_lesson_flow_phases
  for insert with check (can_write());
+drop policy if exists "class_lesson_flow_phases_staff_update" on class_lesson_flow_phases;
  create policy "class_lesson_flow_phases_staff_update" on class_lesson_flow_phases
  for update using (can_write()) with check (can_write());
+drop policy if exists "class_lesson_flow_phases_staff_delete" on class_lesson_flow_phases;
  create policy "class_lesson_flow_phases_staff_delete" on class_lesson_flow_phases
  for delete using (can_write());
 
 -- class_activity_options
  drop policy if exists "class_activity_options_staff_all" on class_activity_options;
+drop policy if exists "class_activity_options_staff_select" on class_activity_options;
  create policy "class_activity_options_staff_select" on class_activity_options
  for select using (is_staff());
+drop policy if exists "class_activity_options_staff_insert" on class_activity_options;
  create policy "class_activity_options_staff_insert" on class_activity_options
  for insert with check (can_write());
+drop policy if exists "class_activity_options_staff_update" on class_activity_options;
  create policy "class_activity_options_staff_update" on class_activity_options
  for update using (can_write()) with check (can_write());
+drop policy if exists "class_activity_options_staff_delete" on class_activity_options;
  create policy "class_activity_options_staff_delete" on class_activity_options
  for delete using (can_write());
 
 -- class_activity_option_steps
  drop policy if exists "class_activity_option_steps_staff_all" on class_activity_option_steps;
+drop policy if exists "class_activity_option_steps_staff_select" on class_activity_option_steps;
  create policy "class_activity_option_steps_staff_select" on class_activity_option_steps
  for select using (is_staff());
+drop policy if exists "class_activity_option_steps_staff_insert" on class_activity_option_steps;
  create policy "class_activity_option_steps_staff_insert" on class_activity_option_steps
  for insert with check (can_write());
+drop policy if exists "class_activity_option_steps_staff_update" on class_activity_option_steps;
  create policy "class_activity_option_steps_staff_update" on class_activity_option_steps
  for update using (can_write()) with check (can_write());
+drop policy if exists "class_activity_option_steps_staff_delete" on class_activity_option_steps;
  create policy "class_activity_option_steps_staff_delete" on class_activity_option_steps
  for delete using (can_write());
 
 -- class_what_to_do_if_items
  drop policy if exists "class_what_to_do_if_items_staff_all" on class_what_to_do_if_items;
+drop policy if exists "class_what_to_do_if_items_staff_select" on class_what_to_do_if_items;
  create policy "class_what_to_do_if_items_staff_select" on class_what_to_do_if_items
  for select using (is_staff());
+drop policy if exists "class_what_to_do_if_items_staff_insert" on class_what_to_do_if_items;
  create policy "class_what_to_do_if_items_staff_insert" on class_what_to_do_if_items
  for insert with check (can_write());
+drop policy if exists "class_what_to_do_if_items_staff_update" on class_what_to_do_if_items;
  create policy "class_what_to_do_if_items_staff_update" on class_what_to_do_if_items
  for update using (can_write()) with check (can_write());
+drop policy if exists "class_what_to_do_if_items_staff_delete" on class_what_to_do_if_items;
  create policy "class_what_to_do_if_items_staff_delete" on class_what_to_do_if_items
+ for delete using (can_write());
+
+-- class_overview_rows
+ drop policy if exists "class_overview_rows_staff_all" on class_overview_rows;
+drop policy if exists "class_overview_rows_staff_select" on class_overview_rows;
+ create policy "class_overview_rows_staff_select" on class_overview_rows
+ for select using (is_staff());
+drop policy if exists "class_overview_rows_staff_insert" on class_overview_rows;
+ create policy "class_overview_rows_staff_insert" on class_overview_rows
+ for insert with check (can_write());
+drop policy if exists "class_overview_rows_staff_update" on class_overview_rows;
+ create policy "class_overview_rows_staff_update" on class_overview_rows
+ for update using (can_write()) with check (can_write());
+drop policy if exists "class_overview_rows_staff_delete" on class_overview_rows;
+ create policy "class_overview_rows_staff_delete" on class_overview_rows
+ for delete using (can_write());
+
+-- class_role_rows
+ drop policy if exists "class_role_rows_staff_all" on class_role_rows;
+drop policy if exists "class_role_rows_staff_select" on class_role_rows;
+ create policy "class_role_rows_staff_select" on class_role_rows
+ for select using (is_staff());
+drop policy if exists "class_role_rows_staff_insert" on class_role_rows;
+ create policy "class_role_rows_staff_insert" on class_role_rows
+ for insert with check (can_write());
+drop policy if exists "class_role_rows_staff_update" on class_role_rows;
+ create policy "class_role_rows_staff_update" on class_role_rows
+ for update using (can_write()) with check (can_write());
+drop policy if exists "class_role_rows_staff_delete" on class_role_rows;
+ create policy "class_role_rows_staff_delete" on class_role_rows
+ for delete using (can_write());
+
+-- class_end_of_class_items
+ drop policy if exists "class_end_of_class_items_staff_all" on class_end_of_class_items;
+drop policy if exists "class_end_of_class_items_staff_select" on class_end_of_class_items;
+ create policy "class_end_of_class_items_staff_select" on class_end_of_class_items
+ for select using (is_staff());
+drop policy if exists "class_end_of_class_items_staff_insert" on class_end_of_class_items;
+ create policy "class_end_of_class_items_staff_insert" on class_end_of_class_items
+ for insert with check (can_write());
+drop policy if exists "class_end_of_class_items_staff_update" on class_end_of_class_items;
+ create policy "class_end_of_class_items_staff_update" on class_end_of_class_items
+ for update using (can_write()) with check (can_write());
+drop policy if exists "class_end_of_class_items_staff_delete" on class_end_of_class_items;
+ create policy "class_end_of_class_items_staff_delete" on class_end_of_class_items
  for delete using (can_write());
 
 -- toc_block_plans
  drop policy if exists "toc_block_plans_staff_all" on toc_block_plans;
+drop policy if exists "toc_block_plans_staff_select" on toc_block_plans;
  create policy "toc_block_plans_staff_select" on toc_block_plans
  for select using (is_staff());
+drop policy if exists "toc_block_plans_staff_insert" on toc_block_plans;
  create policy "toc_block_plans_staff_insert" on toc_block_plans
  for insert with check (can_write());
+drop policy if exists "toc_block_plans_staff_update" on toc_block_plans;
  create policy "toc_block_plans_staff_update" on toc_block_plans
  for update using (can_write()) with check (can_write());
+drop policy if exists "toc_block_plans_staff_delete" on toc_block_plans;
  create policy "toc_block_plans_staff_delete" on toc_block_plans
  for delete using (can_write());
 
 -- toc_opening_routine_steps
  drop policy if exists "toc_opening_routine_steps_staff_all" on toc_opening_routine_steps;
+drop policy if exists "toc_opening_routine_steps_staff_select" on toc_opening_routine_steps;
  create policy "toc_opening_routine_steps_staff_select" on toc_opening_routine_steps
  for select using (is_staff());
+drop policy if exists "toc_opening_routine_steps_staff_insert" on toc_opening_routine_steps;
  create policy "toc_opening_routine_steps_staff_insert" on toc_opening_routine_steps
  for insert with check (can_write());
+drop policy if exists "toc_opening_routine_steps_staff_update" on toc_opening_routine_steps;
  create policy "toc_opening_routine_steps_staff_update" on toc_opening_routine_steps
  for update using (can_write()) with check (can_write());
+drop policy if exists "toc_opening_routine_steps_staff_delete" on toc_opening_routine_steps;
  create policy "toc_opening_routine_steps_staff_delete" on toc_opening_routine_steps
  for delete using (can_write());
 
 -- toc_lesson_flow_phases
  drop policy if exists "toc_lesson_flow_phases_staff_all" on toc_lesson_flow_phases;
+drop policy if exists "toc_lesson_flow_phases_staff_select" on toc_lesson_flow_phases;
  create policy "toc_lesson_flow_phases_staff_select" on toc_lesson_flow_phases
  for select using (is_staff());
+drop policy if exists "toc_lesson_flow_phases_staff_insert" on toc_lesson_flow_phases;
  create policy "toc_lesson_flow_phases_staff_insert" on toc_lesson_flow_phases
  for insert with check (can_write());
+drop policy if exists "toc_lesson_flow_phases_staff_update" on toc_lesson_flow_phases;
  create policy "toc_lesson_flow_phases_staff_update" on toc_lesson_flow_phases
  for update using (can_write()) with check (can_write());
+drop policy if exists "toc_lesson_flow_phases_staff_delete" on toc_lesson_flow_phases;
  create policy "toc_lesson_flow_phases_staff_delete" on toc_lesson_flow_phases
  for delete using (can_write());
 
 -- toc_activity_options
  drop policy if exists "toc_activity_options_staff_all" on toc_activity_options;
+drop policy if exists "toc_activity_options_staff_select" on toc_activity_options;
  create policy "toc_activity_options_staff_select" on toc_activity_options
  for select using (is_staff());
+drop policy if exists "toc_activity_options_staff_insert" on toc_activity_options;
  create policy "toc_activity_options_staff_insert" on toc_activity_options
  for insert with check (can_write());
+drop policy if exists "toc_activity_options_staff_update" on toc_activity_options;
  create policy "toc_activity_options_staff_update" on toc_activity_options
  for update using (can_write()) with check (can_write());
+drop policy if exists "toc_activity_options_staff_delete" on toc_activity_options;
  create policy "toc_activity_options_staff_delete" on toc_activity_options
  for delete using (can_write());
 
 -- toc_activity_option_steps
  drop policy if exists "toc_activity_option_steps_staff_all" on toc_activity_option_steps;
+drop policy if exists "toc_activity_option_steps_staff_select" on toc_activity_option_steps;
  create policy "toc_activity_option_steps_staff_select" on toc_activity_option_steps
  for select using (is_staff());
+drop policy if exists "toc_activity_option_steps_staff_insert" on toc_activity_option_steps;
  create policy "toc_activity_option_steps_staff_insert" on toc_activity_option_steps
  for insert with check (can_write());
+drop policy if exists "toc_activity_option_steps_staff_update" on toc_activity_option_steps;
  create policy "toc_activity_option_steps_staff_update" on toc_activity_option_steps
  for update using (can_write()) with check (can_write());
+drop policy if exists "toc_activity_option_steps_staff_delete" on toc_activity_option_steps;
  create policy "toc_activity_option_steps_staff_delete" on toc_activity_option_steps
  for delete using (can_write());
 
 -- toc_what_to_do_if_items
  drop policy if exists "toc_what_to_do_if_items_staff_all" on toc_what_to_do_if_items;
+drop policy if exists "toc_what_to_do_if_items_staff_select" on toc_what_to_do_if_items;
  create policy "toc_what_to_do_if_items_staff_select" on toc_what_to_do_if_items
  for select using (is_staff());
+drop policy if exists "toc_what_to_do_if_items_staff_insert" on toc_what_to_do_if_items;
  create policy "toc_what_to_do_if_items_staff_insert" on toc_what_to_do_if_items
  for insert with check (can_write());
+drop policy if exists "toc_what_to_do_if_items_staff_update" on toc_what_to_do_if_items;
  create policy "toc_what_to_do_if_items_staff_update" on toc_what_to_do_if_items
  for update using (can_write()) with check (can_write());
+drop policy if exists "toc_what_to_do_if_items_staff_delete" on toc_what_to_do_if_items;
  create policy "toc_what_to_do_if_items_staff_delete" on toc_what_to_do_if_items
+ for delete using (can_write());
+
+-- toc_overview_rows
+ drop policy if exists "toc_overview_rows_staff_all" on toc_overview_rows;
+drop policy if exists "toc_overview_rows_staff_select" on toc_overview_rows;
+ create policy "toc_overview_rows_staff_select" on toc_overview_rows
+ for select using (is_staff());
+drop policy if exists "toc_overview_rows_staff_insert" on toc_overview_rows;
+ create policy "toc_overview_rows_staff_insert" on toc_overview_rows
+ for insert with check (can_write());
+drop policy if exists "toc_overview_rows_staff_update" on toc_overview_rows;
+ create policy "toc_overview_rows_staff_update" on toc_overview_rows
+ for update using (can_write()) with check (can_write());
+drop policy if exists "toc_overview_rows_staff_delete" on toc_overview_rows;
+ create policy "toc_overview_rows_staff_delete" on toc_overview_rows
+ for delete using (can_write());
+
+-- toc_role_rows
+ drop policy if exists "toc_role_rows_staff_all" on toc_role_rows;
+drop policy if exists "toc_role_rows_staff_select" on toc_role_rows;
+ create policy "toc_role_rows_staff_select" on toc_role_rows
+ for select using (is_staff());
+drop policy if exists "toc_role_rows_staff_insert" on toc_role_rows;
+ create policy "toc_role_rows_staff_insert" on toc_role_rows
+ for insert with check (can_write());
+drop policy if exists "toc_role_rows_staff_update" on toc_role_rows;
+ create policy "toc_role_rows_staff_update" on toc_role_rows
+ for update using (can_write()) with check (can_write());
+drop policy if exists "toc_role_rows_staff_delete" on toc_role_rows;
+ create policy "toc_role_rows_staff_delete" on toc_role_rows
+ for delete using (can_write());
+
+-- toc_end_of_class_items
+ drop policy if exists "toc_end_of_class_items_staff_all" on toc_end_of_class_items;
+drop policy if exists "toc_end_of_class_items_staff_select" on toc_end_of_class_items;
+ create policy "toc_end_of_class_items_staff_select" on toc_end_of_class_items
+ for select using (is_staff());
+drop policy if exists "toc_end_of_class_items_staff_insert" on toc_end_of_class_items;
+ create policy "toc_end_of_class_items_staff_insert" on toc_end_of_class_items
+ for insert with check (can_write());
+drop policy if exists "toc_end_of_class_items_staff_update" on toc_end_of_class_items;
+ create policy "toc_end_of_class_items_staff_update" on toc_end_of_class_items
+ for update using (can_write()) with check (can_write());
+drop policy if exists "toc_end_of_class_items_staff_delete" on toc_end_of_class_items;
+ create policy "toc_end_of_class_items_staff_delete" on toc_end_of_class_items
  for delete using (can_write());
 
 -- ----------------------
@@ -766,7 +1087,8 @@ alter table learning_standard_levels enable row level security;
 -- Token is compared by sha256 hash to day_plans.share_token_hash.
 -- SECURITY DEFINER so anon callers can access without opening table RLS.
 -- Public dayplan payload (by day_plans.id)
-create or replace function get_public_day_plan_by_id(plan_id uuid)
+-- Includes TOC content (template merged with per-day overrides).
+create or replace function resolve_day_plan_payload(plan_id uuid)
 returns jsonb
 language plpgsql
 security definer
@@ -775,7 +1097,47 @@ as $$
 declare
   p record;
   blocks jsonb;
+  primary_block_id uuid;
+
+  tbp record;
+  tpl record;
+
+  has_or boolean;
+  has_lf boolean;
+  has_opt boolean;
+  has_wi boolean;
+  has_overview boolean;
+  has_roles boolean;
+  has_end boolean;
+
+  toc_opening jsonb;
+  toc_lesson_flow jsonb;
+  toc_activity_options jsonb;
+  toc_whatif jsonb;
+  toc_overview jsonb;
+  toc_roles jsonb;
+  toc_end jsonb;
+
+  eff_plan_mode text;
+  eff_teacher text;
+  eff_ta_name text;
+  eff_ta_role text;
+  eff_phone text;
+  eff_note text;
+  eff_attendance_note text;
+
+  publish_mode text;
+  tpl_adv jsonb;
+  ov_adv jsonb;
+  adv jsonb;
+  adv_out jsonb;
+  lesson_overview jsonb;
+
 begin
+  if not is_staff() then
+    return null;
+  end if;
+
   if plan_id is null then
     return null;
   end if;
@@ -783,7 +1145,6 @@ begin
   select * into p
   from day_plans
   where id = plan_id
-    and visibility = 'link'
     and trashed_at is null
   limit 1;
 
@@ -791,8 +1152,8 @@ begin
     return null;
   end if;
 
-  -- Only return the block that matches this plan's slot (e.g. Block F), not the entire day schedule.
-  -- We match via classes.block_label (joined by class_id).
+  -- Prefer matching via classes.block_label (joined by class_id), but fall back to parsing from class_name.
+  -- We support both "(Block X)" and "Block X" formats.
   select coalesce(
     jsonb_agg(
       jsonb_build_object(
@@ -803,7 +1164,11 @@ begin
         'class_name', b.class_name,
         'details', b.details,
         'class_id', b.class_id,
-        'block_label', c.block_label,
+        'block_label', coalesce(
+          c.block_label,
+          substring(b.class_name from '\\(Block ([^\\)]+)\\)'),
+          substring(b.class_name from 'Block\\s+([A-Za-z0-9]+)')
+        ),
         'students', (
           select coalesce(
             jsonb_agg(
@@ -825,8 +1190,336 @@ begin
   from day_plan_blocks b
   left join classes c on c.id = b.class_id
   where b.day_plan_id = p.id
-    and c.block_label is not null
-    and upper(c.block_label) = upper(p.slot);
+    and upper(coalesce(
+      c.block_label,
+      substring(b.class_name from '\\(Block ([^\\)]+)\\)'),
+      substring(b.class_name from 'Block\\s+([A-Za-z0-9]+)')
+    )) = upper(p.slot);
+
+  -- If we couldn't determine the primary block, fall back to returning all blocks.
+  if blocks is null or blocks = '[]'::jsonb then
+    select coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'id', b.id,
+          'start_time', b.start_time,
+          'end_time', b.end_time,
+          'room', b.room,
+          'class_name', b.class_name,
+          'details', b.details,
+          'class_id', b.class_id,
+          'block_label', coalesce(c.block_label, null),
+          'students', (
+            select coalesce(
+              jsonb_agg(
+                jsonb_build_object('id', s.id, 'first_name', s.first_name, 'last_name', s.last_name)
+                order by s.last_name, s.first_name
+              ),
+              '[]'::jsonb
+            )
+            from enrollments e
+            join students s on s.id = e.student_id
+            where e.class_id = b.class_id
+          )
+        )
+        order by b.start_time asc
+      ),
+      '[]'::jsonb
+    )
+    into blocks
+    from day_plan_blocks b
+    left join classes c on c.id = b.class_id
+    where b.day_plan_id = p.id;
+  end if;
+
+  -- Determine a primary day_plan_block_id for TOC content.
+  select b.id into primary_block_id
+  from day_plan_blocks b
+  left join classes c on c.id = b.class_id
+  where b.day_plan_id = p.id
+    and upper(coalesce(
+      c.block_label,
+      substring(b.class_name from '\\(Block ([^\\)]+)\\)'),
+      substring(b.class_name from 'Block\\s+([A-Za-z0-9]+)')
+    )) = upper(p.slot)
+  order by b.start_time asc
+  limit 1;
+
+  if primary_block_id is null then
+    select b.id into primary_block_id
+    from day_plan_blocks b
+    where b.day_plan_id = p.id
+    order by b.start_time asc
+    limit 1;
+  end if;
+
+  -- Load toc_block_plan + template (if any)
+  if primary_block_id is not null then
+    select * into tbp
+    from toc_block_plans
+    where day_plan_block_id = primary_block_id
+    limit 1;
+
+    if tbp.template_id is not null then
+      select * into tpl
+      from class_toc_templates
+      where id = tbp.template_id
+      limit 1;
+    else
+      tpl := null;
+    end if;
+
+    eff_plan_mode := coalesce(tbp.plan_mode, tpl.plan_mode, 'lesson_flow');
+    eff_teacher := coalesce(nullif(tbp.override_teacher_name, ''), tpl.teacher_name, '');
+    eff_ta_name := coalesce(nullif(tbp.override_ta_name, ''), tpl.ta_name, '');
+    eff_ta_role := coalesce(nullif(tbp.override_ta_role, ''), tpl.ta_role, '');
+    eff_phone := coalesce(nullif(tbp.override_phone_policy, ''), tpl.phone_policy, 'Not permitted');
+    eff_note := coalesce(nullif(tbp.override_note_to_toc, ''), tpl.note_to_toc, '');
+    eff_attendance_note := coalesce(nullif(tbp.override_attendance_note, ''), tpl.attendance_note, '');
+
+    publish_mode := coalesce(nullif((tbp.override_payload->>'publish_mode'), ''), 'toc');
+    tpl_adv := coalesce(tpl.advanced_payload, '{}'::jsonb);
+    ov_adv := coalesce(tbp.override_payload->'advanced', '{}'::jsonb);
+    adv := tpl_adv || ov_adv;
+
+    -- Child tables: use instance if it exists, otherwise template.
+    select exists(select 1 from toc_opening_routine_steps where toc_block_plan_id = tbp.id) into has_or;
+
+    -- Lesson flow can be overridden via JSON payload (new architecture) OR via legacy toc_lesson_flow_phases rows.
+    -- Treat an empty JSON array as "no override" so we don't hide the template by accident.
+    if tbp.override_payload is not null
+      and jsonb_typeof(tbp.override_payload->'lesson_flow_phases') = 'array'
+      and jsonb_array_length(tbp.override_payload->'lesson_flow_phases') > 0
+    then
+      has_lf := true;
+    else
+      select exists(select 1 from toc_lesson_flow_phases where toc_block_plan_id = tbp.id) into has_lf;
+    end if;
+    select exists(select 1 from toc_activity_options where toc_block_plan_id = tbp.id) into has_opt;
+    select exists(select 1 from toc_what_to_do_if_items where toc_block_plan_id = tbp.id) into has_wi;
+    select exists(select 1 from toc_overview_rows where toc_block_plan_id = tbp.id) into has_overview;
+    select exists(select 1 from toc_role_rows where toc_block_plan_id = tbp.id) into has_roles;
+    select exists(select 1 from toc_end_of_class_items where toc_block_plan_id = tbp.id) into has_end;
+
+    if has_or then
+      select coalesce(jsonb_agg(jsonb_build_object('step_text', s.step_text) order by s.sort_order asc), '[]'::jsonb)
+      into toc_opening
+      from toc_opening_routine_steps s
+      where s.toc_block_plan_id = tbp.id;
+    else
+      select coalesce(jsonb_agg(jsonb_build_object('step_text', s.step_text) order by s.sort_order asc), '[]'::jsonb)
+      into toc_opening
+      from class_opening_routine_steps s
+      where tpl.id is not null and s.template_id = tpl.id;
+    end if;
+
+    if has_lf then
+      if tbp.override_payload is not null
+        and jsonb_typeof(tbp.override_payload->'lesson_flow_phases') = 'array'
+        and jsonb_array_length(tbp.override_payload->'lesson_flow_phases') > 0
+      then
+        toc_lesson_flow := tbp.override_payload->'lesson_flow_phases';
+      else
+        select coalesce(
+          jsonb_agg(
+            jsonb_build_object(
+              'time_text', p2.time_text,
+              'phase_text', p2.phase_text,
+              'activity_text', p2.activity_text,
+              'purpose_text', p2.purpose_text
+            )
+            order by p2.sort_order asc
+          ),
+          '[]'::jsonb
+        )
+        into toc_lesson_flow
+        from toc_lesson_flow_phases p2
+        where p2.toc_block_plan_id = tbp.id;
+      end if;
+    else
+      select coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'time_text', p2.time_text,
+            'phase_text', p2.phase_text,
+            'activity_text', p2.activity_text,
+            'purpose_text', p2.purpose_text
+          )
+          order by p2.sort_order asc
+        ),
+        '[]'::jsonb
+      )
+      into toc_lesson_flow
+      from class_lesson_flow_phases p2
+      where tpl.id is not null and p2.template_id = tpl.id;
+    end if;
+
+    if has_opt then
+      select coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'title', o.title,
+            'description', o.description,
+            'details_text', o.details_text,
+            'toc_role_text', o.toc_role_text,
+            'steps', (
+              select coalesce(
+                jsonb_agg(jsonb_build_object('step_text', st.step_text) order by st.sort_order asc),
+                '[]'::jsonb
+              )
+              from toc_activity_option_steps st
+              where st.toc_activity_option_id = o.id
+            )
+          )
+          order by o.sort_order asc
+        ),
+        '[]'::jsonb
+      )
+      into toc_activity_options
+      from toc_activity_options o
+      where o.toc_block_plan_id = tbp.id;
+    else
+      select coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'title', o.title,
+            'description', o.description,
+            'details_text', o.details_text,
+            'toc_role_text', o.toc_role_text,
+            'steps', (
+              select coalesce(
+                jsonb_agg(jsonb_build_object('step_text', st.step_text) order by st.sort_order asc),
+                '[]'::jsonb
+              )
+              from class_activity_option_steps st
+              where st.activity_option_id = o.id
+            )
+          )
+          order by o.sort_order asc
+        ),
+        '[]'::jsonb
+      )
+      into toc_activity_options
+      from class_activity_options o
+      where tpl.id is not null and o.template_id = tpl.id;
+    end if;
+
+    if has_wi then
+      select coalesce(
+        jsonb_agg(
+          jsonb_build_object('scenario_text', w.scenario_text, 'response_text', w.response_text)
+          order by w.sort_order asc
+        ),
+        '[]'::jsonb
+      )
+      into toc_whatif
+      from toc_what_to_do_if_items w
+      where w.toc_block_plan_id = tbp.id;
+    else
+      select coalesce(
+        jsonb_agg(
+          jsonb_build_object('scenario_text', w.scenario_text, 'response_text', w.response_text)
+          order by w.sort_order asc
+        ),
+        '[]'::jsonb
+      )
+      into toc_whatif
+      from class_what_to_do_if_items w
+      where tpl.id is not null and w.template_id = tpl.id;
+    end if;
+
+    -- Overview (label/value)
+    if has_overview then
+      select coalesce(
+        jsonb_agg(jsonb_build_object('label', r.label, 'value', r.value) order by r.sort_order asc),
+        '[]'::jsonb
+      )
+      into toc_overview
+      from toc_overview_rows r
+      where r.toc_block_plan_id = tbp.id;
+    else
+      select coalesce(
+        jsonb_agg(jsonb_build_object('label', r.label, 'value', r.value) order by r.sort_order asc),
+        '[]'::jsonb
+      )
+      into toc_overview
+      from class_overview_rows r
+      where tpl.id is not null and r.template_id = tpl.id;
+    end if;
+
+    -- Roles (who/responsibility)
+    if has_roles then
+      select coalesce(
+        jsonb_agg(jsonb_build_object('who', r.who, 'responsibility', r.responsibility) order by r.sort_order asc),
+        '[]'::jsonb
+      )
+      into toc_roles
+      from toc_role_rows r
+      where r.toc_block_plan_id = tbp.id;
+    else
+      select coalesce(
+        jsonb_agg(jsonb_build_object('who', r.who, 'responsibility', r.responsibility) order by r.sort_order asc),
+        '[]'::jsonb
+      )
+      into toc_roles
+      from class_role_rows r
+      where tpl.id is not null and r.template_id = tpl.id;
+    end if;
+
+    -- End of class bullets
+    if has_end then
+      select coalesce(
+        jsonb_agg(jsonb_build_object('item_text', r.item_text) order by r.sort_order asc),
+        '[]'::jsonb
+      )
+      into toc_end
+      from toc_end_of_class_items r
+      where r.toc_block_plan_id = tbp.id;
+    else
+      select coalesce(
+        jsonb_agg(jsonb_build_object('item_text', r.item_text) order by r.sort_order asc),
+        '[]'::jsonb
+      )
+      into toc_end
+      from class_end_of_class_items r
+      where tpl.id is not null and r.template_id = tpl.id;
+    end if;
+  end if;
+
+  -- Materials Needed: always included (Standard + Advanced), hidden when empty.
+  if jsonb_typeof(adv->'materials_needed') = 'array' and jsonb_array_length(adv->'materials_needed') > 0 then
+    adv_out := adv_out || jsonb_build_object('materials_needed', adv->'materials_needed');
+  end if;
+
+  -- Advanced-only sections:
+  -- Include only when publish_mode='advanced', and hide blanks.
+
+  if publish_mode = 'advanced' then
+    lesson_overview := jsonb_strip_nulls(jsonb_build_object(
+      'central_theme', nullif(trim(coalesce(adv->>'central_theme','')), ''),
+      'deep_hope', nullif(trim(coalesce(adv->>'deep_hope','')), ''),
+      'big_idea', nullif(trim(coalesce(adv->>'big_idea','')), ''),
+      'learning_target', nullif(trim(coalesce(adv->>'learning_target','')), ''),
+      'collaborative_structure', nullif(trim(coalesce(adv->>'collaborative_structure','')), ''),
+      'context', nullif(trim(coalesce(adv->>'context','')), '')
+    ));
+
+    if lesson_overview is not null and lesson_overview <> '{}'::jsonb then
+      adv_out := adv_out || jsonb_build_object('lesson_overview', lesson_overview);
+    end if;
+
+    if jsonb_typeof(adv->'assessment_touch_points') = 'array' and jsonb_array_length(adv->'assessment_touch_points') > 0 then
+      adv_out := adv_out || jsonb_build_object('assessment_touch_points', adv->'assessment_touch_points');
+    end if;
+
+    if jsonb_typeof(adv->'pd_goal_connections') = 'array' and jsonb_array_length(adv->'pd_goal_connections') > 0 then
+      adv_out := adv_out || jsonb_build_object('pd_goal_connections', adv->'pd_goal_connections');
+    end if;
+
+    if jsonb_typeof(adv->'first_peoples_principles') = 'array' and jsonb_array_length(adv->'first_peoples_principles') > 0 then
+      adv_out := adv_out || jsonb_build_object('first_peoples_principles', adv->'first_peoples_principles');
+    end if;
+  end if;
 
   return jsonb_build_object(
     'id', p.id,
@@ -835,11 +1528,588 @@ begin
     'friday_type', p.friday_type,
     'title', p.title,
     'notes', p.notes,
-    'blocks', blocks
+    'blocks', blocks,
+    'toc', (
+      jsonb_build_object(
+        'plan_mode', coalesce(eff_plan_mode, 'lesson_flow'),
+        'teacher_name', coalesce(eff_teacher, ''),
+        'ta_name', coalesce(eff_ta_name, ''),
+        'ta_role', coalesce(eff_ta_role, ''),
+        'phone_policy', coalesce(eff_phone, 'Not permitted'),
+        'note_to_toc', coalesce(eff_note, ''),
+        'attendance_note', coalesce(eff_attendance_note, ''),
+        'class_overview_rows', coalesce(toc_overview, '[]'::jsonb),
+        'division_of_roles_rows', coalesce(toc_roles, '[]'::jsonb),
+        'opening_routine_steps', coalesce(toc_opening, '[]'::jsonb),
+        'lesson_flow_phases', coalesce(toc_lesson_flow, '[]'::jsonb),
+        'activity_options', coalesce(toc_activity_options, '[]'::jsonb),
+        'what_to_do_if_items', coalesce(toc_whatif, '[]'::jsonb),
+        'end_of_class_items', coalesce(toc_end, '[]'::jsonb)
+      )
+      || coalesce(adv_out, '{}'::jsonb)
+    )
   );
 end;
 $$;
 
+revoke all on function resolve_day_plan_payload(uuid) from public;
+grant execute on function resolve_day_plan_payload(uuid) to authenticated;
+
+-- Seed a TOC instance from its template (copy-once, staff only).
+create or replace function public.seed_toc_block_plan_from_template(p_toc_block_plan_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  tbp record;
+  tpl record;
+  tpl_adv jsonb;
+begin
+  if not is_staff() then
+    return;
+  end if;
+
+  select * into tbp
+  from toc_block_plans
+  where id = p_toc_block_plan_id
+  limit 1;
+
+  if not found then
+    return;
+  end if;
+
+  if tbp.seeded_at is not null then
+    return;
+  end if;
+
+  if tbp.template_id is null then
+    return;
+  end if;
+
+  select * into tpl
+  from class_toc_templates
+  where id = tbp.template_id
+  limit 1;
+
+  if not found then
+    return;
+  end if;
+
+  -- wipe existing instance rows
+  delete from toc_opening_routine_steps where toc_block_plan_id = tbp.id;
+  delete from toc_lesson_flow_phases where toc_block_plan_id = tbp.id;
+  delete from toc_activity_options where toc_block_plan_id = tbp.id;
+  delete from toc_what_to_do_if_items where toc_block_plan_id = tbp.id;
+  delete from toc_overview_rows where toc_block_plan_id = tbp.id;
+  delete from toc_role_rows where toc_block_plan_id = tbp.id;
+  delete from toc_end_of_class_items where toc_block_plan_id = tbp.id;
+
+  -- copy template -> instance
+  insert into toc_opening_routine_steps (toc_block_plan_id, sort_order, step_text, source_template_step_id)
+  select tbp.id, s.sort_order, s.step_text, s.id
+  from class_opening_routine_steps s
+  where s.template_id = tpl.id
+  order by s.sort_order;
+
+  insert into toc_lesson_flow_phases (toc_block_plan_id, sort_order, time_text, phase_text, activity_text, purpose_text, source_template_phase_id)
+  select tbp.id, p.sort_order, p.time_text, p.phase_text, p.activity_text, p.purpose_text, p.id
+  from class_lesson_flow_phases p
+  where p.template_id = tpl.id
+  order by p.sort_order;
+
+  -- activity options + steps
+  insert into toc_activity_options (toc_block_plan_id, sort_order, title, description, details_text, toc_role_text, source_template_option_id)
+  select tbp.id, o.sort_order, o.title, o.description, o.details_text, o.toc_role_text, o.id
+  from class_activity_options o
+  where o.template_id = tpl.id
+  order by o.sort_order;
+
+  insert into toc_activity_option_steps (toc_activity_option_id, sort_order, step_text, source_template_option_step_id)
+  select inst_opt.id, s.sort_order, s.step_text, s.id
+  from class_activity_option_steps s
+  join class_activity_options o on o.id = s.activity_option_id
+  join toc_activity_options inst_opt
+    on inst_opt.toc_block_plan_id = tbp.id
+   and inst_opt.source_template_option_id = o.id
+  where o.template_id = tpl.id
+  order by o.sort_order, s.sort_order;
+
+  insert into toc_what_to_do_if_items (toc_block_plan_id, sort_order, scenario_text, response_text, source_template_item_id)
+  select tbp.id, w.sort_order, w.scenario_text, w.response_text, w.id
+  from class_what_to_do_if_items w
+  where w.template_id = tpl.id
+  order by w.sort_order;
+
+  insert into toc_overview_rows (toc_block_plan_id, sort_order, label, value)
+  select tbp.id, r.sort_order, r.label, r.value
+  from class_overview_rows r
+  where r.template_id = tpl.id
+  order by r.sort_order;
+
+  insert into toc_role_rows (toc_block_plan_id, sort_order, who, responsibility)
+  select tbp.id, r.sort_order, r.who, r.responsibility
+  from class_role_rows r
+  where r.template_id = tpl.id
+  order by r.sort_order;
+
+  insert into toc_end_of_class_items (toc_block_plan_id, sort_order, item_text)
+  select tbp.id, r.sort_order, r.item_text
+  from class_end_of_class_items r
+  where r.template_id = tpl.id
+  order by r.sort_order;
+
+  tpl_adv := coalesce(tpl.advanced_payload, '{}'::jsonb);
+
+  update toc_block_plans
+  set seeded_at = now(),
+      -- Copy template header fields into the TOC instance so /p never needs to read templates.
+      override_teacher_name = coalesce(override_teacher_name, tpl.teacher_name),
+      override_ta_name = coalesce(override_ta_name, tpl.ta_name),
+      override_ta_role = coalesce(override_ta_role, tpl.ta_role),
+      override_phone_policy = coalesce(override_phone_policy, tpl.phone_policy),
+      override_note_to_toc = coalesce(override_note_to_toc, tpl.note_to_toc),
+      override_attendance_note = coalesce(override_attendance_note, tpl.attendance_note),
+      override_assessment_touch_point = coalesce(override_assessment_touch_point, tpl.assessment_touch_point),
+      plan_mode = coalesce(nullif(plan_mode,''), tpl.plan_mode),
+      override_payload = coalesce(override_payload, '{}'::jsonb)
+        || jsonb_build_object('publish_mode', coalesce(nullif((override_payload->>'publish_mode'), ''), 'toc'))
+        || jsonb_build_object('advanced', tpl_adv)
+  where id = tbp.id;
+end;
+$$;
+revoke all on function public.seed_toc_block_plan_from_template(uuid) from public;
+grant execute on function public.seed_toc_block_plan_from_template(uuid) to authenticated;
+
+-- Resolve + persist the public TOC payload for a given toc_block_plan.
+-- This is the materialized "live render" (template + overrides merged) that /p will read.
+create or replace function public.resolve_toc_block_plan_public_payload(p_toc_block_plan_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  tbp record;
+  tpl record;
+
+  has_or boolean;
+  has_lf boolean;
+  has_opt boolean;
+  has_wi boolean;
+  has_overview boolean;
+  has_roles boolean;
+  has_end boolean;
+
+  toc_opening jsonb;
+  toc_lesson_flow jsonb;
+  toc_activity_options jsonb;
+  toc_whatif jsonb;
+  toc_overview jsonb;
+  toc_roles jsonb;
+  toc_end jsonb;
+
+  eff_plan_mode text;
+  eff_teacher text;
+  eff_ta_name text;
+  eff_ta_role text;
+  eff_phone text;
+  eff_note text;
+  eff_attendance_note text;
+
+  publish_mode text;
+  tpl_adv jsonb;
+  ov_adv jsonb;
+  adv jsonb;
+  adv_out jsonb;
+  lesson_overview jsonb;
+  out_toc jsonb;
+
+begin
+  if not is_staff() then
+    return null;
+  end if;
+
+  if p_toc_block_plan_id is null then
+    return null;
+  end if;
+
+  select * into tbp
+  from toc_block_plans
+  where id = p_toc_block_plan_id
+  limit 1;
+
+  if not found then
+    return null;
+  end if;
+
+  if tbp.template_id is not null then
+    select * into tpl
+    from class_toc_templates
+    where id = tbp.template_id
+    limit 1;
+  else
+    tpl := null;
+  end if;
+
+  eff_plan_mode := coalesce(tbp.plan_mode, tpl.plan_mode, 'lesson_flow');
+  eff_teacher := coalesce(nullif(tbp.override_teacher_name, ''), tpl.teacher_name, '');
+  eff_ta_name := coalesce(nullif(tbp.override_ta_name, ''), tpl.ta_name, '');
+  eff_ta_role := coalesce(nullif(tbp.override_ta_role, ''), tpl.ta_role, '');
+  eff_phone := coalesce(nullif(tbp.override_phone_policy, ''), tpl.phone_policy, 'Not permitted');
+  eff_note := coalesce(nullif(tbp.override_note_to_toc, ''), tpl.note_to_toc, '');
+  eff_attendance_note := coalesce(nullif(tbp.override_attendance_note, ''), tpl.attendance_note, '');
+
+  publish_mode := coalesce(nullif((tbp.override_payload->>'publish_mode'), ''), 'toc');
+  tpl_adv := coalesce(tpl.advanced_payload, '{}'::jsonb);
+  ov_adv := coalesce(tbp.override_payload->'advanced', '{}'::jsonb);
+  adv := tpl_adv || ov_adv;
+
+  -- determine which sections have instance overrides
+  select exists(select 1 from toc_opening_routine_steps where toc_block_plan_id = tbp.id) into has_or;
+
+  if tbp.override_payload is not null
+    and jsonb_typeof(tbp.override_payload->'lesson_flow_phases') = 'array'
+    and jsonb_array_length(tbp.override_payload->'lesson_flow_phases') > 0
+  then
+    has_lf := true;
+  else
+    select exists(select 1 from toc_lesson_flow_phases where toc_block_plan_id = tbp.id) into has_lf;
+  end if;
+
+  select exists(select 1 from toc_activity_options where toc_block_plan_id = tbp.id) into has_opt;
+  select exists(select 1 from toc_what_to_do_if_items where toc_block_plan_id = tbp.id) into has_wi;
+  select exists(select 1 from toc_overview_rows where toc_block_plan_id = tbp.id) into has_overview;
+  select exists(select 1 from toc_role_rows where toc_block_plan_id = tbp.id) into has_roles;
+  select exists(select 1 from toc_end_of_class_items where toc_block_plan_id = tbp.id) into has_end;
+
+  -- Opening routine
+  if has_or then
+    select coalesce(jsonb_agg(jsonb_build_object('step_text', s.step_text) order by s.sort_order asc), '[]'::jsonb)
+    into toc_opening
+    from toc_opening_routine_steps s
+    where s.toc_block_plan_id = tbp.id;
+  else
+    select coalesce(jsonb_agg(jsonb_build_object('step_text', s.step_text) order by s.sort_order asc), '[]'::jsonb)
+    into toc_opening
+    from class_opening_routine_steps s
+    where tpl.id is not null and s.template_id = tpl.id;
+  end if;
+
+  -- Lesson flow
+  if has_lf then
+    if tbp.override_payload is not null
+      and jsonb_typeof(tbp.override_payload->'lesson_flow_phases') = 'array'
+      and jsonb_array_length(tbp.override_payload->'lesson_flow_phases') > 0
+    then
+      toc_lesson_flow := tbp.override_payload->'lesson_flow_phases';
+    else
+      select coalesce(
+        jsonb_agg(
+          jsonb_build_object('time_text', p2.time_text,'phase_text', p2.phase_text,'activity_text', p2.activity_text,'purpose_text', p2.purpose_text)
+          order by p2.sort_order asc
+        ),
+        '[]'::jsonb
+      )
+      into toc_lesson_flow
+      from toc_lesson_flow_phases p2
+      where p2.toc_block_plan_id = tbp.id;
+    end if;
+  else
+    select coalesce(
+      jsonb_agg(
+        jsonb_build_object('time_text', p2.time_text,'phase_text', p2.phase_text,'activity_text', p2.activity_text,'purpose_text', p2.purpose_text)
+        order by p2.sort_order asc
+      ),
+      '[]'::jsonb
+    )
+    into toc_lesson_flow
+    from class_lesson_flow_phases p2
+    where tpl.id is not null and p2.template_id = tpl.id;
+  end if;
+
+  -- Activity options
+  if has_opt then
+    select coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'title', o.title,
+          'description', o.description,
+          'details_text', o.details_text,
+          'toc_role_text', o.toc_role_text,
+          'steps', (
+            select coalesce(jsonb_agg(jsonb_build_object('step_text', st.step_text) order by st.sort_order asc), '[]'::jsonb)
+            from toc_activity_option_steps st
+            where st.toc_activity_option_id = o.id
+          )
+        )
+        order by o.sort_order asc
+      ),
+      '[]'::jsonb
+    )
+    into toc_activity_options
+    from toc_activity_options o
+    where o.toc_block_plan_id = tbp.id;
+  else
+    select coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'title', o.title,
+          'description', o.description,
+          'details_text', o.details_text,
+          'toc_role_text', o.toc_role_text,
+          'steps', (
+            select coalesce(jsonb_agg(jsonb_build_object('step_text', st.step_text) order by st.sort_order asc), '[]'::jsonb)
+            from class_activity_option_steps st
+            where st.activity_option_id = o.id
+          )
+        )
+        order by o.sort_order asc
+      ),
+      '[]'::jsonb
+    )
+    into toc_activity_options
+    from class_activity_options o
+    where tpl.id is not null and o.template_id = tpl.id;
+  end if;
+
+  -- What to do if
+  if has_wi then
+    select coalesce(
+      jsonb_agg(jsonb_build_object('scenario_text', w.scenario_text,'response_text', w.response_text) order by w.sort_order asc),
+      '[]'::jsonb
+    )
+    into toc_whatif
+    from toc_what_to_do_if_items w
+    where w.toc_block_plan_id = tbp.id;
+  else
+    select coalesce(
+      jsonb_agg(jsonb_build_object('scenario_text', w.scenario_text,'response_text', w.response_text) order by w.sort_order asc),
+      '[]'::jsonb
+    )
+    into toc_whatif
+    from class_what_to_do_if_items w
+    where tpl.id is not null and w.template_id = tpl.id;
+  end if;
+
+  -- Overview
+  if has_overview then
+    select coalesce(jsonb_agg(jsonb_build_object('label', r.label, 'value', r.value) order by r.sort_order asc), '[]'::jsonb)
+    into toc_overview
+    from toc_overview_rows r
+    where r.toc_block_plan_id = tbp.id;
+  else
+    select coalesce(jsonb_agg(jsonb_build_object('label', r.label, 'value', r.value) order by r.sort_order asc), '[]'::jsonb)
+    into toc_overview
+    from class_overview_rows r
+    where tpl.id is not null and r.template_id = tpl.id;
+  end if;
+
+  -- Roles
+  if has_roles then
+    select coalesce(jsonb_agg(jsonb_build_object('who', r.who, 'responsibility', r.responsibility) order by r.sort_order asc), '[]'::jsonb)
+    into toc_roles
+    from toc_role_rows r
+    where r.toc_block_plan_id = tbp.id;
+  else
+    select coalesce(jsonb_agg(jsonb_build_object('who', r.who, 'responsibility', r.responsibility) order by r.sort_order asc), '[]'::jsonb)
+    into toc_roles
+    from class_role_rows r
+    where tpl.id is not null and r.template_id = tpl.id;
+  end if;
+
+  -- End of class
+  if has_end then
+    select coalesce(jsonb_agg(jsonb_build_object('item_text', r.item_text) order by r.sort_order asc), '[]'::jsonb)
+    into toc_end
+    from toc_end_of_class_items r
+    where r.toc_block_plan_id = tbp.id;
+  else
+    select coalesce(jsonb_agg(jsonb_build_object('item_text', r.item_text) order by r.sort_order asc), '[]'::jsonb)
+    into toc_end
+    from class_end_of_class_items r
+    where tpl.id is not null and r.template_id = tpl.id;
+  end if;
+
+  -- Advanced output: materials always (if present), other sections only in advanced mode
+  adv_out := '{}'::jsonb;
+
+  if jsonb_typeof(adv->'materials_needed') = 'array' and jsonb_array_length(adv->'materials_needed') > 0 then
+    adv_out := adv_out || jsonb_build_object('materials_needed', adv->'materials_needed');
+  end if;
+
+  if publish_mode = 'advanced' then
+    lesson_overview := jsonb_strip_nulls(jsonb_build_object(
+      'central_theme', nullif(trim(coalesce(adv->>'central_theme','')), ''),
+      'deep_hope', nullif(trim(coalesce(adv->>'deep_hope','')), ''),
+      'big_idea', nullif(trim(coalesce(adv->>'big_idea','')), ''),
+      'learning_target', nullif(trim(coalesce(adv->>'learning_target','')), ''),
+      'collaborative_structure', nullif(trim(coalesce(adv->>'collaborative_structure','')), ''),
+      'context', nullif(trim(coalesce(adv->>'context','')), '')
+    ));
+
+    if lesson_overview is not null and lesson_overview <> '{}'::jsonb then
+      adv_out := adv_out || jsonb_build_object('lesson_overview', lesson_overview);
+    end if;
+
+    if jsonb_typeof(adv->'assessment_touch_points') = 'array' and jsonb_array_length(adv->'assessment_touch_points') > 0 then
+      adv_out := adv_out || jsonb_build_object('assessment_touch_points', adv->'assessment_touch_points');
+    end if;
+
+    if jsonb_typeof(adv->'pd_goal_connections') = 'array' and jsonb_array_length(adv->'pd_goal_connections') > 0 then
+      adv_out := adv_out || jsonb_build_object('pd_goal_connections', adv->'pd_goal_connections');
+    end if;
+
+    if jsonb_typeof(adv->'first_peoples_principles') = 'array' and jsonb_array_length(adv->'first_peoples_principles') > 0 then
+      adv_out := adv_out || jsonb_build_object('first_peoples_principles', adv->'first_peoples_principles');
+    end if;
+  end if;
+
+  out_toc := jsonb_build_object(
+    'plan_mode', coalesce(eff_plan_mode,'lesson_flow'),
+    'teacher_name', coalesce(eff_teacher,''),
+    'ta_name', coalesce(eff_ta_name,''),
+    'ta_role', coalesce(eff_ta_role,''),
+    'phone_policy', coalesce(eff_phone,'Not permitted'),
+    'note_to_toc', coalesce(eff_note,''),
+    'attendance_note', coalesce(eff_attendance_note,''),
+    'class_overview_rows', coalesce(toc_overview,'[]'::jsonb),
+    'division_of_roles_rows', coalesce(toc_roles,'[]'::jsonb),
+    'opening_routine_steps', coalesce(toc_opening,'[]'::jsonb),
+    'lesson_flow_phases', coalesce(toc_lesson_flow,'[]'::jsonb),
+    'activity_options', coalesce(toc_activity_options,'[]'::jsonb),
+    'what_to_do_if_items', coalesce(toc_whatif,'[]'::jsonb),
+    'end_of_class_items', coalesce(toc_end,'[]'::jsonb)
+  ) || coalesce(adv_out,'{}'::jsonb);
+
+  update toc_block_plans
+  set public_payload = out_toc,
+      public_updated_at = now()
+  where id = tbp.id;
+
+  return out_toc;
+end;
+$$;
+revoke all on function public.resolve_toc_block_plan_public_payload(uuid) from public;
+grant execute on function public.resolve_toc_block_plan_public_payload(uuid) to authenticated;
+
+-- Public dayplan payload for /p built from the materialized toc_block_plans.public_payload.
+create or replace function public.get_public_day_plan_from_toc(plan_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  p record;
+  blocks jsonb;
+  primary_block_id uuid;
+  tbp record;
+begin
+  if plan_id is null then
+    return null;
+  end if;
+
+  select * into p
+  from day_plans
+  where id = plan_id
+    and visibility = 'link'
+    and trashed_at is null
+  limit 1;
+
+  if not found then
+    return null;
+  end if;
+
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'id', b.id,
+        'start_time', b.start_time,
+        'end_time', b.end_time,
+        'room', b.room,
+        'class_name', b.class_name,
+        'details', b.details,
+        'class_id', b.class_id
+      )
+      order by b.start_time asc
+    ),
+    '[]'::jsonb
+  )
+  into blocks
+  from day_plan_blocks b
+  where b.day_plan_id = p.id;
+
+  select b.id into primary_block_id
+  from day_plan_blocks b
+  where b.day_plan_id = p.id
+  order by b.start_time asc
+  limit 1;
+
+  select * into tbp
+  from toc_block_plans
+  where day_plan_block_id = primary_block_id
+  limit 1;
+
+  if not found then
+    return jsonb_build_object(
+      'id', p.id,
+      'plan_date', p.plan_date,
+      'slot', p.slot,
+      'friday_type', p.friday_type,
+      'title', p.title,
+      'notes', p.notes,
+      'blocks', blocks
+    );
+  end if;
+
+  return jsonb_build_object(
+    'id', p.id,
+    'plan_date', p.plan_date,
+    'slot', p.slot,
+    'friday_type', p.friday_type,
+    'title', p.title,
+    'notes', p.notes,
+    'blocks', blocks,
+    'toc', tbp.public_payload
+  );
+end;
+$$;
+revoke all on function public.get_public_day_plan_from_toc(uuid) from public;
+grant execute on function public.get_public_day_plan_from_toc(uuid) to anon;
+
+-- Legacy public dayplan payload (by day_plans.id)
+-- Reads the published snapshot only (no template access).
+create or replace function get_public_day_plan_by_id(plan_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  p record;
+begin
+  if plan_id is null then
+    return null;
+  end if;
+
+  select id, published_payload
+  into p
+  from day_plans
+  where id = plan_id
+    and visibility = 'link'
+    and trashed_at is null
+    and published_payload is not null
+  limit 1;
+
+  if not found then
+    return null;
+  end if;
+
+  return p.published_payload;
+end;
+$$;
 revoke all on function get_public_day_plan_by_id(uuid) from public;
 grant execute on function get_public_day_plan_by_id(uuid) to anon;
 
@@ -903,7 +2173,14 @@ begin
   from day_plans p
   where p.visibility = 'link'
     and p.trashed_at is null
-    and p.plan_date between ws and we;
+    and p.plan_date between ws and we
+    and exists (
+      select 1
+      from day_plan_blocks b
+      join toc_block_plans tbp on tbp.day_plan_block_id = b.id
+      where b.day_plan_id = p.id
+        and tbp.public_payload is not null
+    );
 
   return plans;
 end;
@@ -914,24 +2191,32 @@ grant execute on function get_public_plans_for_week(date) to anon;
 
 -- learning_standards
 drop policy if exists "learning_standards_staff_all" on learning_standards;
+drop policy if exists "learning_standards_staff_select" on learning_standards;
 create policy "learning_standards_staff_select" on learning_standards
 for select using (is_staff());
+drop policy if exists "learning_standards_staff_insert" on learning_standards;
 create policy "learning_standards_staff_insert" on learning_standards
 for insert with check (can_write());
+drop policy if exists "learning_standards_staff_update" on learning_standards;
 create policy "learning_standards_staff_update" on learning_standards
 for update using (can_write()) with check (can_write());
+drop policy if exists "learning_standards_staff_delete" on learning_standards;
 create policy "learning_standards_staff_delete" on learning_standards
 for delete using (can_write());
 
--- learning_standard_levels
-drop policy if exists "learning_standard_levels_staff_all" on learning_standard_levels;
-create policy "learning_standard_levels_staff_select" on learning_standard_levels
+-- learning_standard_rubrics
+drop policy if exists "learning_standard_rubrics_staff_all" on learning_standard_rubrics;
+drop policy if exists "learning_standard_rubrics_staff_select" on learning_standard_rubrics;
+create policy "learning_standard_rubrics_staff_select" on learning_standard_rubrics
 for select using (is_staff());
-create policy "learning_standard_levels_staff_insert" on learning_standard_levels
+drop policy if exists "learning_standard_rubrics_staff_insert" on learning_standard_rubrics;
+create policy "learning_standard_rubrics_staff_insert" on learning_standard_rubrics
 for insert with check (can_write());
-create policy "learning_standard_levels_staff_update" on learning_standard_levels
+drop policy if exists "learning_standard_rubrics_staff_update" on learning_standard_rubrics;
+create policy "learning_standard_rubrics_staff_update" on learning_standard_rubrics
 for update using (can_write()) with check (can_write());
-create policy "learning_standard_levels_staff_delete" on learning_standard_levels
+drop policy if exists "learning_standard_rubrics_staff_delete" on learning_standard_rubrics;
+create policy "learning_standard_rubrics_staff_delete" on learning_standard_rubrics
 for delete using (can_write());
 
 -- PUBLIC ACCESS NOTE:

@@ -27,7 +27,9 @@ export default function RcsBanner(props: {
 
           <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
             {props.rightSlot}
-            <img src="/rcs-wordmark.png" alt="RCS" style={{ ...styles.logo, height: logoHeight }} />
+            <a href="https://myrcs.ca" style={styles.logoLink} aria-label="Open myrcs.ca">
+              <img src="/rcs-wordmark.png" alt="RCS" style={{ ...styles.logo, height: logoHeight }} />
+            </a>
           </div>
         </div>
       </div>
@@ -39,6 +41,7 @@ const styles: Record<string, React.CSSProperties> = {
   banner: { background: RCS.deepNavy, borderBottom: `4px solid ${RCS.gold}`, padding: '22px 24px' },
   inner: { margin: '0 auto' },
   row: { display: 'flex', gap: 14, alignItems: 'center', justifyContent: 'space-between' },
+  logoLink: { display: 'inline-block' },
   logo: { width: 'auto', display: 'block' },
   schoolName: { color: RCS.gold, fontWeight: 900, letterSpacing: 0.2, marginBottom: 6 },
   appName: { color: RCS.white, fontWeight: 900, fontSize: 28 },
