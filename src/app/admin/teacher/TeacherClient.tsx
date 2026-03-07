@@ -35,10 +35,11 @@ export default function TeacherClient() {
   const [subject, setSubject] = useState('');
   const [grade, setGrade] = useState('');
   const [classSize, setClassSize] = useState('');
+  const [unitStage, setUnitStage] = useState('');
+  const [classesRows, setClassesRows] = useState<any[]>([]);
   const [diversity, setDiversity] = useState('');
   const [standards, setStandards] = useState('');
   const [unitTopic, setUnitTopic] = useState('');
-  const [unitStage, setUnitStage] = useState('');
   const [tools, setTools] = useState('');
   const [notWorked, setNotWorked] = useState('');
 
@@ -56,15 +57,16 @@ export default function TeacherClient() {
 
   const blockOptions = useMemo(() => {
     const plansByDate = (weekPlans?.plans ?? {}) as Record<string, any[]>;
-    const out: Array<{ key: string; label: string; plan_date: string; slot: string; class_name: string; room: string; plan_id: string; block_id: string }> = [];
+    const out: Array<{ key: string; label: string; plan_date: string; slot: string; class_name: string; room: string; plan_id: string; block_id: string; class_id: string | null }> = [];
     for (const [date, plans] of Object.entries(plansByDate)) {
       for (const p of plans || []) {
         for (const b of p.day_plan_blocks || []) {
           const planId = String((p as any).id);
           const blockId = String((b as any).id);
+          const classId = (b as any)?.class_id ? String((b as any).class_id) : null;
           const key = `${planId}:${blockId}`;
           const label = `${date} • Block ${p.slot} • ${b.class_name || '—'}${b.room ? ` (${b.room})` : ''}`;
-          out.push({ key, label, plan_date: date, slot: p.slot, class_name: b.class_name || '', room: b.room || '', plan_id: planId, block_id: blockId });
+          out.push({ key, label, plan_date: date, slot: p.slot, class_name: b.class_name || '', room: b.room || '', plan_id: planId, block_id: blockId, class_id: classId });
         }
       }
     }
@@ -96,11 +98,38 @@ export default function TeacherClient() {
   }, [weekDate]);
 
   useEffect(() => {
+    // Fetch classes (for grade dropdown, etc.)
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/admin/classes');
+        const j = await res.json();
+        if (!res.ok) return;
+        if (!cancelled) setClassesRows(Array.isArray(j?.rows) ? j.rows : []);
+      } catch {
+        // ignore
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const selectedClass = useMemo(() => {
+    if (!selectedBlock?.class_id) return null;
+    return classesRows.find((c: any) => String(c.id) === String(selectedBlock.class_id)) ?? null;
+  }, [selectedBlock, classesRows]);
+
+  useEffect(() => {
     // When a block is selected, auto-fill some context fields.
     if (!selectedBlock) return;
     if (!subject.trim()) setSubject(selectedBlock.class_name);
-    if (!tools.trim()) setTools('');
-  }, [selectedBlock]);
+
+    const g = (selectedClass as any)?.grade_level;
+    if (!grade.trim() && (typeof g === 'number' || typeof g === 'string') && String(g).trim()) {
+      setGrade(String(g));
+    }
+  }, [selectedBlock, selectedClass]);
 
   const section1 = useMemo(
     () =>
@@ -170,13 +199,61 @@ export default function TeacherClient() {
         <div style={{ fontWeight: 900, marginBottom: 10 }}>Section 1 — Teaching context</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10 }}>
           <Field label="Subject / Course" value={subject} setValue={setSubject} placeholder={selectedBlock?.class_name ? selectedBlock.class_name : 'e.g., ADST'} />
-          <Field label="Year/Grade" value={grade} setValue={setGrade} placeholder="e.g., Grade 7" />
+
+          <label style={{ display: 'grid', gap: 6 }}>
+            <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.8 }}>Year/Grade</div>
+            <select
+              value={grade}
+              onChange={async (e) => {
+                const v = e.target.value;
+                setGrade(v);
+                // Persist to class record when possible.
+                if (selectedClass?.id) {
+                  const n = v ? Number(v) : null;
+                  await fetch('/api/admin/classes', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: selectedClass.id, grade_level: Number.isFinite(n as any) ? n : null }),
+                  }).catch(() => null);
+                }
+              }}
+              style={styles.input}
+            >
+              <option value="">—</option>
+              {Array.from({ length: 13 }).map((_, i) => (
+                <option key={i} value={i === 0 ? '' : String(i)}>
+                  {i === 0 ? '—' : `Grade ${i}`}
+                </option>
+              ))}
+            </select>
+          </label>
           <Field label="Class size" value={classSize} setValue={setClassSize} placeholder="e.g., 28" />
           <Field label="Learner diversity" value={diversity} setValue={setDiversity} placeholder="e.g., EAL, IEP, mixed prior knowledge" />
           <Field label="Standards" value={standards} setValue={setStandards} placeholder="e.g., ADST — Define / Ideate" />
           <Field label="Unit topic" value={unitTopic} setValue={setUnitTopic} placeholder="e.g., Design thinking" />
-          <Field label="Unit stage" value={unitStage} setValue={setUnitStage} placeholder="e.g., mid-unit" />
-          <Field label="Tools/platforms" value={tools} setValue={setTools} placeholder="e.g., no devices" />
+          <label style={{ display: 'grid', gap: 6 }}>
+            <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.8 }}>Unit stage</div>
+            <select value={unitStage} onChange={(e) => setUnitStage(e.target.value)} style={styles.input}>
+              <option value="">—</option>
+              <option value="beginning">beginning</option>
+              <option value="mid-unit">mid-unit</option>
+              <option value="end of unit">end of unit</option>
+            </select>
+          </label>
+
+          <label style={{ display: 'grid', gap: 6 }}>
+            <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.8 }}>Tools/platforms</div>
+            <select value={tools} onChange={(e) => setTools(e.target.value)} style={styles.input}>
+              <option value="">—</option>
+              <option value="no devices">no devices</option>
+              <option value="Chromebooks">Chromebooks</option>
+              <option value="iPads">iPads</option>
+              <option value="maker supplies">maker supplies</option>
+              <option value="projector">projector</option>
+              <option value="whiteboard">whiteboard</option>
+              <option value="other">other (edit in Task/Constraints)</option>
+            </select>
+          </label>
           <Field label="Hasn't worked well" value={notWorked} setValue={setNotWorked} placeholder="e.g., long lectures" />
         </div>
       </section>

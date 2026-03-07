@@ -84,6 +84,7 @@ create table if not exists classes (
   room text,
   sort_order int,
   block_label text,
+  grade_level int,
   created_at timestamptz not null default now()
 );
 
@@ -116,6 +117,9 @@ alter table classes
 
 alter table classes
   add column if not exists block_label text;
+
+alter table classes
+  add column if not exists grade_level int;
 
 create index if not exists classes_sort_order_idx on classes(sort_order);
 create index if not exists classes_block_label_idx on classes(block_label);
