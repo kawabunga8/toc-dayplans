@@ -12,7 +12,20 @@ export const geminiProvider: AIProvider = {
 
     const ai = new GoogleGenAI({ apiKey });
 
-    try {
+    const isRateLimit = (err: any) => {
+      const msg = String(err?.message ?? err ?? '');
+      const lower = msg.toLowerCase();
+      return (
+        msg.includes('429') ||
+        lower.includes('rate limit') ||
+        lower.includes('rate-limited') ||
+        lower.includes('resource_exhausted')
+      );
+    };
+
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+    const runOnce = async () => {
       const response: any = await ai.models.generateContent({
         model,
         // SDK accepts string or structured contents depending on version.
@@ -23,11 +36,22 @@ export const geminiProvider: AIProvider = {
       const text = String((response as any)?.text ?? '').trim();
       if (!text) throw new Error('Gemini returned empty response');
       return { text };
+    };
+
+    try {
+      return await runOnce();
     } catch (e: any) {
-      const msg = String(e?.message ?? e);
-      // Basic 429 handling
-      if (msg.includes('429') || msg.toLowerCase().includes('rate')) {
-        throw new Error('Rate limited by Gemini. Please retry in a moment.');
+      if (isRateLimit(e)) {
+        // Auto-retry once with a small backoff.
+        await sleep(1500);
+        try {
+          return await runOnce();
+        } catch (e2: any) {
+          if (isRateLimit(e2)) {
+            throw new Error('Rate limited by Gemini. Please retry in a moment.');
+          }
+          throw e2;
+        }
       }
       throw e;
     }
