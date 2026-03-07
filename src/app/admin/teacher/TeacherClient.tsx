@@ -47,19 +47,24 @@ export default function TeacherClient() {
 
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [okMsg, setOkMsg] = useState<string | null>(null);
   const [phases, setPhases] = useState<Phase[] | null>(null);
+  const [applyLoading, setApplyLoading] = useState(false);
+  const [applyErr, setApplyErr] = useState<string | null>(null);
 
   const role = useMemo(() => TEACHER_ROLES.find((r) => r.id === roleId)!, [roleId]);
 
   const blockOptions = useMemo(() => {
     const plansByDate = (weekPlans?.plans ?? {}) as Record<string, any[]>;
-    const out: Array<{ key: string; label: string; plan_date: string; slot: string; class_name: string; room: string }> = [];
+    const out: Array<{ key: string; label: string; plan_date: string; slot: string; class_name: string; room: string; plan_id: string; block_id: string }> = [];
     for (const [date, plans] of Object.entries(plansByDate)) {
       for (const p of plans || []) {
         for (const b of p.day_plan_blocks || []) {
-          const key = `${p.id}:${b.id}`;
+          const planId = String((p as any).id);
+          const blockId = String((b as any).id);
+          const key = `${planId}:${blockId}`;
           const label = `${date} • Block ${p.slot} • ${b.class_name || '—'}${b.room ? ` (${b.room})` : ''}`;
-          out.push({ key, label, plan_date: date, slot: p.slot, class_name: b.class_name || '', room: b.room || '' });
+          out.push({ key, label, plan_date: date, slot: p.slot, class_name: b.class_name || '', room: b.room || '', plan_id: planId, block_id: blockId });
         }
       }
     }
@@ -219,6 +224,8 @@ export default function TeacherClient() {
             onClick={async () => {
               setLoading(true);
               setErr(null);
+              setOkMsg(null);
+              setApplyErr(null);
               setPhases(null);
               try {
                 const res = await fetch('/api/ai/suggest', {
@@ -284,9 +291,52 @@ export default function TeacherClient() {
               Copy phases JSON
             </button>
           ) : null}
+
+          {phases && selectedBlock ? (
+            <button
+              type="button"
+              disabled={applyLoading}
+              onClick={async () => {
+                setApplyLoading(true);
+                setApplyErr(null);
+                setOkMsg(null);
+                try {
+                  const res = await fetch(`/api/admin/dayplans/blocks/${encodeURIComponent(selectedBlock.block_id)}/lesson-flow/append`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phases }),
+                  });
+
+                  let j: any = null;
+                  let rawText: string | null = null;
+                  try {
+                    j = await res.json();
+                  } catch {
+                    rawText = await res.text().catch(() => null);
+                  }
+
+                  if (!res.ok) {
+                    const msg = j?.error || rawText || `Apply failed (${res.status})`;
+                    throw new Error(String(msg));
+                  }
+
+                  setOkMsg(`Applied: appended ${j?.appended ?? '?'} phase(s) to ${selectedBlock.plan_date} block ${selectedBlock.slot} (${selectedBlock.class_name}).`);
+                } catch (e: any) {
+                  setApplyErr(e?.message ?? 'Apply failed');
+                } finally {
+                  setApplyLoading(false);
+                }
+              }}
+              style={styles.primaryBtn}
+            >
+              {applyLoading ? 'Applying…' : 'Apply to selected dayplan (append)'}
+            </button>
+          ) : null}
         </div>
 
         {err ? <div style={{ marginTop: 10, color: '#B00020', fontWeight: 800 }}>{err}</div> : null}
+        {applyErr ? <div style={{ marginTop: 10, color: '#B00020', fontWeight: 800 }}>{applyErr}</div> : null}
+        {okMsg ? <div style={{ marginTop: 10, color: '#2D6A4F', fontWeight: 900 }}>{okMsg}</div> : null}
 
         {phases ? (
           <div style={{ marginTop: 12, border: `1px solid ${RCS.gold}`, borderRadius: 12, padding: 12, background: '#fffdf2' }}>
