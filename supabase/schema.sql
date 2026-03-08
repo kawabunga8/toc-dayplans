@@ -2045,11 +2045,27 @@ begin
   from day_plan_blocks b
   where b.day_plan_id = p.id;
 
+  -- Choose the primary block for this day plan using the plan's slot (Block A/B/...).
+  -- Prefer classes.block_label when class_id is set; fall back to parsing from class_name.
   select b.id into primary_block_id
   from day_plan_blocks b
+  left join classes c on c.id = b.class_id
   where b.day_plan_id = p.id
+    and upper(coalesce(
+      c.block_label,
+      substring(b.class_name from '\\(Block ([^\\)]+)\\)'),
+      substring(b.class_name from 'Block\\s+([A-Za-z0-9]+)')
+    )) = upper(p.slot)
   order by b.start_time asc
   limit 1;
+
+  if primary_block_id is null then
+    select b.id into primary_block_id
+    from day_plan_blocks b
+    where b.day_plan_id = p.id
+    order by b.start_time asc
+    limit 1;
+  end if;
 
   select * into tbp
   from toc_block_plans
