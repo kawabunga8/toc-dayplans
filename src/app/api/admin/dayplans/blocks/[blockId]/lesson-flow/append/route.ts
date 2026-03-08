@@ -120,6 +120,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ blockId: strin
     );
   }
 
+  // Materialize the public payload so /p updates immediately.
+  // IMPORTANT: must use the cookie-bound client so is_staff() passes.
+  const { error: pubErr } = await supabase.rpc('resolve_toc_block_plan_public_payload', {
+    p_toc_block_plan_id: tocBlockPlanId,
+  });
+  if (pubErr) {
+    return NextResponse.json({ error: `Failed to resolve public payload: ${pubErr.message}` }, { status: 400 });
+  }
+
   // Keep legacy table empty (editor/public rely on JSON override)
   await adminDb.from('toc_lesson_flow_phases').delete().eq('toc_block_plan_id', tocBlockPlanId);
 
