@@ -103,14 +103,30 @@ export async function POST(req: Request, ctx: { params: Promise<{ blockId: strin
     lesson_flow_phases: [...existingPhases, ...cleaned],
   };
 
-  const { error: saveErr } = await adminDb
+  const { data: saved, error: saveErr } = await adminDb
     .from('toc_block_plans')
     .update({ plan_mode: 'lesson_flow', override_payload: nextPayload, updated_at: now })
-    .eq('id', tocBlockPlanId);
+    .eq('id', tocBlockPlanId)
+    .select('override_payload')
+    .maybeSingle();
   if (saveErr) return NextResponse.json({ error: saveErr.message }, { status: 400 });
+
+  const persisted = (saved as any)?.override_payload ?? null;
+  const persistedPhases = Array.isArray((persisted as any)?.lesson_flow_phases) ? ((persisted as any).lesson_flow_phases as any[]) : null;
+  if (!persistedPhases) {
+    return NextResponse.json(
+      { error: 'override_payload did not persist (missing lesson_flow_phases). Check RLS / deployment version.' },
+      { status: 500 }
+    );
+  }
 
   // Keep legacy table empty (editor/public rely on JSON override)
   await adminDb.from('toc_lesson_flow_phases').delete().eq('toc_block_plan_id', tocBlockPlanId);
 
-  return NextResponse.json({ ok: true, toc_block_plan_id: tocBlockPlanId, appended: cleaned.length, total: (existingPhases.length + cleaned.length) });
+  return NextResponse.json({
+    ok: true,
+    toc_block_plan_id: tocBlockPlanId,
+    appended: cleaned.length,
+    total: persistedPhases.length,
+  });
 }
