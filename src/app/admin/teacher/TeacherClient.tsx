@@ -33,10 +33,11 @@ export default function TeacherClient() {
   const [selectedBlockKey, setSelectedBlockKey] = useState<string>('');
 
   const [subject, setSubject] = useState('');
-  const [grade, setGrade] = useState('');
+  const [grades, setGrades] = useState<number[]>([]);
   const [classSize, setClassSize] = useState('');
   const [unitStage, setUnitStage] = useState('');
   const [classesRows, setClassesRows] = useState<any[]>([]);
+  const [subjectTags, setSubjectTags] = useState<string[]>([]);
   const [diversity, setDiversity] = useState('');
   const [standards, setStandards] = useState('');
   const [standardsRows, setStandardsRows] = useState<any[]>([]);
@@ -115,10 +116,14 @@ export default function TeacherClient() {
     };
   }, [weekDate]);
 
-  const loadStandards = async () => {
+  const loadStandards = async (subjects?: string[]) => {
     setStandardsLoading(true);
     try {
-      const res = await fetch('/api/admin/learning-standards');
+      // If exactly one subject tag is present, ask the API to filter (less data).
+      const qs = new URLSearchParams();
+      if (subjects && subjects.length === 1) qs.set('subject', subjects[0]!);
+      const url = `/api/admin/learning-standards${qs.toString() ? `?${qs.toString()}` : ''}`;
+      const res = await fetch(url);
       const j = await res.json();
       if (!res.ok) return;
       setStandardsRows(Array.isArray(j?.rows) ? j.rows : []);
@@ -147,39 +152,69 @@ export default function TeacherClient() {
 
   useEffect(() => {
     // Load standards initially
-    loadStandards().catch(() => null);
+    loadStandards(subjectTags).catch(() => null);
 
     // Reload standards when returning to this tab (after editing Policies)
     const onFocus = () => {
-      loadStandards().catch(() => null);
+      loadStandards(subjectTags).catch(() => null);
     };
     window.addEventListener('focus', onFocus);
     return () => {
       window.removeEventListener('focus', onFocus);
     };
-  }, []);
+  }, [subjectTags]);
 
   const selectedClass = useMemo(() => {
     if (!selectedBlock?.class_id) return null;
     return classesRows.find((c: any) => String(c.id) === String(selectedBlock.class_id)) ?? null;
   }, [selectedBlock, classesRows]);
 
+  const parseTags = (text: string) => {
+    const s = String(text || '');
+    const tags = Array.from(s.matchAll(/#([A-Za-z]+|\d+)/g)).map((m) => String(m[1] ?? ''));
+    const subjects = tags
+      .filter((t) => /[A-Za-z]/.test(t))
+      .map((t) => t.toUpperCase())
+      .filter(Boolean);
+    const grades = tags
+      .filter((t) => /^\d+$/.test(t))
+      .map((t) => Number(t))
+      .filter((n) => Number.isFinite(n));
+    return { subjects: Array.from(new Set(subjects)), grades: Array.from(new Set(grades)).sort((a, b) => a - b) };
+  };
+
   useEffect(() => {
     // When a block is selected, auto-fill some context fields.
     if (!selectedBlock) return;
+
+    const { subjects: subjTags, grades: gradeTags } = parseTags(selectedBlock.class_name);
+    setSubjectTags(subjTags);
+
     if (!subject.trim()) setSubject(selectedBlock.class_name);
 
-    const g = (selectedClass as any)?.grade_level;
-    if (!grade.trim() && (typeof g === 'number' || typeof g === 'string') && String(g).trim()) {
-      setGrade(String(g));
+    if (grades.length === 0) {
+      // Prefer DB grade_level if user hasn't picked grades yet.
+      const g = (selectedClass as any)?.grade_level;
+      if ((typeof g === 'number' || typeof g === 'string') && String(g).trim()) {
+        const n = Number(g);
+        if (Number.isFinite(n)) setGrades([n]);
+      } else if (gradeTags.length) {
+        setGrades(gradeTags);
+      }
     }
   }, [selectedBlock, selectedClass]);
+
+  const gradeText = useMemo(() => {
+    if (!grades.length) return '';
+    if (grades.length === 1) return `Grade ${grades[0]}`;
+    return `Grades ${grades.join('/')}`;
+  }, [grades]);
 
   const section1 = useMemo(
     () =>
       buildSection1FromFields({
         subject: subject || selectedBlock?.class_name || '',
-        grade,
+        grade: gradeText,
         classSize,
         diversity,
         standards,
@@ -188,7 +223,7 @@ export default function TeacherClient() {
         tools,
         notWorked,
       }),
-    [subject, grade, classSize, diversity, standards, unitTopic, unitStage, tools, notWorked, selectedBlock]
+    [subject, gradeText, classSize, diversity, standards, unitTopic, unitStage, tools, notWorked, selectedBlock]
   );
 
   const fullPromptPreview = useMemo(() => {
@@ -244,32 +279,39 @@ export default function TeacherClient() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10 }}>
           <Field label="Subject / Course" value={subject} setValue={setSubject} placeholder={selectedBlock?.class_name ? selectedBlock.class_name : 'e.g., ADST'} />
 
-          <label style={{ display: 'grid', gap: 6 }}>
+          <label style={{ display: 'grid', gap: 6, minWidth: 0 }}>
             <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.8 }}>Year/Grade</div>
-            <select
-              value={grade}
-              onChange={async (e) => {
-                const v = e.target.value;
-                setGrade(v);
-                // Persist to class record when possible.
-                if (selectedClass?.id) {
-                  const n = v ? Number(v) : null;
-                  await fetch('/api/admin/classes', {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id: selectedClass.id, grade_level: Number.isFinite(n as any) ? n : null }),
-                  }).catch(() => null);
-                }
-              }}
-              style={styles.input}
-            >
-              <option value="">—</option>
-              {Array.from({ length: 13 }).map((_, i) => (
-                <option key={i} value={i === 0 ? '' : String(i)}>
-                  {i === 0 ? '—' : `Grade ${i}`}
-                </option>
-              ))}
-            </select>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+              {Array.from({ length: 13 }).map((_, i) => {
+                if (i === 0) return null;
+                const g = i;
+                const checked = grades.includes(g);
+                return (
+                  <label key={g} style={{ display: 'inline-flex', gap: 6, alignItems: 'center', fontSize: 12, opacity: 0.95 }}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={async () => {
+                        const next = checked ? grades.filter((x) => x !== g) : [...grades, g].sort((a, b) => a - b);
+                        setGrades(next);
+
+                        // Persist to class record only if exactly one grade is selected.
+                        if (selectedClass?.id) {
+                          const patchGrade = next.length === 1 ? next[0] : null;
+                          await fetch('/api/admin/classes', {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ id: selectedClass.id, grade_level: patchGrade }),
+                          }).catch(() => null);
+                        }
+                      }}
+                    />
+                    <span>{g}</span>
+                  </label>
+                );
+              })}
+              {grades.length ? <span style={{ fontSize: 12, opacity: 0.7 }}>Selected: {grades.join('/')}</span> : <span style={{ fontSize: 12, opacity: 0.7 }}>—</span>}
+            </div>
           </label>
           <Field label="Class size" value={classSize} setValue={setClassSize} placeholder="e.g., 28" />
           <Field label="Learner diversity" value={diversity} setValue={setDiversity} placeholder="e.g., EAL, IEP, mixed prior knowledge" />
@@ -296,7 +338,14 @@ export default function TeacherClient() {
             <select value={standards} onChange={(e) => setStandards(e.target.value)} style={styles.input}>
               <option value="">{standardsLoading ? 'Loading…' : '—'}</option>
               {(() => {
-                const rows = [...(standardsRows ?? [])];
+                let rows = [...(standardsRows ?? [])];
+
+                // Filter by detected subject tag(s) if present.
+                if (subjectTags.length) {
+                  const allow = new Set(subjectTags.map((s) => s.toUpperCase()));
+                  rows = rows.filter((r: any) => allow.has(String(r?.subject ?? '').toUpperCase()));
+                }
+
                 rows.sort((a: any, b: any) => {
                   const as = String(a?.subject ?? '');
                   const bs = String(b?.subject ?? '');
@@ -411,7 +460,7 @@ export default function TeacherClient() {
                     section: 'teacher_lesson_flow_phases',
                     input: {
                       role_id: roleId,
-                      section1_fields: { subject: subject || selectedBlock?.class_name || '', grade, class_size: classSize, diversity, standards, unit_topic: unitTopic, unit_stage: unitStage, tools, not_worked: notWorked },
+                      section1_fields: { subject: subject || selectedBlock?.class_name || '', grade: gradeText, class_size: classSize, diversity, standards, unit_topic: unitTopic, unit_stage: unitStage, tools, not_worked: notWorked },
                       task,
                       constraints,
                       plan_date: selectedBlock?.plan_date ?? null,
