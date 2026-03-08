@@ -273,8 +273,8 @@ export default function TeacherClient() {
           </label>
           <Field label="Class size" value={classSize} setValue={setClassSize} placeholder="e.g., 28" />
           <Field label="Learner diversity" value={diversity} setValue={setDiversity} placeholder="e.g., EAL, IEP, mixed prior knowledge" />
-          <label style={{ display: 'grid', gap: 6 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+          <label style={{ display: 'grid', gap: 6, minWidth: 0 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.8 }}>Standards</div>
               <button
                 type="button"
@@ -530,7 +530,7 @@ export default function TeacherClient() {
 
 function Field(props: { label: string; value: string; setValue: (v: string) => void; placeholder?: string }) {
   return (
-    <label style={{ display: 'grid', gap: 6 }}>
+    <label style={{ display: 'grid', gap: 6, minWidth: 0 }}>
       <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.8 }}>{props.label}</div>
       <input value={props.value} onChange={(e) => props.setValue(e.target.value)} style={styles.input} placeholder={props.placeholder} />
     </label>
@@ -538,8 +538,8 @@ function Field(props: { label: string; value: string; setValue: (v: string) => v
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  input: { padding: '10px 12px', borderRadius: 10, border: '1px solid rgba(0,0,0,0.2)', fontSize: 14 },
-  textarea: { padding: '10px 12px', borderRadius: 10, border: '1px solid rgba(0,0,0,0.2)', fontSize: 14, fontFamily: 'inherit' },
+  input: { width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10, border: '1px solid rgba(0,0,0,0.2)', fontSize: 14, minWidth: 0 },
+  textarea: { width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10, border: '1px solid rgba(0,0,0,0.2)', fontSize: 14, fontFamily: 'inherit', minWidth: 0 },
   primaryBtn: {
     padding: '10px 12px',
     borderRadius: 10,
