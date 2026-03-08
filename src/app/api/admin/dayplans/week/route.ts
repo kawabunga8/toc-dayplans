@@ -68,7 +68,10 @@ export async function GET(req: Request) {
     .from('day_plans')
     .select(
       `id, plan_date, slot, title, friday_type, trashed_at,
-       day_plan_blocks(id, start_time, end_time, room, class_name, class_id)`
+       day_plan_blocks(
+         id, start_time, end_time, room, class_name, class_id,
+         classes(id, block_label, name, grade_level)
+       )`
     )
     .gte('plan_date', mondayStr)
     .lte('plan_date', fridayStr)

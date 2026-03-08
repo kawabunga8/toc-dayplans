@@ -58,15 +58,31 @@ export default function TeacherClient() {
   const blockOptions = useMemo(() => {
     const plansByDate = (weekPlans?.plans ?? {}) as Record<string, any[]>;
     const out: Array<{ key: string; label: string; plan_date: string; slot: string; class_name: string; room: string; plan_id: string; block_id: string; class_id: string | null }> = [];
+    const norm = (s: string) => String(s || '').trim().toUpperCase();
+    const parseBlockLabel = (className: string) => {
+      const s = String(className || '');
+      const m1 = s.match(/\(Block\s+([^\)]+)\)/i);
+      if (m1?.[1]) return m1[1];
+      const m2 = s.match(/Block\s+([A-Za-z0-9]+)/i);
+      if (m2?.[1]) return m2[1];
+      return '';
+    };
+
     for (const [date, plans] of Object.entries(plansByDate)) {
       for (const p of plans || []) {
+        const slotLabel = norm((p as any).slot);
         for (const b of p.day_plan_blocks || []) {
           const planId = String((p as any).id);
           const blockId = String((b as any).id);
           const classId = (b as any)?.class_id ? String((b as any).class_id) : null;
+
+          const bLabel = norm((b as any)?.classes?.block_label || parseBlockLabel((b as any).class_name));
+          // Only show blocks that match the day plan's slot (prevents applying to a non-primary block).
+          if (slotLabel && bLabel && slotLabel !== bLabel) continue;
+
           const key = `${planId}:${blockId}`;
-          const label = `${date} • Block ${p.slot} • ${b.class_name || '—'}${b.room ? ` (${b.room})` : ''}`;
-          out.push({ key, label, plan_date: date, slot: p.slot, class_name: b.class_name || '', room: b.room || '', plan_id: planId, block_id: blockId, class_id: classId });
+          const label = `${date} • Block ${(p as any).slot} • ${b.class_name || '—'}${b.room ? ` (${b.room})` : ''}`;
+          out.push({ key, label, plan_date: date, slot: (p as any).slot, class_name: b.class_name || '', room: b.room || '', plan_id: planId, block_id: blockId, class_id: classId });
         }
       }
     }
