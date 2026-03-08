@@ -278,7 +278,7 @@ export default function TeacherClient() {
               <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.8 }}>Standards</div>
               <button
                 type="button"
-                onClick={() => window.open('/admin/policies', '_blank')}
+                onClick={() => window.location.href = '/admin/policies?return=/admin/teacher'}
                 style={{
                   padding: '6px 10px',
                   borderRadius: 10,
