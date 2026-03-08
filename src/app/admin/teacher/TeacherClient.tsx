@@ -295,14 +295,38 @@ export default function TeacherClient() {
             </div>
             <select value={standards} onChange={(e) => setStandards(e.target.value)} style={styles.input}>
               <option value="">{standardsLoading ? 'Loading…' : '—'}</option>
-              {standardsRows.map((s: any) => {
-                const label = `${s.subject || ''}${s.standard_key ? ` ${s.standard_key}` : ''} — ${s.standard_title || ''}`.trim();
-                return (
-                  <option key={s.id} value={label}>
-                    {label}
-                  </option>
-                );
-              })}
+              {(() => {
+                const rows = [...(standardsRows ?? [])];
+                rows.sort((a: any, b: any) => {
+                  const as = String(a?.subject ?? '');
+                  const bs = String(b?.subject ?? '');
+                  if (as !== bs) return as.localeCompare(bs);
+                  const at = String(a?.standard_title ?? '');
+                  const bt = String(b?.standard_title ?? '');
+                  return at.localeCompare(bt);
+                });
+
+                const bySubject = new Map<string, any[]>();
+                for (const r of rows) {
+                  const s = String(r?.subject ?? 'Other') || 'Other';
+                  const arr = bySubject.get(s) ?? [];
+                  arr.push(r);
+                  bySubject.set(s, arr);
+                }
+
+                return Array.from(bySubject.entries()).map(([subject, items]) => (
+                  <optgroup key={subject} label={subject}>
+                    {items.map((s: any) => {
+                      const label = `${s.subject || ''}${s.standard_key ? ` ${s.standard_key}` : ''} — ${s.standard_title || ''}`.trim();
+                      return (
+                        <option key={s.id} value={label}>
+                          {label}
+                        </option>
+                      );
+                    })}
+                  </optgroup>
+                ));
+              })()}
             </select>
           </label>
           <Field label="Unit topic" value={unitTopic} setValue={setUnitTopic} placeholder="e.g., Design thinking" />
