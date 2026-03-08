@@ -39,6 +39,8 @@ export default function TeacherClient() {
   const [classesRows, setClassesRows] = useState<any[]>([]);
   const [diversity, setDiversity] = useState('');
   const [standards, setStandards] = useState('');
+  const [standardsRows, setStandardsRows] = useState<any[]>([]);
+  const [standardsLoading, setStandardsLoading] = useState(false);
   const [unitTopic, setUnitTopic] = useState('');
   const [tools, setTools] = useState('');
   const [notWorked, setNotWorked] = useState('');
@@ -113,6 +115,18 @@ export default function TeacherClient() {
     };
   }, [weekDate]);
 
+  const loadStandards = async () => {
+    setStandardsLoading(true);
+    try {
+      const res = await fetch('/api/admin/learning-standards');
+      const j = await res.json();
+      if (!res.ok) return;
+      setStandardsRows(Array.isArray(j?.rows) ? j.rows : []);
+    } finally {
+      setStandardsLoading(false);
+    }
+  };
+
   useEffect(() => {
     // Fetch classes (for grade dropdown, etc.)
     let cancelled = false;
@@ -128,6 +142,20 @@ export default function TeacherClient() {
     })();
     return () => {
       cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    // Load standards initially
+    loadStandards().catch(() => null);
+
+    // Reload standards when returning to this tab (after editing Policies)
+    const onFocus = () => {
+      loadStandards().catch(() => null);
+    };
+    window.addEventListener('focus', onFocus);
+    return () => {
+      window.removeEventListener('focus', onFocus);
     };
   }, []);
 
@@ -245,7 +273,38 @@ export default function TeacherClient() {
           </label>
           <Field label="Class size" value={classSize} setValue={setClassSize} placeholder="e.g., 28" />
           <Field label="Learner diversity" value={diversity} setValue={setDiversity} placeholder="e.g., EAL, IEP, mixed prior knowledge" />
-          <Field label="Standards" value={standards} setValue={setStandards} placeholder="e.g., ADST — Define / Ideate" />
+          <label style={{ display: 'grid', gap: 6 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+              <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.8 }}>Standards</div>
+              <button
+                type="button"
+                onClick={() => window.open('/admin/policies', '_blank')}
+                style={{
+                  padding: '6px 10px',
+                  borderRadius: 10,
+                  border: `1px solid ${RCS.deepNavy}`,
+                  background: 'transparent',
+                  color: RCS.deepNavy,
+                  fontWeight: 900,
+                  cursor: 'pointer',
+                  fontSize: 12,
+                }}
+              >
+                Policies…
+              </button>
+            </div>
+            <select value={standards} onChange={(e) => setStandards(e.target.value)} style={styles.input}>
+              <option value="">{standardsLoading ? 'Loading…' : '—'}</option>
+              {standardsRows.map((s: any) => {
+                const label = `${s.subject || ''}${s.standard_key ? ` ${s.standard_key}` : ''} — ${s.standard_title || ''}`.trim();
+                return (
+                  <option key={s.id} value={label}>
+                    {label}
+                  </option>
+                );
+              })}
+            </select>
+          </label>
           <Field label="Unit topic" value={unitTopic} setValue={setUnitTopic} placeholder="e.g., Design thinking" />
           <label style={{ display: 'grid', gap: 6 }}>
             <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.8 }}>Unit stage</div>
