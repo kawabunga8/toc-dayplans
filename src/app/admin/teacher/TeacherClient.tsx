@@ -282,9 +282,7 @@ export default function TeacherClient() {
           <label style={{ display: 'grid', gap: 6, minWidth: 0 }}>
             <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.8 }}>Year/Grade</div>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-              {Array.from({ length: 13 }).map((_, i) => {
-                if (i === 0) return null;
-                const g = i;
+              {[9, 10, 11, 12].map((g) => {
                 const checked = grades.includes(g);
                 return (
                   <label key={g} style={{ display: 'inline-flex', gap: 6, alignItems: 'center', fontSize: 12, opacity: 0.95 }}>
