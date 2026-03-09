@@ -73,13 +73,28 @@ export default function TeacherClient() {
 
     const selectedDate = String(weekDate || '').trim();
 
+    // Mon–Thu: show only the one “day” block (A–D). Fri: show all blocks. Weekend: none.
+    let requiredSlot: string | null = null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(selectedDate)) {
+      const d = new Date(selectedDate + 'T00:00:00');
+      const dow = d.getDay(); // 0 Sun, 1 Mon, ... 5 Fri, 6 Sat
+      const map: Record<number, string> = { 1: 'A', 2: 'B', 3: 'C', 4: 'D' };
+      if (dow >= 1 && dow <= 4) requiredSlot = map[dow] || null;
+      if (dow === 0 || dow === 6) requiredSlot = '__NO_SCHOOL__';
+      // dow===5 => Friday => requiredSlot stays null (show all)
+    }
+
     for (const [date, plans] of Object.entries(plansByDate)) {
       // Filter the dropdown to only the selected date (within the loaded week).
       if (selectedDate && date !== selectedDate) continue;
 
       for (const p of plans || []) {
-        const slotLabel = norm((p as any).slot);
-        for (const b of p.day_plan_blocks || []) {
+        const slot = String((p as any).slot ?? '').trim();
+        if (requiredSlot && requiredSlot !== '__NO_SCHOOL__' && slot.toUpperCase() !== requiredSlot) continue;
+        if (requiredSlot === '__NO_SCHOOL__') continue;
+
+        const slotLabel = norm(slot);
+        for (const b of (p as any).day_plan_blocks || []) {
           const planId = String((p as any).id);
           const blockId = String((b as any).id);
           const classId = (b as any)?.class_id ? String((b as any).class_id) : null;
@@ -95,8 +110,8 @@ export default function TeacherClient() {
           const key = `${planId}:${blockId}`;
           const roomText = String(cls?.room ?? (b as any).room ?? '').trim();
           const classText = String(cls?.name ?? (b as any).class_name ?? '—').trim();
-          const label = `Block ${(p as any).slot} • ${classText}${roomText ? ` (${roomText})` : ''}`;
-          out.push({ key, label, plan_date: date, slot: (p as any).slot, class_name: b.class_name || '', room: b.room || '', plan_id: planId, block_id: blockId, class_id: classId });
+          const label = `Block ${slot} • ${classText}${roomText ? ` (${roomText})` : ''}`;
+          out.push({ key, label, plan_date: date, slot, class_name: (b as any).class_name || '', room: (b as any).room || '', plan_id: planId, block_id: blockId, class_id: classId });
         }
       }
     }
@@ -264,7 +279,7 @@ export default function TeacherClient() {
           <label style={{ display: 'grid', gap: 6 }}>
             <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.8 }}>Block (for selected date)</div>
             <select value={selectedBlockKey} onChange={(e) => setSelectedBlockKey(e.target.value)} style={styles.input}>
-              <option value="">{weekLoading ? 'Loading…' : blockOptions.length ? 'Select a block' : 'No blocks for this date'}</option>
+              <option value="">{weekLoading ? 'Loading…' : blockOptions.length ? 'Select a block' : 'No school / no blocks'}</option>
               {blockOptions.map((o) => (
                 <option key={o.key} value={o.key}>
                   {o.label}
@@ -279,6 +294,10 @@ export default function TeacherClient() {
         {selectedBlock ? (
           <div style={{ marginTop: 10, fontSize: 12, opacity: 0.9 }}>
             Using: <b>{selectedBlock.plan_date}</b> • <b>Block {selectedBlock.slot}</b> • <b>{selectedBlock.class_name}</b>
+          </div>
+        ) : blockOptions.length === 0 && weekDate ? (
+          <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>
+            No school (or no schedule loaded) for <b>{weekDate}</b>.
           </div>
         ) : (
           <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>Pick a block to auto-fill context (you can still edit fields below).</div>
