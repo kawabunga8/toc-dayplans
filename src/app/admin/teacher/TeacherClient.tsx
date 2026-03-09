@@ -32,6 +32,9 @@ export default function TeacherClient() {
   const [weekPlans, setWeekPlans] = useState<any>(null);
   const [selectedBlockKey, setSelectedBlockKey] = useState<string>('');
 
+  const [rotationSlots, setRotationSlots] = useState<string[] | null>(null);
+  const [rotationLoading, setRotationLoading] = useState(false);
+
   const [subject, setSubject] = useState('');
   const [grades, setGrades] = useState<number[]>([]);
   const [classSize, setClassSize] = useState('');
@@ -73,22 +76,9 @@ export default function TeacherClient() {
 
     const selectedDate = String(weekDate || '').trim();
 
-    // Weekday block sets: show all blocks that occur on that day.
-    // Mon: A-D, Tue: E-H, Wed: I-L, Thu: M-P, Fri: show all (often special).
-    let requiredSlots: string[] | null = null;
-    if (/^\d{4}-\d{2}-\d{2}$/.test(selectedDate)) {
-      const d = new Date(selectedDate + 'T00:00:00');
-      const dow = d.getDay(); // 0 Sun, 1 Mon, ... 5 Fri, 6 Sat
-      const map: Record<number, string[]> = {
-        1: ['A', 'B', 'C', 'D'],
-        2: ['E', 'F', 'G', 'H'],
-        3: ['I', 'J', 'K', 'L'],
-        4: ['M', 'N', 'O', 'P'],
-      };
-      if (dow >= 1 && dow <= 4) requiredSlots = map[dow] || null;
-      if (dow === 0 || dow === 6) requiredSlots = ['__NO_SCHOOL__'];
-      // dow===5 => Friday => requiredSlots stays null (show all)
-    }
+    // Use rotation data (same as other pages) to decide which slots exist on this date.
+    // null => unknown (loading/error), [] => no school, ['A','B',...] => allowed slots
+    const allowSlots = rotationSlots === null ? null : new Set((rotationSlots ?? []).map((s) => String(s).toUpperCase()));
 
     for (const [date, plans] of Object.entries(plansByDate)) {
       // Filter the dropdown to only the selected date (within the loaded week).
@@ -96,10 +86,10 @@ export default function TeacherClient() {
 
       for (const p of plans || []) {
         const slot = String((p as any).slot ?? '').trim();
-        if (requiredSlots && requiredSlots.length) {
-          if (requiredSlots[0] === '__NO_SCHOOL__') continue;
-          const allow = new Set(requiredSlots.map((s) => s.toUpperCase()));
-          if (!allow.has(slot.toUpperCase())) continue;
+        if (allowSlots) {
+          // rotationSlots=[] means "no school"
+          if (allowSlots.size === 0) continue;
+          if (!allowSlots.has(slot.toUpperCase())) continue;
         }
 
         const slotLabel = norm(slot);
@@ -125,7 +115,7 @@ export default function TeacherClient() {
       }
     }
     return out;
-  }, [weekPlans]);
+  }, [weekPlans, weekDate, rotationSlots]);
 
   const selectedBlock = useMemo(() => blockOptions.find((o) => o.key === selectedBlockKey) ?? null, [blockOptions, selectedBlockKey]);
 
@@ -150,6 +140,46 @@ export default function TeacherClient() {
       cancelled = true;
     };
   }, [weekDate]);
+
+  useEffect(() => {
+    // Fetch rotation slots for the selected date.
+    // This is the authoritative mapping of which blocks occur on that day.
+    let cancelled = false;
+    (async () => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(weekDate || '').trim())) {
+        setRotationSlots([]);
+        return;
+      }
+
+      setRotationLoading(true);
+      try {
+        const plansForDate = (weekPlans?.plans?.[weekDate] ?? []) as any[];
+        const fridayType = plansForDate?.[0]?.friday_type ?? null;
+
+        const qs = new URLSearchParams();
+        qs.set('date', weekDate);
+        if (fridayType) qs.set('friday_type', String(fridayType));
+
+        const res = await fetch(`/api/public/rotation?${qs.toString()}`);
+        const j = await res.json();
+        if (!res.ok) throw new Error(j?.error ?? 'Failed to load rotation');
+
+        const slots = Array.isArray(j?.blocks)
+          ? j.blocks.map((b: any) => String(b?.block_label ?? b?.block ?? b?.slot ?? '').trim()).filter(Boolean)
+          : [];
+
+        if (!cancelled) setRotationSlots(slots);
+      } catch {
+        if (!cancelled) setRotationSlots(null);
+      } finally {
+        if (!cancelled) setRotationLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [weekDate, weekPlans]);
 
   const loadStandards = async (subjects?: string[]) => {
     setStandardsLoading(true);
@@ -288,7 +318,9 @@ export default function TeacherClient() {
           <label style={{ display: 'grid', gap: 6 }}>
             <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.8 }}>Block (for selected date)</div>
             <select value={selectedBlockKey} onChange={(e) => setSelectedBlockKey(e.target.value)} style={styles.input}>
-              <option value="">{weekLoading ? 'Loading…' : blockOptions.length ? 'Select a block' : 'No school / no blocks'}</option>
+              <option value="">
+                {weekLoading || rotationLoading ? 'Loading…' : blockOptions.length ? 'Select a block' : rotationSlots && rotationSlots.length === 0 ? 'No school' : 'No blocks'}
+              </option>
               {blockOptions.map((o) => (
                 <option key={o.key} value={o.key}>
                   {o.label}
