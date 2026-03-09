@@ -70,7 +70,7 @@ export async function GET(req: Request) {
       `id, plan_date, slot, title, friday_type, trashed_at,
        day_plan_blocks(
          id, start_time, end_time, room, class_name, class_id,
-         classes(id, block_label, name, grade_level)
+         classes(id, block_label, name, room, grade_level)
        )`
     )
     .gte('plan_date', mondayStr)

@@ -84,12 +84,18 @@ export default function TeacherClient() {
           const blockId = String((b as any).id);
           const classId = (b as any)?.class_id ? String((b as any).class_id) : null;
 
-          const bLabel = norm((b as any)?.classes?.block_label || parseBlockLabel((b as any).class_name));
+          const cls = (b as any)?.classes ?? null;
+          // Prefer Courses/Rooms metadata; if missing, hide it from the dropdown.
+          const bLabel = norm(cls?.block_label || parseBlockLabel((b as any).class_name));
+          if (!bLabel) continue;
+
           // Only show blocks that match the day plan's slot (prevents applying to a non-primary block).
           if (slotLabel && bLabel && slotLabel !== bLabel) continue;
 
           const key = `${planId}:${blockId}`;
-          const label = `Block ${(p as any).slot} • ${b.class_name || '—'}${b.room ? ` (${b.room})` : ''}`;
+          const roomText = String(cls?.room ?? (b as any).room ?? '').trim();
+          const classText = String(cls?.name ?? (b as any).class_name ?? '—').trim();
+          const label = `Block ${(p as any).slot} • ${classText}${roomText ? ` (${roomText})` : ''}`;
           out.push({ key, label, plan_date: date, slot: (p as any).slot, class_name: b.class_name || '', room: b.room || '', plan_id: planId, block_id: blockId, class_id: classId });
         }
       }
