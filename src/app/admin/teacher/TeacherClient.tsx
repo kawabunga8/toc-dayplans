@@ -73,15 +73,21 @@ export default function TeacherClient() {
 
     const selectedDate = String(weekDate || '').trim();
 
-    // Mon–Thu: show only the one “day” block (A–D). Fri: show all blocks. Weekend: none.
-    let requiredSlot: string | null = null;
+    // Weekday block sets: show all blocks that occur on that day.
+    // Mon: A-D, Tue: E-H, Wed: I-L, Thu: M-P, Fri: show all (often special).
+    let requiredSlots: string[] | null = null;
     if (/^\d{4}-\d{2}-\d{2}$/.test(selectedDate)) {
       const d = new Date(selectedDate + 'T00:00:00');
       const dow = d.getDay(); // 0 Sun, 1 Mon, ... 5 Fri, 6 Sat
-      const map: Record<number, string> = { 1: 'A', 2: 'B', 3: 'C', 4: 'D' };
-      if (dow >= 1 && dow <= 4) requiredSlot = map[dow] || null;
-      if (dow === 0 || dow === 6) requiredSlot = '__NO_SCHOOL__';
-      // dow===5 => Friday => requiredSlot stays null (show all)
+      const map: Record<number, string[]> = {
+        1: ['A', 'B', 'C', 'D'],
+        2: ['E', 'F', 'G', 'H'],
+        3: ['I', 'J', 'K', 'L'],
+        4: ['M', 'N', 'O', 'P'],
+      };
+      if (dow >= 1 && dow <= 4) requiredSlots = map[dow] || null;
+      if (dow === 0 || dow === 6) requiredSlots = ['__NO_SCHOOL__'];
+      // dow===5 => Friday => requiredSlots stays null (show all)
     }
 
     for (const [date, plans] of Object.entries(plansByDate)) {
@@ -90,8 +96,11 @@ export default function TeacherClient() {
 
       for (const p of plans || []) {
         const slot = String((p as any).slot ?? '').trim();
-        if (requiredSlot && requiredSlot !== '__NO_SCHOOL__' && slot.toUpperCase() !== requiredSlot) continue;
-        if (requiredSlot === '__NO_SCHOOL__') continue;
+        if (requiredSlots && requiredSlots.length) {
+          if (requiredSlots[0] === '__NO_SCHOOL__') continue;
+          const allow = new Set(requiredSlots.map((s) => s.toUpperCase()));
+          if (!allow.has(slot.toUpperCase())) continue;
+        }
 
         const slotLabel = norm(slot);
         for (const b of (p as any).day_plan_blocks || []) {
