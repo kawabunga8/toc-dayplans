@@ -71,7 +71,12 @@ export default function TeacherClient() {
       return '';
     };
 
+    const selectedDate = String(weekDate || '').trim();
+
     for (const [date, plans] of Object.entries(plansByDate)) {
+      // Filter the dropdown to only the selected date (within the loaded week).
+      if (selectedDate && date !== selectedDate) continue;
+
       for (const p of plans || []) {
         const slotLabel = norm((p as any).slot);
         for (const b of p.day_plan_blocks || []) {
@@ -84,7 +89,7 @@ export default function TeacherClient() {
           if (slotLabel && bLabel && slotLabel !== bLabel) continue;
 
           const key = `${planId}:${blockId}`;
-          const label = `${date} • Block ${(p as any).slot} • ${b.class_name || '—'}${b.room ? ` (${b.room})` : ''}`;
+          const label = `Block ${(p as any).slot} • ${b.class_name || '—'}${b.room ? ` (${b.room})` : ''}`;
           out.push({ key, label, plan_date: date, slot: (p as any).slot, class_name: b.class_name || '', room: b.room || '', plan_id: planId, block_id: blockId, class_id: classId });
         }
       }
@@ -251,9 +256,9 @@ export default function TeacherClient() {
           </label>
 
           <label style={{ display: 'grid', gap: 6 }}>
-            <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.8 }}>Block</div>
+            <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.8 }}>Block (for selected date)</div>
             <select value={selectedBlockKey} onChange={(e) => setSelectedBlockKey(e.target.value)} style={styles.input}>
-              <option value="">{weekLoading ? 'Loading…' : 'Select a block'}</option>
+              <option value="">{weekLoading ? 'Loading…' : blockOptions.length ? 'Select a block' : 'No blocks for this date'}</option>
               {blockOptions.map((o) => (
                 <option key={o.key} value={o.key}>
                   {o.label}
