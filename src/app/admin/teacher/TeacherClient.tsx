@@ -165,7 +165,12 @@ export default function TeacherClient() {
         if (!res.ok) throw new Error(j?.error ?? 'Failed to load rotation');
 
         const slots = Array.isArray(j?.blocks)
-          ? j.blocks.map((b: any) => String(b?.block_label ?? b?.block ?? b?.slot ?? '').trim()).filter(Boolean)
+          ? j.blocks
+              .map((b: any) => {
+                if (typeof b === 'string') return b.trim();
+                return String(b?.block_label ?? b?.block ?? b?.slot ?? '').trim();
+              })
+              .filter(Boolean)
           : [];
 
         if (!cancelled) setRotationSlots(slots);
