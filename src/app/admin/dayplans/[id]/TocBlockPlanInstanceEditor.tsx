@@ -1035,52 +1035,12 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
       // We do this whenever the plan mode is lesson_flow so that /p never silently falls
       // back to the template due to missing rows.
       if (planMode === 'lesson_flow') {
-        // Source of truth: current input values (uncontrolled inputs + refs).
-        // This avoids browser timing issues with controlled textareas.
+        // Source of truth: React state (controlled inputs).
+        // Avoid DOM re-reads; those are brittle on mobile/IME and can miss the user's latest text.
         let effective: Phase[] = [];
 
-        const fromDom = (): Phase[] =>
-          phases.map((p, pIdx) => {
-            const r = phaseFieldRefs.current[p.client_id] ?? {};
-
-            const q = (field: string) => {
-              if (typeof document === 'undefined') return null;
-              // Prefer deterministic id-based lookup (most robust), then idx selector, then fallbacks.
-              const byId = document.getElementById(`lessonflow-${field}-${pIdx}`) as any;
-              if (byId && typeof byId.value !== 'undefined') return byId;
-
-              const byIdx = document.querySelector<HTMLInputElement | HTMLTextAreaElement>(
-                `[data-phase-idx="${pIdx}"][data-phase-field="${field}"]`
-              );
-              if (byIdx) return byIdx;
-
-              const all = Array.from(
-                document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(`[data-phase-field="${field}"]`)
-              );
-              const byList = all[pIdx] ?? null;
-              if (byList) return byList;
-
-              return document.querySelector<HTMLInputElement | HTMLTextAreaElement>(
-                `[data-phase-client-id="${p.client_id}"][data-phase-field="${field}"]`
-              );
-            };
-
-            const timeEl = q('time') ?? r.time;
-            const phaseEl = q('phase') ?? r.phase;
-            const actEl = q('activity') ?? r.activity;
-            const purpEl = q('purpose') ?? r.purpose;
-
-            return {
-              ...p,
-              time_text: (timeEl?.value ?? p.time_text ?? '').toString(),
-              phase_text: (phaseEl?.value ?? p.phase_text ?? '').toString(),
-              activity_text: (actEl?.value ?? p.activity_text ?? '').toString(),
-              purpose_text: (purpEl?.value ?? p.purpose_text ?? '').toString(),
-            };
-          });
-
         if (phases.length) {
-          effective = fromDom();
+          effective = phases;
         } else if ((tplLessonFlow ?? []).length) {
           effective = (tplLessonFlow ?? []).map((r: any) => ({
             client_id: newClientId(),
