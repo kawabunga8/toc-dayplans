@@ -296,6 +296,42 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
     return () => window.removeEventListener('popstate', onPop);
   }, [hasUnsavedChanges]);
 
+  // Intercept in-page link clicks (e.g. "TOC View") so you can't navigate away without confirming.
+  useEffect(() => {
+    const onClickCapture = (e: MouseEvent) => {
+      if (!hasUnsavedChanges || bypassGuardRef.current) return;
+      if (navGuardOpen) return;
+      if (e.defaultPrevented) return;
+      if (e.button !== 0) return; // left click only
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; // allow open-in-new-tab etc.
+
+      const target = e.target as HTMLElement | null;
+      const a = target?.closest?.('a[href]') as HTMLAnchorElement | null;
+      if (!a) return;
+      const href = a.getAttribute('href') || '';
+      if (!href) return;
+      if (a.target === '_blank') return;
+      if (href.startsWith('#')) return;
+
+      // Only intercept same-origin navigations.
+      let url: URL;
+      try {
+        url = new URL(href, window.location.origin);
+      } catch {
+        return;
+      }
+      if (url.origin !== window.location.origin) return;
+
+      e.preventDefault();
+      requestNavigate(() => {
+        window.location.href = url.toString();
+      }, 'You have unsaved changes. Continue without saving?');
+    };
+
+    document.addEventListener('click', onClickCapture, true);
+    return () => document.removeEventListener('click', onClickCapture, true);
+  }, [hasUnsavedChanges, navGuardOpen]);
+
   // Allow pickers to return selected values via query params.
   useEffect(() => {
     const cc = (searchParams.get('core_competency_focus') ?? '').trim();
