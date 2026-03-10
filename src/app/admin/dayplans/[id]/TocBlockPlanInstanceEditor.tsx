@@ -1847,13 +1847,16 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                 data-phase-idx={idx}
                 data-phase-client-id={p.client_id}
                 data-phase-field="time"
-                defaultValue={String(p.time_text ?? '')}
+                value={String(p.time_text ?? '')}
                 ref={(el) => {
                   const rec = phaseFieldRefs.current[p.client_id] ?? {};
                   rec.time = el;
                   phaseFieldRefs.current[p.client_id] = rec;
                 }}
-                onChange={() => {
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setPhases((prev) => prev.map((x) => (x.client_id === p.client_id ? { ...x, time_text: v } : x)));
+                  setLessonOverride(true);
                   setLessonTouched(true);
                   markUnsaved();
                 }}
@@ -1867,13 +1870,16 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                 data-phase-idx={idx}
                 data-phase-client-id={p.client_id}
                 data-phase-field="phase"
-                defaultValue={String(p.phase_text ?? '')}
+                value={String(p.phase_text ?? '')}
                 ref={(el) => {
                   const rec = phaseFieldRefs.current[p.client_id] ?? {};
                   rec.phase = el;
                   phaseFieldRefs.current[p.client_id] = rec;
                 }}
-                onChange={() => {
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setPhases((prev) => prev.map((x) => (x.client_id === p.client_id ? { ...x, phase_text: v } : x)));
+                  setLessonOverride(true);
                   setLessonTouched(true);
                   markUnsaved();
                 }}
@@ -1887,13 +1893,16 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                 data-phase-idx={idx}
                 data-phase-client-id={p.client_id}
                 data-phase-field="activity"
-                defaultValue={String(p.activity_text ?? '')}
+                value={String(p.activity_text ?? '')}
                 ref={(el) => {
                   const rec = phaseFieldRefs.current[p.client_id] ?? {};
                   rec.activity = el;
                   phaseFieldRefs.current[p.client_id] = rec;
                 }}
-                onChange={() => {
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setPhases((prev) => prev.map((x) => (x.client_id === p.client_id ? { ...x, activity_text: v } : x)));
+                  setLessonOverride(true);
                   setLessonTouched(true);
                   markUnsaved();
                 }}
@@ -1908,13 +1917,16 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                 data-phase-idx={idx}
                 data-phase-client-id={p.client_id}
                 data-phase-field="purpose"
-                defaultValue={String(p.purpose_text ?? '')}
+                value={String(p.purpose_text ?? '')}
                 ref={(el) => {
                   const rec = phaseFieldRefs.current[p.client_id] ?? {};
                   rec.purpose = el;
                   phaseFieldRefs.current[p.client_id] = rec;
                 }}
-                onChange={() => {
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setPhases((prev) => prev.map((x) => (x.client_id === p.client_id ? { ...x, purpose_text: v } : x)));
+                  setLessonOverride(true);
                   setLessonTouched(true);
                   markUnsaved();
                 }}
