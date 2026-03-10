@@ -618,6 +618,10 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
     setTouchCycle(String(effectiveTp?.cyclical_loop_type ?? ''));
 
     // template previews
+    // IMPORTANT: keep local copies for any values we want to use immediately in this function.
+    // React state setters (setTplLessonFlow, etc.) are async and won't update within the same call.
+    let tplLessonFlowLocal: Array<{ time_text: string; phase_text: string; activity_text: string; purpose_text: string | null }> = [];
+
     if (effectiveTplId) {
       const [orRes, wiRes, lfRes, optRes, roleRes] = await Promise.all([
         supabase.from('class_opening_routine_steps').select('sort_order,step_text').eq('template_id', effectiveTplId).order('sort_order', { ascending: true }),
@@ -634,7 +638,14 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
 
       setTplOpeningSteps((orRes.data ?? []).map((r: any) => ({ step_text: r.step_text })));
       setTplWhatIf((wiRes.data ?? []).map((r: any) => ({ scenario_text: r.scenario_text, response_text: r.response_text })));
-      setTplLessonFlow((lfRes.data ?? []).map((r: any) => ({ time_text: r.time_text, phase_text: r.phase_text, activity_text: r.activity_text, purpose_text: r.purpose_text ?? null })));
+
+      tplLessonFlowLocal = (lfRes.data ?? []).map((r: any) => ({
+        time_text: r.time_text,
+        phase_text: r.phase_text,
+        activity_text: r.activity_text,
+        purpose_text: r.purpose_text ?? null,
+      }));
+      setTplLessonFlow(tplLessonFlowLocal);
 
       const tOpts = optRes.data ?? [];
       const optIds = tOpts.map((o: any) => o.id);
@@ -733,7 +744,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         source_template_phase_id: r.source_template_phase_id ?? null,
       }));
 
-      const seededFromTemplate: Phase[] = (tplLessonFlow ?? []).map((r: any) => ({
+      const seededFromTemplate: Phase[] = (tplLessonFlowLocal ?? []).map((r: any) => ({
         client_id: newClientId(),
         time_text: String(r.time_text ?? ''),
         phase_text: String(r.phase_text ?? ''),
