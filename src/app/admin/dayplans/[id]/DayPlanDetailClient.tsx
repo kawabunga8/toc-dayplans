@@ -1019,6 +1019,25 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                     <span style={{ marginLeft: 10, opacity: 0.7 }}>
                       v{process.env.NEXT_PUBLIC_APP_VERSION || '—'}
                     </span>
+                    <span style={{ marginLeft: 10, opacity: 0.7 }}>
+                      • Plan ID: <span style={{ fontFamily: 'monospace' }}>{plan?.id || '—'}</span>
+                    </span>
+                    {plan?.id ? (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(String(plan.id));
+                            alert('Copied Plan ID');
+                          } catch {
+                            // ignore
+                          }
+                        }}
+                        style={{ marginLeft: 8, ...styles.secondaryBtn, padding: '4px 8px' } as any}
+                      >
+                        Copy
+                      </button>
+                    ) : null}
                   </div>
                   <button
                     type="button"
