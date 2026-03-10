@@ -175,15 +175,27 @@ export async function POST(req: Request) {
     blockId = (createdBlock as any).id;
   }
 
-  // 3) Apply (append) lesson flow override to the toc_block_plan for that block
+  // 3) Apply (append) lesson flow override to the toc_block_plan for that block (seed template on create)
   const now = new Date().toISOString();
+
+  const { data: tpl, error: tplErr } = await adminDb
+    .from('class_toc_templates')
+    .select('id,plan_mode')
+    .eq('class_id', cls.id)
+    .eq('is_active', true)
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (tplErr) return NextResponse.json({ error: tplErr.message }, { status: 400 });
+
   const { data: upserted, error: upErr } = await adminDb
     .from('toc_block_plans')
     .upsert(
       {
         day_plan_block_id: blockId,
         class_id: cls.id,
-        plan_mode: 'lesson_flow',
+        template_id: tpl?.id ?? null,
+        plan_mode: (tpl?.plan_mode as any) ?? 'lesson_flow',
         updated_at: now,
       } as any,
       { onConflict: 'day_plan_block_id' }

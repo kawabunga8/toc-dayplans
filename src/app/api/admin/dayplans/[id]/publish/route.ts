@@ -48,7 +48,60 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
 
   const planDate = plan.plan_date as string; // YYYY-MM-DD
 
-  // Resolve + store a published snapshot. /toc and /p read ONLY this snapshot.
+  // Ensure each class block has a seeded toc_block_plan with a template.
+  // This makes /p usable even before anyone opens the TOC editor.
+  {
+    const { data: blocks, error: blkErr } = await supabase
+      .from('day_plan_blocks')
+      .select('id,class_id')
+      .eq('day_plan_id', id);
+    if (blkErr) return NextResponse.json({ error: blkErr.message }, { status: 400 });
+
+    const classBlocks = (blocks ?? []).filter((b: any) => b?.id && b?.class_id);
+
+    for (const b of classBlocks) {
+      const blockId = String(b.id);
+      const classId = String(b.class_id);
+
+      // Latest active template for this class (if any)
+      const { data: tpl, error: tplErr } = await supabase
+        .from('class_toc_templates')
+        .select('id,plan_mode')
+        .eq('class_id', classId)
+        .eq('is_active', true)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (tplErr) return NextResponse.json({ error: tplErr.message }, { status: 400 });
+
+      // Upsert toc_block_plans for this day_plan_block
+      const { data: tbp, error: upErr } = await supabase
+        .from('toc_block_plans')
+        .upsert(
+          {
+            day_plan_block_id: blockId,
+            class_id: classId,
+            template_id: tpl?.id ?? null,
+            plan_mode: (tpl?.plan_mode as any) ?? 'lesson_flow',
+            updated_at: new Date().toISOString(),
+          } as any,
+          { onConflict: 'day_plan_block_id' }
+        )
+        .select('id')
+        .maybeSingle();
+      if (upErr) return NextResponse.json({ error: upErr.message }, { status: 400 });
+
+      // Materialize public payload so /p updates
+      if (tbp?.id) {
+        const { error: pubErr } = await supabase.rpc('resolve_toc_block_plan_public_payload', {
+          p_toc_block_plan_id: String(tbp.id),
+        });
+        if (pubErr) return NextResponse.json({ error: pubErr.message }, { status: 400 });
+      }
+    }
+  }
+
+  // Resolve + store a published snapshot.
   const { data: resolved, error: resErr } = await supabase.rpc('resolve_day_plan_payload', { plan_id: id });
   if (resErr || !resolved) {
     return NextResponse.json({ error: resErr?.message ?? 'Failed to resolve day plan' }, { status: 400 });
