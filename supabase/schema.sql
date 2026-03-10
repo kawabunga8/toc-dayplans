@@ -2681,7 +2681,6 @@ begin
       from day_plan_blocks b
       join toc_block_plans tbp on tbp.day_plan_block_id = b.id
       where b.day_plan_id = p.id
-        and tbp.public_payload is not null
     );
 
   return plans;
