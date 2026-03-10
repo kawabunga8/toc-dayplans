@@ -80,6 +80,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
   }, [unsaved, blockId]);
   const markUnsaved = () => setUnsaved(true);
   const [saveDebug, setSaveDebug] = useState<string | null>(null);
+  const [saveReceipt, setSaveReceipt] = useState<string | null>(null);
 
   const [tocBlockPlanId, setTocBlockPlanId] = useState<string | null>(null);
 
@@ -1139,6 +1140,13 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         setOverridePayload(persisted);
         workingPayload = persisted;
 
+        try {
+          const sample = String((effective?.[0] as any)?.activity_text ?? '').replace(/\s+/g, ' ').trim();
+          setSaveReceipt(`Saved lesson flow (${effective.length} phases) • ${new Date().toLocaleTimeString()} • sample: ${sample.slice(0, 60)}`);
+        } catch {
+          setSaveReceipt(`Saved lesson flow (${effective.length} phases) • ${new Date().toLocaleTimeString()}`);
+        }
+
         // Legacy table cleanup (optional): keep empty so public RPC uses JSON override.
         await supabase.from('toc_lesson_flow_phases').delete().eq('toc_block_plan_id', tocBlockPlanId);
       }
@@ -1332,8 +1340,13 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
           <div style={{ fontSize: 12, opacity: 0.85 }}>
             {status === 'saving' ? 'Saving…' : status === 'error' ? 'Not saved' : unsaved ? 'Unsaved changes (use Save all)' : 'Saved'}
           </div>
+          {saveReceipt ? (
+            <div style={{ fontSize: 11, opacity: 0.85, maxWidth: 520 }} title={saveReceipt}>
+              {saveReceipt}
+            </div>
+          ) : null}
           {saveDebug ? (
-            <div style={{ fontSize: 11, opacity: 0.75, maxWidth: 420 }} title={saveDebug}>
+            <div style={{ fontSize: 11, opacity: 0.6, maxWidth: 520 }} title={saveDebug}>
               {saveDebug}
             </div>
           ) : null}
