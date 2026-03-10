@@ -135,12 +135,27 @@ export async function POST(req: Request) {
   let blockId: string | null = (blocks?.[0] as any)?.id ?? null;
 
   if (!blockId) {
+    // Block times are period-based (P1/P2/Flex/...), while rotation is block-label-based (A/B/CLE/Lunch/...)
+    // Pair them by index: rotation_defaults.slot_order aligns with chronological block_time_defaults ordering.
+    const { data: rot, error: rotErr } = await adminDb.rpc('get_rotation_for_date', {
+      plan_date,
+      friday_type,
+    } as any);
+    if (rotErr) return NextResponse.json({ error: rotErr.message }, { status: 400 });
+
+    const rotArr = Array.isArray(rot) ? rot.map((x: any) => String(x ?? '').trim()).filter(Boolean) : [];
+    const idx = rotArr.findIndex((b) => b.toUpperCase() === slot.toUpperCase());
+    if (idx < 0) {
+      return NextResponse.json({ error: `Rotation for ${plan_date} does not include slot ${slot}` }, { status: 400 });
+    }
+
     const { data: times, error: timeErr } = await adminDb.rpc('get_block_times_for_date', { plan_date });
     if (timeErr) return NextResponse.json({ error: timeErr.message }, { status: 400 });
+
     const arr = Array.isArray(times) ? times : [];
-    const t = arr.find((r: any) => String(r?.slot ?? '').toUpperCase() === slot.toUpperCase()) ?? null;
+    const t = arr[idx] ?? null;
     if (!t?.start_time || !t?.end_time) {
-      return NextResponse.json({ error: `Missing block times for ${plan_date} slot ${slot}` }, { status: 400 });
+      return NextResponse.json({ error: `Missing block times for ${plan_date} (index ${idx}) slot ${slot}` }, { status: 400 });
     }
 
     const { data: createdBlock, error: blockInsErr } = await adminDb
