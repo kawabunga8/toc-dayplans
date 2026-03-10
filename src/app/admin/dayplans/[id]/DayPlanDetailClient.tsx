@@ -1115,45 +1115,17 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
           </section>
 
           <section style={styles.card}>
-            <div style={styles.sectionHeader}>Publishing (TOC link)</div>
-            {trashed && (
-              <div style={{ ...styles.errorBox, marginTop: 0, marginBottom: 12 }}>
-                This plan is in the trash. Restore it to publish again.
-              </div>
-            )}
+            <div style={styles.sectionHeader}>Manage</div>
             <div style={{ display: 'grid', gap: 8 }}>
-              {hasUnpublishedChanges ? (
-                <div style={{ ...styles.callout, borderColor: '#C9A84C', background: '#FDF3DC' }}>
-                  <b>Unpublished changes</b> — the public page (<code>/p</code>) shows the last published version.
-                </div>
-              ) : null}
-
-              <div>
-                <b>Status:</b> {published ? <span>Published</span> : <span>Not published</span>}
+              <div style={{ ...styles.callout, borderColor: '#C9A84C', background: '#FDF3DC' }}>
+                Publishing is managed on the <b>/publishing</b> page.
               </div>
-
-              {published && publicUrl && (
-                <div style={styles.callout}>
-                  <div style={{ fontWeight: 900, color: RCS.deepNavy, marginBottom: 6 }}>Public URL</div>
-                  <div style={{ wordBreak: 'break-all' }}>{publicUrl}</div>
-                  <div style={{ display: 'flex', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
-                    <button onClick={copyLink} style={styles.secondaryBtn}>Copy link</button>
-                    <a href={publicUrl} target="_blank" rel="noreferrer" style={styles.primaryLink}>Open</a>
-                  </div>
-                </div>
-              )}
+              <div>
+                <b>Status:</b> {trashed ? <span>Trashed</span> : <span>Active</span>}
+              </div>
             </div>
 
             <div style={{ display: 'flex', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
-                <button onClick={publish} disabled={status !== 'idle' || trashed} style={styles.primaryBtn}>
-                  {status === 'publishing' ? 'Publishing…' : published ? 'Republish' : 'Publish'}
-                </button>
-                {hasUnpublishedChanges ? <span style={{ fontSize: 12, color: '#7F1D1D', fontWeight: 800 }}>Unpublished changes</span> : null}
-              </div>
-              <button onClick={revoke} disabled={!published || status !== 'idle'} style={styles.dangerBtn}>
-                Revoke
-              </button>
               {trashed ? (
                 <button onClick={restore} disabled={status !== 'idle'} style={styles.secondaryBtn}>
                   Restore
