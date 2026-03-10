@@ -27,7 +27,21 @@ export default async function PublicPlanPage({ params }: { params: Promise<{ id:
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  const { data, error } = await supabase.rpc('get_public_day_plan_from_toc', { plan_id: id });
+  // Prefer live computed payload (matches /dayplan immediately).
+  // Fall back to materialized payload for older DBs.
+  let data: any = null;
+  let error: any = null;
+  {
+    const r1 = await supabase.rpc('get_public_day_plan_live', { plan_id: id });
+    if (!r1.error && r1.data) {
+      data = r1.data;
+    } else {
+      const r2 = await supabase.rpc('get_public_day_plan_from_toc', { plan_id: id });
+      data = r2.data;
+      error = r2.error;
+    }
+  }
+
   const { data: layoutData } = await supabase.rpc('get_public_page_layout', { layout_id: 'public_plan' });
 
   if (error || !data) {

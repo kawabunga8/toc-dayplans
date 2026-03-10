@@ -17,7 +17,13 @@ export async function GET(req: Request) {
   }
 
   const supabase = createClient(url, anon, { auth: { persistSession: false, autoRefreshToken: false } });
-  const { data, error } = await supabase.rpc('get_public_day_plan_from_toc', { plan_id: id });
+
+  // Prefer live computed payload (matches /dayplan immediately).
+  // Fall back to materialized payload for older DBs.
+  const r1 = await supabase.rpc('get_public_day_plan_live', { plan_id: id });
+  const { data, error } = (!r1.error && r1.data)
+    ? ({ data: r1.data, error: null } as any)
+    : (await supabase.rpc('get_public_day_plan_from_toc', { plan_id: id }) as any);
 
   if (error || !data) {
     return NextResponse.json(
