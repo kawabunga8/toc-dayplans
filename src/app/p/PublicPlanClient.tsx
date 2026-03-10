@@ -756,7 +756,14 @@ export default function PublicPlanClient({ plan, layout }: { plan: PublicPlan; l
                       );
                     })()}
                   </div>
-                ) : null}
+                ) : (
+                  <div style={{ ...styles.tocWrap, borderStyle: 'dashed', opacity: 0.9 }}>
+                    <div style={{ fontWeight: 900, marginBottom: 6 }}>TOC plan not available yet</div>
+                    <div style={{ fontSize: 12, opacity: 0.85 }}>
+                      This block hasn’t been published (or the public payload hasn’t been generated yet). Please check back later.
+                    </div>
+                  </div>
+                )}
 
                 {showAttendance && open && (
                   <div className="attendanceWrap" style={styles.attendanceWrap}>
