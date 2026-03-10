@@ -109,7 +109,12 @@ export async function POST(req: Request) {
 
     const { text } = await provider.generate(prompt);
 
-    const parsed = extractJsonObject(text);
+    let parsed: any;
+    try {
+      parsed = extractJsonObject(text);
+    } catch (e: any) {
+      return NextResponse.json({ error: e?.message ?? 'Failed to parse JSON from model output', raw: String(text).slice(0, 1200) }, { status: 400 });
+    }
     const note = String(parsed?.note_to_toc ?? '').trim();
     if (!note) {
       return NextResponse.json({ error: 'Model returned empty note_to_toc' }, { status: 400 });
@@ -130,7 +135,12 @@ export async function POST(req: Request) {
 
     const { text } = await provider.generate(prompt);
 
-    const parsed = extractJsonObject(text);
+    let parsed: any;
+    try {
+      parsed = extractJsonObject(text);
+    } catch (e: any) {
+      return NextResponse.json({ error: e?.message ?? 'Failed to parse JSON from model output', raw: String(text).slice(0, 1200) }, { status: 400 });
+    }
     const phases = Array.isArray(parsed?.lesson_flow_phases) ? parsed.lesson_flow_phases : null;
     if (!phases) return NextResponse.json({ error: 'Model returned missing lesson_flow_phases' }, { status: 400 });
 
@@ -180,7 +190,12 @@ export async function POST(req: Request) {
 
     const { text } = await provider.generate(prompt);
 
-    const parsed = extractJsonObject(text);
+    let parsed: any;
+    try {
+      parsed = extractJsonObject(text);
+    } catch (e: any) {
+      return NextResponse.json({ error: e?.message ?? 'Failed to parse JSON from model output', raw: String(text).slice(0, 1200) }, { status: 400 });
+    }
     const phases = Array.isArray(parsed?.lesson_flow_phases) ? parsed.lesson_flow_phases : null;
     if (!phases) return NextResponse.json({ error: 'Model returned missing lesson_flow_phases' }, { status: 400 });
 
