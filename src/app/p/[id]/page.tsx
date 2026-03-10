@@ -31,14 +31,17 @@ export default async function PublicPlanPage({ params }: { params: Promise<{ id:
   // Fall back to materialized payload for older DBs.
   let data: any = null;
   let error: any = null;
+  let payloadSource: 'live' | 'materialized' | 'none' = 'none';
   {
     const r1 = await supabase.rpc('get_public_day_plan_live', { plan_id: id });
     if (!r1.error && r1.data) {
       data = r1.data;
+      payloadSource = 'live';
     } else {
       const r2 = await supabase.rpc('get_public_day_plan_from_toc', { plan_id: id });
       data = r2.data;
       error = r2.error;
+      payloadSource = r2.data ? 'materialized' : 'none';
     }
   }
 
@@ -85,11 +88,13 @@ export default async function PublicPlanPage({ params }: { params: Promise<{ id:
 
     diagnostics = {
       plan_id: id,
+      payload_source: payloadSource,
       plan_slot: slot || null,
       primary_block_id: primaryBlockId,
       toc_block_plan_id: tbp?.id ?? null,
       toc_public_updated_at: tbp?.public_updated_at ?? null,
       toc_has_public_payload: tbp?.public_payload != null,
+      plan_has_toc: (data as any)?.toc != null,
     };
   } catch {
     diagnostics = { plan_id: id };

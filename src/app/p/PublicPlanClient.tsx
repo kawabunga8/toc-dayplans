@@ -347,7 +347,13 @@ export default function PublicPlanClient({ plan, layout, diagnostics }: { plan: 
                 Plan ID: <span style={{ fontFamily: 'monospace' }}>{plan.id}</span>
               </div>
               <div style={{ fontSize: 11, opacity: 0.7, marginTop: 2, lineHeight: 1.25 }}>
-                TOC payload:{' '}
+                Source:{' '}
+                <span style={{ fontFamily: 'monospace' }}>{String(diagnostics?.payload_source ?? '—')}</span>
+                {' '}• plan.toc:{' '}
+                <span style={{ fontFamily: 'monospace' }}>{diagnostics?.plan_has_toc ? 'present' : 'missing'}</span>
+              </div>
+              <div style={{ fontSize: 11, opacity: 0.7, marginTop: 2, lineHeight: 1.25 }}>
+                Materialized TOC payload:{' '}
                 <span style={{ fontFamily: 'monospace' }}>{diagnostics?.toc_has_public_payload ? 'OK' : 'MISSING'}</span>
                 {diagnostics?.toc_public_updated_at ? (
                   <>
