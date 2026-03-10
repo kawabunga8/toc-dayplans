@@ -242,6 +242,21 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
     return tocUnsaved;
   }, [tocUnsavedByBlockId]);
 
+  const [navGuardOpen, setNavGuardOpen] = useState(false);
+  const [navGuardMsg, setNavGuardMsg] = useState('You have unsaved changes. Leave without saving?');
+  const pendingNavRef = useRef<null | (() => void)>(null);
+  const bypassGuardRef = useRef(false);
+
+  function requestNavigate(fn: () => void, msg?: string) {
+    if (!hasUnsavedChanges || bypassGuardRef.current) {
+      fn();
+      return;
+    }
+    pendingNavRef.current = fn;
+    if (msg) setNavGuardMsg(msg);
+    setNavGuardOpen(true);
+  }
+
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
       if (!hasUnsavedChanges) return;
@@ -250,6 +265,35 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
     };
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
+  }, [hasUnsavedChanges]);
+
+  // Block back/forward navigation with a custom modal.
+  useEffect(() => {
+    try {
+      // Create an extra history entry so Back triggers popstate within this page.
+      window.history.pushState({ dayplan_guard: true }, '', window.location.href);
+    } catch {
+      // ignore
+    }
+
+    const onPop = () => {
+      if (!hasUnsavedChanges || bypassGuardRef.current) return;
+      // Re-push current URL to effectively cancel back.
+      try {
+        window.history.pushState({ dayplan_guard: true }, '', window.location.href);
+      } catch {
+        // ignore
+      }
+      pendingNavRef.current = () => {
+        bypassGuardRef.current = true;
+        window.history.back();
+      };
+      setNavGuardMsg('You have unsaved changes. Go back anyway?');
+      setNavGuardOpen(true);
+    };
+
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
   }, [hasUnsavedChanges]);
 
   // Allow pickers to return selected values via query params.
@@ -832,6 +876,43 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
 
   return (
     <main style={styles.page}>
+      {navGuardOpen ? (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'grid', placeItems: 'center', zIndex: 9999, padding: 16 }}>
+          <div style={{ background: '#fff', borderRadius: 14, maxWidth: 520, width: '100%', border: '1px solid rgba(0,0,0,0.12)', padding: 16 }}>
+            <div style={{ fontWeight: 900, marginBottom: 8 }}>Unsaved changes</div>
+            <div style={{ fontSize: 13, opacity: 0.9, marginBottom: 14 }}>{navGuardMsg}</div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  pendingNavRef.current = null;
+                  setNavGuardOpen(false);
+                }}
+                style={styles.secondaryBtn}
+              >
+                Stay
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const fn = pendingNavRef.current;
+                  pendingNavRef.current = null;
+                  setNavGuardOpen(false);
+                  bypassGuardRef.current = true;
+                  try {
+                    fn?.();
+                  } finally {
+                    // keep bypass true for the immediate navigation
+                  }
+                }}
+                style={styles.dangerBtn}
+              >
+                Leave without saving
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <div style={styles.rowBetween}>
         <div>
           <h1 style={styles.h1}>Dayplan Builder</h1>
@@ -909,7 +990,9 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                       const ret = retQs.toString() ? `/admin/dayplans/${id}?${retQs.toString()}` : `/admin/dayplans/${id}`;
 
                       qs.set('return', ret);
-                      window.location.href = `/admin/policies?${qs.toString()}`;
+                      requestNavigate(() => {
+                        window.location.href = `/admin/policies?${qs.toString()}`;
+                      }, 'You have unsaved changes. Continue to Learning Standards selection without saving?');
                     }}
                     style={styles.secondaryBtn}
                   >
@@ -940,7 +1023,9 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                       const ret = retQs.toString() ? `/admin/dayplans/${id}?${retQs.toString()}` : `/admin/dayplans/${id}`;
 
                       qs.set('return', ret);
-                      window.location.href = `/admin/policies/core-competencies?${qs.toString()}`;
+                      requestNavigate(() => {
+                        window.location.href = `/admin/policies/core-competencies?${qs.toString()}`;
+                      }, 'You have unsaved changes. Continue to Core Competencies selection without saving?');
                     }}
                     style={styles.secondaryBtn}
                   >
