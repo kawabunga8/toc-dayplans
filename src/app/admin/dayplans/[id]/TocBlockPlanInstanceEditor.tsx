@@ -530,25 +530,9 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
       await supabase.from('toc_block_plans').update({ template_id: effectiveTplId }).eq('id', tocPlanId);
     }
 
-    // New architecture: copy template content into TOC instance cards once.
-    // /p reads ONLY from toc_* instance tables, so we must seed before public use.
-    try {
-      if (!((plan as any).seeded_at) && effectiveTplId) {
-        await supabase.rpc('seed_toc_block_plan_from_template', { p_toc_block_plan_id: tocPlanId });
-        // Reload plan row after seeding so subsequent reads use instance tables.
-        const { data: plan2, error: p2Err } = await supabase
-          .from('toc_block_plans')
-          .select('template_id,plan_mode,override_note_to_toc,override_assessment_touch_point,override_payload,seeded_at')
-          .eq('id', tocPlanId)
-          .single();
-        if (!p2Err && plan2) {
-          (plan as any).override_payload = (plan2 as any).override_payload;
-          (plan as any).seeded_at = (plan2 as any).seeded_at;
-        }
-      }
-    } catch {
-      // seeding is best-effort; editor can still function
-    }
+    // NOTE: We no longer auto-seed instance tables on load.
+    // /p reads live computed payload directly, and lesson flow overrides live in toc_block_plans.override_payload.
+    // Seeding mutates DB on page load and can cause confusing "disappearing" UI if it races with overrides.
 
     setTemplateId(effectiveTplId);
     setPlanMode(plan.plan_mode as PlanMode);
