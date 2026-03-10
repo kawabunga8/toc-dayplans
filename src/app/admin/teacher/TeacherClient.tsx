@@ -62,60 +62,45 @@ export default function TeacherClient() {
   const role = useMemo(() => TEACHER_ROLES.find((r) => r.id === roleId)!, [roleId]);
 
   const blockOptions = useMemo(() => {
-    const plansByDate = (weekPlans?.plans ?? {}) as Record<string, any[]>;
     const out: Array<{ key: string; label: string; plan_date: string; slot: string; class_name: string; room: string; plan_id: string; block_id: string; class_id: string | null }> = [];
-    const norm = (s: string) => String(s || '').trim().toUpperCase();
-    const parseBlockLabel = (className: string) => {
-      const s = String(className || '');
-      const m1 = s.match(/\(Block\s+([^\)]+)\)/i);
-      if (m1?.[1]) return m1[1];
-      const m2 = s.match(/Block\s+([A-Za-z0-9]+)/i);
-      if (m2?.[1]) return m2[1];
-      return '';
-    };
 
     const selectedDate = String(weekDate || '').trim();
 
-    // Use rotation data (same as other pages) to decide which slots exist on this date.
-    // null => unknown (loading/error), [] => no school, ['A','B',...] => allowed slots
-    const allowSlots = rotationSlots === null ? null : new Set((rotationSlots ?? []).map((s) => String(s).toUpperCase()));
+    // rotationSlots:
+    // - null => unknown (loading/error)
+    // - [] => no school
+    // - ['A','B',...] => allowed slots
+    if (!selectedDate || !/^\d{4}-\d{2}-\d{2}$/.test(selectedDate)) return out;
+    if (rotationSlots && rotationSlots.length === 0) return out;
 
-    for (const [date, plans] of Object.entries(plansByDate)) {
-      // Filter the dropdown to only the selected date (within the loaded week).
-      if (selectedDate && date !== selectedDate) continue;
+    const slots = Array.isArray(rotationSlots) ? rotationSlots : [];
 
-      for (const p of plans || []) {
-        const slot = String((p as any).slot ?? '').trim();
-        if (allowSlots) {
-          // rotationSlots=[] means "no school"
-          if (allowSlots.size === 0) continue;
-          if (!allowSlots.has(slot.toUpperCase())) continue;
-        }
+    for (const slotRaw of slots) {
+      const slot = String(slotRaw || '').trim().toUpperCase();
+      if (!slot) continue;
 
-        const slotLabel = norm(slot);
-        for (const b of (p as any).day_plan_blocks || []) {
-          const planId = String((p as any).id);
-          const blockId = String((b as any).id);
-          const classId = (b as any)?.class_id ? String((b as any).class_id) : null;
+      const cls = classesRows.find((c: any) => String(c?.block_label ?? '').toUpperCase() === slot) ?? null;
+      const classText = String(cls?.name ?? `Block ${slot}`).trim();
+      const roomText = String(cls?.room ?? '').trim();
 
-          const cls = (b as any)?.classes ?? null;
-          // Prefer Courses/Rooms metadata; if missing, hide it from the dropdown.
-          const bLabel = norm(cls?.block_label || parseBlockLabel((b as any).class_name));
-          if (!bLabel) continue;
+      const key = `${selectedDate}:${slot}`;
+      const label = `Block ${slot} • ${classText}${roomText ? ` (${roomText})` : ''}`;
 
-          // Only show blocks that match the day plan's slot (prevents applying to a non-primary block).
-          if (slotLabel && bLabel && slotLabel !== bLabel) continue;
-
-          const key = `${planId}:${blockId}`;
-          const roomText = String(cls?.room ?? (b as any).room ?? '').trim();
-          const classText = String(cls?.name ?? (b as any).class_name ?? '—').trim();
-          const label = `Block ${slot} • ${classText}${roomText ? ` (${roomText})` : ''}`;
-          out.push({ key, label, plan_date: date, slot, class_name: (b as any).class_name || '', room: (b as any).room || '', plan_id: planId, block_id: blockId, class_id: classId });
-        }
-      }
+      out.push({
+        key,
+        label,
+        plan_date: selectedDate,
+        slot,
+        class_name: classText,
+        room: roomText,
+        plan_id: '',
+        block_id: '',
+        class_id: cls?.id ?? null,
+      });
     }
+
     return out;
-  }, [weekPlans, weekDate, rotationSlots]);
+  }, [weekDate, rotationSlots, classesRows]);
 
   const selectedBlock = useMemo(() => blockOptions.find((o) => o.key === selectedBlockKey) ?? null, [blockOptions, selectedBlockKey]);
 
@@ -600,10 +585,14 @@ export default function TeacherClient() {
                 setApplyErr(null);
                 setOkMsg(null);
                 try {
-                  const res = await fetch(`/api/admin/dayplans/blocks/${encodeURIComponent(selectedBlock.block_id)}/lesson-flow/append`, {
+                  const res = await fetch(`/api/admin/dayplans/by-date-slot/lesson-flow/append`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ phases }),
+                    body: JSON.stringify({
+                      plan_date: selectedBlock.plan_date,
+                      slot: selectedBlock.slot,
+                      phases,
+                    }),
                   });
 
                   let j: any = null;
@@ -619,26 +608,8 @@ export default function TeacherClient() {
                     throw new Error(String(msg));
                   }
 
-                  // Republish the day plan so /toc and /p reflect the changes.
-                  const pubRes = await fetch(`/api/admin/dayplans/${encodeURIComponent(selectedBlock.plan_id)}/publish`, {
-                    method: 'POST',
-                  });
-                  let pubJ: any = null;
-                  try {
-                    pubJ = await pubRes.json();
-                  } catch {
-                    // ignore
-                  }
-                  if (!pubRes.ok) {
-                    throw new Error(pubJ?.error ?? `Republish failed (${pubRes.status})`);
-                  }
-
-                  setOkMsg(
-                    `Applied + republished: appended ${j?.appended ?? '?'} phase(s) to ${selectedBlock.plan_date} block ${selectedBlock.slot} (${selectedBlock.class_name}). Redirecting…`
-                  );
-
-                  // Jump to the dayplan detail page.
-                  window.location.href = `/admin/dayplans/${encodeURIComponent(selectedBlock.plan_id)}`;
+                  setOkMsg(`Applied: appended ${j?.appended ?? '?'} phase(s) to ${selectedBlock.plan_date} block ${selectedBlock.slot}. Redirecting…`);
+                  window.location.href = `/admin/dayplans/${encodeURIComponent(String(j?.plan_id ?? ''))}`;
                 } catch (e: any) {
                   setApplyErr(e?.message ?? 'Apply failed');
                 } finally {
@@ -647,7 +618,7 @@ export default function TeacherClient() {
               }}
               style={styles.primaryBtn}
             >
-              {applyLoading ? 'Applying…' : 'Apply to selected dayplan (append)'}
+              {applyLoading ? 'Applying…' : 'Apply (append + create plan if missing)'}
             </button>
           ) : null}
         </div>
