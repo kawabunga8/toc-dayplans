@@ -731,6 +731,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
       }));
       setPhases(nextPhases);
       setLessonOverride(true);
+      setLessonTouched(false);
     } else {
       const legacyPhases: Phase[] = (lf2.data ?? []).map((r: any) => ({
         client_id: newClientId(),
@@ -750,9 +751,10 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         source_template_phase_id: null,
       }));
 
-      const nextPhases = legacyPhases.length ? legacyPhases : seededFromTemplate;
-      setPhases(nextPhases);
-      setLessonOverride(nextPhases.length > 0);
+      // Only mark "override" when there are actual day-specific overrides (JSON override or legacy instance rows).
+      const useLegacy = legacyPhases.length > 0;
+      setPhases(useLegacy ? legacyPhases : seededFromTemplate);
+      setLessonOverride(useLegacy);
     }
 
     setWhatIfItems((wi2.data ?? []).map((r: any) => ({ scenario_text: r.scenario_text, response_text: r.response_text, source_template_item_id: r.source_template_item_id ?? null })));
