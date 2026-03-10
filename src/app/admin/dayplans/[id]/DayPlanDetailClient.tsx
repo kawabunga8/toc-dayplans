@@ -890,7 +890,7 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                 }}
                 style={styles.secondaryBtn}
               >
-                Stay
+                Cancel
               </button>
               <button
                 type="button"
@@ -907,7 +907,7 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                 }}
                 style={styles.dangerBtn}
               >
-                Leave without saving
+                Continue without saving
               </button>
             </div>
           </div>
