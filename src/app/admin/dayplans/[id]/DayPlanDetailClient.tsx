@@ -1227,6 +1227,52 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                   >
                     Debug lesson flow
                   </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const tags = {
+                          plan_id: plan?.id ?? null,
+                          plan_date: plan?.plan_date ?? null,
+                          slot: plan?.slot ?? null,
+                        };
+                        const toc = {
+                          has_unsaved_changes: hasUnsavedChanges,
+                          toc_unsaved_by_block_id: tocUnsavedByBlockId,
+                        };
+                        const res = await fetch('/api/admin/debug/report', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            plan_id: id,
+                            host: typeof window !== 'undefined' ? window.location.host : '',
+                            href: typeof window !== 'undefined' ? window.location.href : '',
+                            tags,
+                            toc,
+                          }),
+                        });
+                        const j = await res.json();
+                        if (!res.ok) throw new Error(j?.error ?? 'Failed');
+                        const diagId = String(j?.diagnostic_id ?? '').trim();
+                        if (diagId) {
+                          try {
+                            await navigator.clipboard.writeText(diagId);
+                          } catch {
+                            // ignore
+                          }
+                          alert(`Diagnostic ID: ${diagId} (copied)`);
+                        } else {
+                          alert('Diagnostic created');
+                        }
+                      } catch (e: any) {
+                        alert(e?.message ?? 'Diagnostic failed');
+                      }
+                    }}
+                    style={styles.secondaryBtn}
+                  >
+                    Report diagnostics
+                  </button>
+
                   <button onClick={recalcTimesFromDefaults} disabled={status !== 'idle'} style={styles.secondaryBtn}>
                     Fix times from defaults
                   </button>
