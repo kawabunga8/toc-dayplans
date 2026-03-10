@@ -45,7 +45,7 @@ export async function GET(req: Request) {
 
     const { data: blocks, error: blocksErr } = await supabase
       .from('day_plan_blocks')
-      .select('id,day_plan_id,class_name,class_id,room,start_time,end_time,classes:block_label(block_label)')
+      .select('id,day_plan_id,class_name,class_id,room,start_time,end_time,classes(block_label)')
       .eq('day_plan_id', id)
       .order('start_time', { ascending: true });
     if (blocksErr) throw blocksErr;
