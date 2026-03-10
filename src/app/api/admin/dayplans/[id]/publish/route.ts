@@ -91,13 +91,7 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
         .maybeSingle();
       if (upErr) return NextResponse.json({ error: upErr.message }, { status: 400 });
 
-      // Materialize public payload so /p updates
-      if (tbp?.id) {
-        const { error: pubErr } = await supabase.rpc('resolve_toc_block_plan_public_payload', {
-          p_toc_block_plan_id: String(tbp.id),
-        });
-        if (pubErr) return NextResponse.json({ error: pubErr.message }, { status: 400 });
-      }
+      // No materialization step: /p reads live computed payload directly.
     }
   }
 

@@ -99,8 +99,8 @@ export async function GET(req: Request) {
       }
     }
 
-    // /p reads from get_public_day_plan_from_toc (materialized toc_block_plans.public_payload)
-    const { data: publicPlan, error: pubErr } = await supabase.rpc('get_public_day_plan_from_toc', { plan_id: id });
+    // /p reads from get_public_day_plan_live (computed from dayplan + templates + overrides)
+    const { data: publicPlan, error: pubErr } = await supabase.rpc('get_public_day_plan_live', { plan_id: id });
     if (pubErr) throw pubErr;
 
     const debug_build = {

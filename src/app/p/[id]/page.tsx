@@ -27,23 +27,9 @@ export default async function PublicPlanPage({ params }: { params: Promise<{ id:
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  // Prefer live computed payload (matches /dayplan immediately).
-  // Fall back to materialized payload for older DBs.
-  let data: any = null;
-  let error: any = null;
-  let payloadSource: 'live' | 'materialized' | 'none' = 'none';
-  {
-    const r1 = await supabase.rpc('get_public_day_plan_live', { plan_id: id });
-    if (!r1.error && r1.data) {
-      data = r1.data;
-      payloadSource = 'live';
-    } else {
-      const r2 = await supabase.rpc('get_public_day_plan_from_toc', { plan_id: id });
-      data = r2.data;
-      error = r2.error;
-      payloadSource = r2.data ? 'materialized' : 'none';
-    }
-  }
+  // Live-only: /p reads computed payload directly from dayplan + templates + overrides.
+  const { data, error } = await supabase.rpc('get_public_day_plan_live', { plan_id: id });
+  const payloadSource: 'live' | 'none' = data ? 'live' : 'none';
 
   const { data: layoutData } = await supabase.rpc('get_public_page_layout', { layout_id: 'public_plan' });
 
@@ -80,7 +66,7 @@ export default async function PublicPlanPage({ params }: { params: Promise<{ id:
     if (primaryBlockId) {
       const { data: row } = await supabase
         .from('toc_block_plans')
-        .select('id,public_updated_at,public_payload')
+        .select('id')
         .eq('day_plan_block_id', primaryBlockId)
         .maybeSingle();
       tbp = row ?? null;
@@ -92,8 +78,6 @@ export default async function PublicPlanPage({ params }: { params: Promise<{ id:
       plan_slot: slot || null,
       primary_block_id: primaryBlockId,
       toc_block_plan_id: tbp?.id ?? null,
-      toc_public_updated_at: tbp?.public_updated_at ?? null,
-      toc_has_public_payload: tbp?.public_payload != null,
       plan_has_toc: (data as any)?.toc != null,
     };
   } catch {

@@ -353,15 +353,6 @@ export default function PublicPlanClient({ plan, layout, diagnostics }: { plan: 
                 <span style={{ fontFamily: 'monospace' }}>{diagnostics?.plan_has_toc ? 'present' : 'missing'}</span>
               </div>
               <div style={{ fontSize: 11, opacity: 0.7, marginTop: 2, lineHeight: 1.25 }}>
-                Materialized TOC payload:{' '}
-                <span style={{ fontFamily: 'monospace' }}>{diagnostics?.toc_has_public_payload ? 'OK' : 'MISSING'}</span>
-                {diagnostics?.toc_public_updated_at ? (
-                  <>
-                    {' '}• updated <span style={{ fontFamily: 'monospace' }}>{String(diagnostics.toc_public_updated_at)}</span>
-                  </>
-                ) : null}
-              </div>
-              <div style={{ fontSize: 11, opacity: 0.7, marginTop: 2, lineHeight: 1.25 }}>
                 Build: <span style={{ fontFamily: 'monospace' }}>v{process.env.NEXT_PUBLIC_APP_VERSION || '—'}</span>
               </div>
             </div>

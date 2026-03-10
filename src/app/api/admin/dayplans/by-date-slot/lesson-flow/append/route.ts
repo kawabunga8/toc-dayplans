@@ -237,13 +237,7 @@ export async function POST(req: Request) {
     );
   }
 
-  // Materialize public payload for /p
-  const { error: pubErr } = await supabase.rpc('resolve_toc_block_plan_public_payload', {
-    p_toc_block_plan_id: tocBlockPlanId,
-  });
-  if (pubErr) {
-    return NextResponse.json({ error: `Failed to resolve public payload: ${pubErr.message}` }, { status: 400 });
-  }
+  // No materialization step: /p reads live computed payload directly.
 
   await adminDb.from('toc_lesson_flow_phases').delete().eq('toc_block_plan_id', tocBlockPlanId);
 

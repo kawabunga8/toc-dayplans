@@ -1301,12 +1301,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         }
       }
 
-      // Materialize the live render into toc_block_plans.public_payload for /p.
-      // Do NOT swallow errors here; if this fails then /p will appear blank.
-      {
-        const { error: pubErr } = await supabase.rpc('resolve_toc_block_plan_public_payload', { p_toc_block_plan_id: tocBlockPlanId });
-        if (pubErr) throw pubErr;
-      }
+      // No materialization step: /p reads live computed payload directly.
 
       // Reload state (optional)
       if (reload) await loadAll(supabase, tocBlockPlanId, templateId);
