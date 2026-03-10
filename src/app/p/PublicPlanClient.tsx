@@ -94,7 +94,7 @@ type PublicPlanLayout = {
   sections?: Array<{ key: LayoutSectionKey; title?: string; enabled?: boolean }>;
 };
 
-export default function PublicPlanClient({ plan, layout }: { plan: PublicPlan; layout?: PublicPlanLayout | null }) {
+export default function PublicPlanClient({ plan, layout, diagnostics }: { plan: PublicPlan; layout?: PublicPlanLayout | null; diagnostics?: any }) {
   const [rotationBlocks, setRotationBlocks] = useState<string[]>([]);
   const [blockTimesBySlot, setBlockTimesBySlot] = useState<Record<string, { start: string; end: string }>>({});
 
@@ -340,6 +340,23 @@ export default function PublicPlanClient({ plan, layout }: { plan: PublicPlan; l
                 Block {plan.slot}
                 {plan.friday_type ? ` · ${plan.friday_type === 'day1' ? 'Friday Day 1' : 'Friday Day 2'}` : ''}
                 {' · '} {formatHeaderDate(plan.plan_date)}
+              </div>
+
+              {/* Always-visible self-diagnostics (keeps support from being tedious) */}
+              <div style={{ fontSize: 11, opacity: 0.7, marginTop: 4, lineHeight: 1.25 }}>
+                Plan ID: <span style={{ fontFamily: 'monospace' }}>{plan.id}</span>
+              </div>
+              <div style={{ fontSize: 11, opacity: 0.7, marginTop: 2, lineHeight: 1.25 }}>
+                TOC payload:{' '}
+                <span style={{ fontFamily: 'monospace' }}>{diagnostics?.toc_has_public_payload ? 'OK' : 'MISSING'}</span>
+                {diagnostics?.toc_public_updated_at ? (
+                  <>
+                    {' '}• updated <span style={{ fontFamily: 'monospace' }}>{String(diagnostics.toc_public_updated_at)}</span>
+                  </>
+                ) : null}
+              </div>
+              <div style={{ fontSize: 11, opacity: 0.7, marginTop: 2, lineHeight: 1.25 }}>
+                Build: <span style={{ fontFamily: 'monospace' }}>v{process.env.NEXT_PUBLIC_APP_VERSION || '—'}</span>
               </div>
             </div>
           </div>
