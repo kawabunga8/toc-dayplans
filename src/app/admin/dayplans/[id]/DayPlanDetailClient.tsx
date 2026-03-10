@@ -61,6 +61,7 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
   const [saveAllStatus, setSaveAllStatus] = useState<SaveAllStatus>('idle');
   const [saveAllError, setSaveAllError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [tocUnsavedByBlockId, setTocUnsavedByBlockId] = useState<Record<string, boolean>>({});
   const [plan, setPlan] = useState<DayPlanRow | null>(null);
 
   const [draftTitle, setDraftTitle] = useState('');
@@ -214,6 +215,42 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
   }, [id]);
 
   // Autosave disabled (use Save all)
+
+  // Track unsaved state from child TOC editors so we can warn before navigation.
+  useEffect(() => {
+    const handlers: Array<{ type: string; fn: any }> = [];
+
+    for (const b of blocks) {
+      if (!b?.id) continue;
+      const type = `toc-unsaved:${String(b.id)}`;
+      const fn = (e: Event) => {
+        const evt = e as CustomEvent<{ unsaved?: boolean }>;
+        const u = !!evt.detail?.unsaved;
+        setTocUnsavedByBlockId((prev) => ({ ...prev, [String(b.id)]: u }));
+      };
+      window.addEventListener(type, fn as any);
+      handlers.push({ type, fn });
+    }
+
+    return () => {
+      for (const h of handlers) window.removeEventListener(h.type, h.fn as any);
+    };
+  }, [blocks]);
+
+  const hasUnsavedChanges = useMemo(() => {
+    const tocUnsaved = Object.values(tocUnsavedByBlockId).some(Boolean);
+    return tocUnsaved;
+  }, [tocUnsavedByBlockId]);
+
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (!hasUnsavedChanges) return;
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [hasUnsavedChanges]);
 
   // Allow pickers to return selected values via query params.
   useEffect(() => {

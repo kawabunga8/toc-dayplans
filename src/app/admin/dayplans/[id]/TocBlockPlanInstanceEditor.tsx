@@ -65,6 +65,19 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
   const [error, setError] = useState<string | null>(null);
 
   const [unsaved, setUnsaved] = useState(false);
+
+  // Report unsaved state to the parent dayplan page so it can warn on navigation.
+  useEffect(() => {
+    try {
+      window.dispatchEvent(
+        new CustomEvent(`toc-unsaved:${blockId}`, {
+          detail: { unsaved },
+        })
+      );
+    } catch {
+      // ignore
+    }
+  }, [unsaved, blockId]);
   const markUnsaved = () => setUnsaved(true);
   const [saveDebug, setSaveDebug] = useState<string | null>(null);
 
