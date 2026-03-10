@@ -343,7 +343,9 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
       await saveBlocks();
 
       // Publish should prune legacy TOC overrides (template-first) and save intended day overrides.
-      const ids = (blocks ?? []).map((b) => b.id).filter(Boolean) as string[];
+      const ids = (blocks ?? [])
+        .filter((b) => b.id && b.class_id)
+        .map((b) => b.id) as string[];
       for (const bid of ids) {
         await requestTocPublishForBlock(bid);
       }
@@ -624,17 +626,23 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
       // IMPORTANT: don't rely on local React state for block IDs here.
       // saveBlocks may insert new rows and setBlocks() is async, so ids can be stale.
       const supabase = getSupabaseClient();
-      const { data: bidRows, error: bidErr } = await supabase.from('day_plan_blocks').select('id').eq('day_plan_id', plan!.id);
+      const { data: bidRows, error: bidErr } = await supabase
+        .from('day_plan_blocks')
+        .select('id, class_id')
+        .eq('day_plan_id', plan!.id);
       if (bidErr) throw bidErr;
-      const ids = (bidRows ?? []).map((r: any) => String(r.id)).filter(Boolean);
+      const tocIds = (bidRows ?? [])
+        .filter((r: any) => r?.class_id) // only blocks that have a TOC editor/listener
+        .map((r: any) => String(r.id))
+        .filter(Boolean);
 
       // Save TOC edits.
-      for (const bid of ids) {
+      for (const bid of tocIds) {
         await requestTocSaveForBlock(bid);
       }
 
       // Save = Publish: always publish after saving so /p reflects latest changes.
-      for (const bid of ids) {
+      for (const bid of tocIds) {
         await requestTocPublishForBlock(bid);
       }
 
