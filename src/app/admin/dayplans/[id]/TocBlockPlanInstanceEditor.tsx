@@ -1004,6 +1004,9 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
 
     try {
       const supabase = getSupabaseClient();
+      // Keep a local copy of override_payload as we mutate it during save.
+      // React state updates are async; using state as a merge base later can clobber earlier writes.
+      let workingPayload: any = overridePayload && typeof overridePayload === 'object' ? { ...(overridePayload as any) } : {};
 
       // header
       const { error: upErr } = await supabase
@@ -1113,7 +1116,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         }
 
         const nextPayload = {
-          ...(overridePayload && typeof overridePayload === 'object' ? overridePayload : {}),
+          ...workingPayload,
           lesson_flow_phases: effective.map((p) => ({
             time_text: p.time_text,
             phase_text: p.phase_text,
@@ -1135,6 +1138,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         }
 
         setOverridePayload(persisted);
+        workingPayload = persisted;
 
         // Legacy table cleanup (optional): keep empty so public RPC uses JSON override.
         await supabase.from('toc_lesson_flow_phases').delete().eq('toc_block_plan_id', tocBlockPlanId);
@@ -1172,7 +1176,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         nextAdvanced.pd_goal_connections.length === 0 &&
         nextAdvanced.first_peoples_principles.length === 0;
 
-      const base = (overridePayload && typeof overridePayload === 'object' ? { ...(overridePayload as any) } : {}) as any;
+      const base = (workingPayload && typeof workingPayload === 'object' ? { ...(workingPayload as any) } : {}) as any;
       const nextPayload2 = {
         ...base,
         publish_mode: publishMode,
@@ -1190,7 +1194,9 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         .select('override_payload')
         .maybeSingle();
       if (up2Err) throw up2Err;
-      setOverridePayload((saved2 as any)?.override_payload ?? nextPayload2);
+      const persisted2 = (saved2 as any)?.override_payload ?? nextPayload2;
+      setOverridePayload(persisted2);
+      workingPayload = persisted2;
 
       // Opening routine overrides only if created
       if (openingOverride) {
