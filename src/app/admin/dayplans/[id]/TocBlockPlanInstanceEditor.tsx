@@ -1479,34 +1479,42 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
             A quick check-in embedded in your lesson (evidence + differentiation). Saved as a day override.
           </div>
 
-          <div style={styles.grid2}>
-            <label style={styles.field}>
-              <span style={styles.label}>Timing in lesson</span>
-              <input value={touchTiming} onChange={(e) => { setTouchTiming(e.target.value); markUnsaved(); }} style={styles.input} placeholder="e.g., 15 minutes into flow" />
-            </label>
-            <label style={styles.field}>
-              <span style={styles.label}>Cyclical loop type</span>
-              <input value={touchCycle} onChange={(e) => { setTouchCycle(e.target.value); markUnsaved(); }} style={styles.input} placeholder="design / rehearsal / refinement" />
-            </label>
-            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
-              <span style={styles.label}>Learning Standard focus (reference)</span>
-              <input value={touchStandard} onChange={(e) => { setTouchStandard(e.target.value); markUnsaved(); }} style={styles.input} placeholder="e.g., ADST > Define and Ideate" />
-            </label>
-            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
-              <span style={styles.label}>Evidence to collect</span>
-              <input value={touchEvidence} onChange={(e) => { setTouchEvidence(e.target.value); markUnsaved(); }} style={styles.input} placeholder="e.g., verbal articulation of…" />
-            </label>
-            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
-              <span style={styles.label}>Differentiation strategy (UDL / IEP)</span>
-              <input value={touchDiff} onChange={(e) => { setTouchDiff(e.target.value); markUnsaved(); }} style={styles.input} placeholder="e.g., chunking, sentence starters, extended time…" />
-            </label>
-          </div>
+          {publishMode === 'advanced' ? (
+            <>
+              <div style={styles.grid2}>
+                <label style={styles.field}>
+                  <span style={styles.label}>Timing in lesson</span>
+                  <input value={touchTiming} onChange={(e) => { setTouchTiming(e.target.value); markUnsaved(); }} style={styles.input} placeholder="e.g., 15 minutes into flow" />
+                </label>
+                <label style={styles.field}>
+                  <span style={styles.label}>Cyclical loop type</span>
+                  <input value={touchCycle} onChange={(e) => { setTouchCycle(e.target.value); markUnsaved(); }} style={styles.input} placeholder="design / rehearsal / refinement" />
+                </label>
+                <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                  <span style={styles.label}>Learning Standard focus (reference)</span>
+                  <input value={touchStandard} onChange={(e) => { setTouchStandard(e.target.value); markUnsaved(); }} style={styles.input} placeholder="e.g., ADST > Define and Ideate" />
+                </label>
+                <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                  <span style={styles.label}>Evidence to collect</span>
+                  <input value={touchEvidence} onChange={(e) => { setTouchEvidence(e.target.value); markUnsaved(); }} style={styles.input} placeholder="e.g., verbal articulation of…" />
+                </label>
+                <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                  <span style={styles.label}>Differentiation strategy (UDL / IEP)</span>
+                  <input value={touchDiff} onChange={(e) => { setTouchDiff(e.target.value); markUnsaved(); }} style={styles.input} placeholder="e.g., chunking, sentence starters, extended time…" />
+                </label>
+              </div>
 
-          {templateTouchPoint ? (
-            <div style={{ marginTop: 10, fontSize: 12, opacity: 0.8 }}>
-              Template baseline: {String((templateTouchPoint as any)?.timing_in_lesson ?? '').trim() ? 'set' : '—'}
+              {templateTouchPoint ? (
+                <div style={{ marginTop: 10, fontSize: 12, opacity: 0.8 }}>
+                  Template baseline: {String((templateTouchPoint as any)?.timing_in_lesson ?? '').trim() ? 'set' : '—'}
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <div style={{ fontSize: 12, opacity: 0.85 }}>
+              Hidden in Standard mode. Toggle <b>Advanced (Everything)</b> to view/edit.
             </div>
-          ) : null}
+          )}
         </div>
 
         <div style={{ gridColumn: '1 / -1', ...styles.touchCard }}>
