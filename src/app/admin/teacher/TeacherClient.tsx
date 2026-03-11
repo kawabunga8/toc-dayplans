@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
+import { getSupabaseClient } from '@/lib/supabaseClient';
 import { TEACHER_ROLES, buildSection1FromFields, STANDING_GUARDRAILS } from '@/lib/teacherSuperprompt/superprompt';
 
 type RoleId = 1 | 2 | 3 | 4 | 5 | 6;
@@ -241,32 +242,73 @@ export default function TeacherClient() {
 
   useEffect(() => {
     // When a block is selected, auto-fill some context fields.
+    // Tags should come from the active TOC template (same source as /courses "#Tags" column).
     if (!selectedBlock) return;
 
-    const nameTags = parseTags(selectedBlock.class_name);
-    const roomTags = parseTags((selectedClass as any)?.room ?? '');
-    const subjTags = Array.from(new Set([...(nameTags.subjects ?? []), ...(roomTags.subjects ?? [])]));
-    const gradeTags = Array.from(new Set([...(nameTags.grades ?? []), ...(roomTags.grades ?? [])])).sort((a, b) => a - b);
-    setSubjectTags(subjTags);
+    let cancelled = false;
 
-    // Keep Subject/Course aligned with the selected block by default.
-    // If the user has manually overridden Subject, we keep it.
-    // Otherwise, update it whenever the block selection changes.
-    if (!subject.trim() || subject.trim() === String(selectedBlock.class_name ?? '').trim()) {
-      setSubject(selectedBlock.class_name);
-    }
-
-    if (grades.length === 0) {
-      // Prefer DB grade_level if user hasn't picked grades yet.
-      const g = (selectedClass as any)?.grade_level;
-      if ((typeof g === 'number' || typeof g === 'string') && String(g).trim()) {
-        const n = Number(g);
-        if (Number.isFinite(n)) setGrades([n]);
-      } else if (gradeTags.length) {
-        setGrades(gradeTags);
+    (async () => {
+      // 1) Subject/course label
+      // Keep Subject/Course aligned with the selected block by default.
+      // If the user has manually overridden Subject, we keep it.
+      // Otherwise, update it whenever the block selection changes.
+      if (!subject.trim() || subject.trim() === String(selectedBlock.class_name ?? '').trim()) {
+        setSubject(selectedBlock.class_name);
       }
-    }
-  }, [selectedBlock, selectedClass]);
+
+      // 2) Load template default_tags (authoritative "tags")
+      let templateTags: string[] = [];
+      try {
+        if (selectedClass?.id) {
+          const supabase = getSupabaseClient();
+          const { data, error } = await supabase
+            .from('class_toc_templates')
+            .select('default_tags')
+            .eq('class_id', selectedClass.id)
+            .eq('is_active', true)
+            .order('updated_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (!error) {
+            templateTags = Array.isArray((data as any)?.default_tags)
+              ? ((data as any).default_tags as any[]).map((t) => String(t).trim()).filter(Boolean)
+              : [];
+          }
+        }
+      } catch {
+        // ignore
+      }
+
+      // 3) Compute subject tags + grade tags
+      const templateSubjects = templateTags.filter((t) => /[A-Za-z]/.test(t)).map((t) => t.toUpperCase());
+      const templateGrades = templateTags.filter((t) => /^\d+$/.test(t)).map((t) => Number(t)).filter((n) => Number.isFinite(n));
+
+      // Fallback: parse #tags from name if template has none
+      const fallback = parseTags(selectedBlock.class_name);
+      const subjTags = Array.from(new Set([...(templateSubjects.length ? templateSubjects : fallback.subjects)]));
+      const gradeTags = templateGrades.length ? templateGrades : fallback.grades;
+
+      if (!cancelled) setSubjectTags(subjTags);
+
+      // 4) Auto-fill grade only if user hasn't picked grades yet.
+      if (grades.length === 0) {
+        // Prefer DB grade_level if present.
+        const g = (selectedClass as any)?.grade_level;
+        if ((typeof g === 'number' || typeof g === 'string') && String(g).trim()) {
+          const n = Number(g);
+          if (Number.isFinite(n)) {
+            if (!cancelled) setGrades([n]);
+          }
+        } else if (gradeTags.length) {
+          if (!cancelled) setGrades(gradeTags);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedBlock, selectedClass, subject, grades.length]);
 
   const gradeText = useMemo(() => {
     if (!grades.length) return '';
