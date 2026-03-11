@@ -31,6 +31,7 @@ export default function TeacherClient() {
   const [weekErr, setWeekErr] = useState<string | null>(null);
   const [weekPlans, setWeekPlans] = useState<any>(null);
   const [selectedBlockKey, setSelectedBlockKey] = useState<string>('');
+  const [fridayTypeOverride, setFridayTypeOverride] = useState<'day1' | 'day2' | ''>('');
 
   const [rotationSlots, setRotationSlots] = useState<string[] | null>(null);
   const [rotationLoading, setRotationLoading] = useState(false);
@@ -139,7 +140,7 @@ export default function TeacherClient() {
       setRotationLoading(true);
       try {
         const plansForDate = (weekPlans?.plans?.[weekDate] ?? []) as any[];
-        const fridayType = plansForDate?.[0]?.friday_type ?? null;
+        const fridayType = fridayTypeOverride || plansForDate?.[0]?.friday_type || null;
 
         const qs = new URLSearchParams();
         qs.set('date', weekDate);
@@ -307,7 +308,24 @@ export default function TeacherClient() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10, alignItems: 'end' }}>
           <label style={{ display: 'grid', gap: 6 }}>
             <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.8 }}>Week containing date</div>
-            <input type="date" value={weekDate} onChange={(e) => setWeekDate(e.target.value)} style={styles.input} />
+            <input
+              type="date"
+              value={weekDate}
+              onChange={(e) => {
+                setWeekDate(e.target.value);
+                setSelectedBlockKey('');
+              }}
+              style={styles.input}
+            />
+          </label>
+
+          <label style={{ display: 'grid', gap: 6 }}>
+            <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.8 }}>Friday Type (only for Fridays)</div>
+            <select value={fridayTypeOverride} onChange={(e) => { setFridayTypeOverride(e.target.value as any); setSelectedBlockKey(''); }} style={styles.input}>
+              <option value="">—</option>
+              <option value="day1">Friday Day 1</option>
+              <option value="day2">Friday Day 2</option>
+            </select>
           </label>
 
           <label style={{ display: 'grid', gap: 6 }}>
