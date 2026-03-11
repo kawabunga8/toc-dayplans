@@ -1983,16 +1983,36 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
               <div key={idx} style={styles.row3}>
                 <input
                   value={s.step_text}
-                  onChange={(e) => setOpeningSteps((prev) => prev.map((x, i) => (i === idx ? { ...x, step_text: e.target.value } : x)))}
+                  onChange={(e) => {
+                    setOpeningSteps((prev) => prev.map((x, i) => (i === idx ? { ...x, step_text: e.target.value } : x)));
+                    setOpeningTouched(true);
+                    markUnsaved();
+                  }}
                   style={styles.input}
                   disabled={isDemo}
                 />
-                <button onClick={() => setOpeningSteps((prev) => prev.filter((_, i) => i !== idx))} style={styles.dangerBtn} disabled={isDemo}>
+                <button
+                  onClick={() => {
+                    setOpeningSteps((prev) => prev.filter((_, i) => i !== idx));
+                    setOpeningTouched(true);
+                    markUnsaved();
+                  }}
+                  style={styles.dangerBtn}
+                  disabled={isDemo}
+                >
                   Remove
                 </button>
               </div>
             ))}
-            <button onClick={() => setOpeningSteps((p) => [...p, { step_text: '', source_template_step_id: null }])} style={styles.secondaryBtn} disabled={isDemo}>
+            <button
+              onClick={() => {
+                setOpeningSteps((p) => [...p, { step_text: '', source_template_step_id: null }]);
+                setOpeningTouched(true);
+                markUnsaved();
+              }}
+              style={styles.secondaryBtn}
+              disabled={isDemo}
+            >
               + Add step
             </button>
           </div>
