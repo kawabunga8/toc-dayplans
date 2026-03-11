@@ -516,14 +516,16 @@ export default function PublicPlanClient({ plan, layout, diagnostics }: { plan: 
                                         {plan.toc.class_overview_rows
                                           .filter((r) => {
                                             const k = String(r.label ?? '').trim().toLowerCase();
-                                            return k !== 'class' && k !== 'room' && k !== 'time';
+                                            if (k === 'class' || k === 'room' || k === 'time') return false;
+                                            const v = resolveTokens(String(r.value ?? ''), b).trim();
+                                            return !!v;
                                           })
                                           .map((r, idx) => {
-                                            const v = resolveTokens(String(r.value ?? ''), b);
+                                            const v = resolveTokens(String(r.value ?? ''), b).trim();
                                             return (
                                               <tr key={idx} style={idx % 2 === 1 ? (styles.printTrAlt as any) : undefined}>
                                                 <td style={styles.printTd as any}><b>{r.label}</b></td>
-                                                <td style={styles.printTd as any}>{v || ''}</td>
+                                                <td style={styles.printTd as any}>{v}</td>
                                               </tr>
                                             );
                                           })}
