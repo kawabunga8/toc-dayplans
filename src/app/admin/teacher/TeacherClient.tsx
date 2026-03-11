@@ -243,7 +243,10 @@ export default function TeacherClient() {
     // When a block is selected, auto-fill some context fields.
     if (!selectedBlock) return;
 
-    const { subjects: subjTags, grades: gradeTags } = parseTags(selectedBlock.class_name);
+    const nameTags = parseTags(selectedBlock.class_name);
+    const roomTags = parseTags((selectedClass as any)?.room ?? '');
+    const subjTags = Array.from(new Set([...(nameTags.subjects ?? []), ...(roomTags.subjects ?? [])]));
+    const gradeTags = Array.from(new Set([...(nameTags.grades ?? []), ...(roomTags.grades ?? [])])).sort((a, b) => a - b);
     setSubjectTags(subjTags);
 
     // Keep Subject/Course aligned with the selected block by default.
