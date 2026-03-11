@@ -171,7 +171,7 @@ export default function TeacherClient() {
     return () => {
       cancelled = true;
     };
-  }, [weekDate, weekPlans]);
+  }, [weekDate, weekPlans, fridayTypeOverride]);
 
   const loadStandards = async (subjects?: string[]) => {
     setStandardsLoading(true);
