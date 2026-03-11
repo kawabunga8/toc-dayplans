@@ -62,6 +62,7 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
   const [saveAllError, setSaveAllError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [tocUnsavedByBlockId, setTocUnsavedByBlockId] = useState<Record<string, boolean>>({});
+  const [metaDirty, setMetaDirty] = useState(false);
   const [plan, setPlan] = useState<DayPlanRow | null>(null);
 
   const [draftTitle, setDraftTitle] = useState('');
@@ -239,8 +240,8 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
 
   const hasUnsavedChanges = useMemo(() => {
     const tocUnsaved = Object.values(tocUnsavedByBlockId).some(Boolean);
-    return tocUnsaved;
-  }, [tocUnsavedByBlockId]);
+    return tocUnsaved || metaDirty;
+  }, [tocUnsavedByBlockId, metaDirty]);
 
   const [navGuardOpen, setNavGuardOpen] = useState(false);
   const [navGuardMsg, setNavGuardMsg] = useState('You have unsaved changes. Leave without saving?');
@@ -641,6 +642,7 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
         class_id: b.class_id ?? null,
       })) as PlanBlockRow[]);
 
+      setMetaDirty(false);
       setStatus('idle');
     } catch (e: any) {
       setStatus('error');
@@ -770,6 +772,7 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
       await load();
       setSavedAt(new Date().toISOString());
       setSaveAllStatus('saved');
+      setMetaDirty(false);
       setStatus('idle');
     } catch (e: any) {
       setSaveAllStatus('error');
@@ -991,7 +994,15 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
 
               <label style={{ display: 'grid', gap: 6 }}>
                 <span style={styles.label}>Notes (optional)</span>
-                <textarea value={draftNotes} onChange={(e) => setDraftNotes(e.target.value)} rows={4} style={styles.textarea} />
+                <textarea
+                  value={draftNotes}
+                  onChange={(e) => {
+                    setDraftNotes(e.target.value);
+                    setMetaDirty(true);
+                  }}
+                  rows={4}
+                  style={styles.textarea}
+                />
               </label>
 
               <label style={{ display: 'grid', gap: 6 }}>
@@ -999,7 +1010,10 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                 <div style={{ display: 'flex', gap: 10, alignItems: 'stretch', flexWrap: 'wrap' }}>
                   <textarea
                     value={draftLearningStandardFocus}
-                    onChange={(e) => setDraftLearningStandardFocus(e.target.value)}
+                    onChange={(e) => {
+                      setDraftLearningStandardFocus(e.target.value);
+                      setMetaDirty(true);
+                    }}
                     rows={2}
                     style={{ ...styles.textarea, flex: 1, minWidth: 260 }}
                     placeholder="(empty)"
@@ -1042,7 +1056,10 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                 <div style={{ display: 'flex', gap: 10, alignItems: 'stretch', flexWrap: 'wrap' }}>
                   <textarea
                     value={draftCoreCompetencyFocus}
-                    onChange={(e) => setDraftCoreCompetencyFocus(e.target.value)}
+                    onChange={(e) => {
+                      setDraftCoreCompetencyFocus(e.target.value);
+                      setMetaDirty(true);
+                    }}
                     rows={2}
                     style={{ ...styles.textarea, flex: 1, minWidth: 260 }}
                     placeholder="(empty)"
@@ -1075,7 +1092,10 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                   <span style={styles.label}>Friday Type</span>
                   <select
                     value={plan.friday_type ?? ''}
-                    onChange={(e) => setPlan((prev) => (prev ? { ...prev, friday_type: (e.target.value as any) || null } : prev))}
+                    onChange={(e) => {
+                      setPlan((prev) => (prev ? { ...prev, friday_type: (e.target.value as any) || null } : prev));
+                      setMetaDirty(true);
+                    }}
                     style={styles.input}
                   >
                     <option value="">Select…</option>
@@ -1143,7 +1163,10 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                         <span style={styles.label}>Details (optional)</span>
                         <textarea
                           value={b.details ?? ''}
-                          onChange={(e) => setBlocks((prev) => prev.map((x, i) => (i === idx ? { ...x, details: e.target.value } : x)))}
+                          onChange={(e) => {
+                            setBlocks((prev) => prev.map((x, i) => (i === idx ? { ...x, details: e.target.value } : x)));
+                            setMetaDirty(true);
+                          }}
                           rows={2}
                           style={styles.textarea}
                         />
