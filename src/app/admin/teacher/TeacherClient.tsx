@@ -245,7 +245,12 @@ export default function TeacherClient() {
     const { subjects: subjTags, grades: gradeTags } = parseTags(selectedBlock.class_name);
     setSubjectTags(subjTags);
 
-    if (!subject.trim()) setSubject(selectedBlock.class_name);
+    // Keep Subject/Course aligned with the selected block by default.
+    // If the user has manually overridden Subject, we keep it.
+    // Otherwise, update it whenever the block selection changes.
+    if (!subject.trim() || subject.trim() === String(selectedBlock.class_name ?? '').trim()) {
+      setSubject(selectedBlock.class_name);
+    }
 
     if (grades.length === 0) {
       // Prefer DB grade_level if user hasn't picked grades yet.
