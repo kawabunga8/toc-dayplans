@@ -1558,55 +1558,65 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         </div>
 
         <div style={{ gridColumn: '1 / -1', ...styles.touchCard }}>
-          <div style={{ ...styles.sectionHeader, marginBottom: 8 }}>Advanced Sections (editable; published only in Advanced mode)</div>
-
+          <div style={{ ...styles.sectionHeader, marginBottom: 8 }}>Materials Needed</div>
           <div style={styles.grid2}>
             <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
               <span style={styles.label}>Materials Needed (one per line) — <em>included in Standard + Advanced</em></span>
               <textarea value={advMaterialsNeeded} onChange={(e) => { setAdvMaterialsNeeded(e.target.value); markUnsaved(); }} rows={5} style={styles.textarea} disabled={isDemo} />
             </label>
-
-            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
-              <span style={styles.label}>Central Theme</span>
-              <textarea value={advCentralTheme} onChange={(e) => { setAdvCentralTheme(e.target.value); markUnsaved(); }} rows={2} style={styles.textarea} disabled={isDemo} />
-            </label>
-            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
-              <span style={styles.label}>Deep Hope</span>
-              <textarea value={advDeepHope} onChange={(e) => { setAdvDeepHope(e.target.value); markUnsaved(); }} rows={2} style={styles.textarea} disabled={isDemo} />
-            </label>
-            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
-              <span style={styles.label}>Big Idea</span>
-              <textarea value={advBigIdea} onChange={(e) => { setAdvBigIdea(e.target.value); markUnsaved(); }} rows={2} style={styles.textarea} disabled={isDemo} />
-            </label>
-            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
-              <span style={styles.label}>Learning Target</span>
-              <textarea value={advLearningTarget} onChange={(e) => { setAdvLearningTarget(e.target.value); markUnsaved(); }} rows={2} style={styles.textarea} disabled={isDemo} />
-            </label>
-            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
-              <span style={styles.label}>Collaborative Structure</span>
-              <textarea value={advCollaborativeStructure} onChange={(e) => { setAdvCollaborativeStructure(e.target.value); markUnsaved(); }} rows={2} style={styles.textarea} disabled={isDemo} />
-            </label>
-            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
-              <span style={styles.label}>Context</span>
-              <textarea value={advContext} onChange={(e) => { setAdvContext(e.target.value); markUnsaved(); }} rows={3} style={styles.textarea} disabled={isDemo} />
-            </label>
-
-            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
-              <span style={styles.label}>Assessment Touch Points (one per line)</span>
-              <textarea value={advAssessmentTouchPoints} onChange={(e) => { setAdvAssessmentTouchPoints(e.target.value); markUnsaved(); }} rows={5} style={styles.textarea} disabled={isDemo} />
-            </label>
-
-            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
-              <span style={styles.label}>PD Goal Connections (one per line)</span>
-              <textarea value={advPdGoalConnections} onChange={(e) => { setAdvPdGoalConnections(e.target.value); markUnsaved(); }} rows={5} style={styles.textarea} disabled={isDemo} />
-            </label>
-
-            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
-              <span style={styles.label}>First Peoples Principles of Learning (one per line)</span>
-              <textarea value={advFirstPeoplesPrinciples} onChange={(e) => { setAdvFirstPeoplesPrinciples(e.target.value); markUnsaved(); }} rows={5} style={styles.textarea} disabled={isDemo} />
-            </label>
           </div>
         </div>
+
+        {publishMode === 'advanced' ? (
+          <div style={{ gridColumn: '1 / -1', ...styles.touchCard }}>
+            <div style={{ ...styles.sectionHeader, marginBottom: 8 }}>Advanced Sections</div>
+            <div style={{ fontSize: 12, opacity: 0.85, marginBottom: 10 }}>
+              These fields are only shown and published when Advanced is enabled.
+            </div>
+
+            <div style={styles.grid2}>
+              <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                <span style={styles.label}>Central Theme</span>
+                <textarea value={advCentralTheme} onChange={(e) => { setAdvCentralTheme(e.target.value); markUnsaved(); }} rows={2} style={styles.textarea} disabled={isDemo} />
+              </label>
+              <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                <span style={styles.label}>Deep Hope</span>
+                <textarea value={advDeepHope} onChange={(e) => { setAdvDeepHope(e.target.value); markUnsaved(); }} rows={2} style={styles.textarea} disabled={isDemo} />
+              </label>
+              <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                <span style={styles.label}>Big Idea</span>
+                <textarea value={advBigIdea} onChange={(e) => { setAdvBigIdea(e.target.value); markUnsaved(); }} rows={2} style={styles.textarea} disabled={isDemo} />
+              </label>
+              <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                <span style={styles.label}>Learning Target</span>
+                <textarea value={advLearningTarget} onChange={(e) => { setAdvLearningTarget(e.target.value); markUnsaved(); }} rows={2} style={styles.textarea} disabled={isDemo} />
+              </label>
+              <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                <span style={styles.label}>Collaborative Structure</span>
+                <textarea value={advCollaborativeStructure} onChange={(e) => { setAdvCollaborativeStructure(e.target.value); markUnsaved(); }} rows={2} style={styles.textarea} disabled={isDemo} />
+              </label>
+              <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                <span style={styles.label}>Context</span>
+                <textarea value={advContext} onChange={(e) => { setAdvContext(e.target.value); markUnsaved(); }} rows={3} style={styles.textarea} disabled={isDemo} />
+              </label>
+
+              <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                <span style={styles.label}>Assessment Touch Points (one per line)</span>
+                <textarea value={advAssessmentTouchPoints} onChange={(e) => { setAdvAssessmentTouchPoints(e.target.value); markUnsaved(); }} rows={5} style={styles.textarea} disabled={isDemo} />
+              </label>
+
+              <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                <span style={styles.label}>PD Goal Connections (one per line)</span>
+                <textarea value={advPdGoalConnections} onChange={(e) => { setAdvPdGoalConnections(e.target.value); markUnsaved(); }} rows={5} style={styles.textarea} disabled={isDemo} />
+              </label>
+
+              <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                <span style={styles.label}>First Peoples Principles of Learning (one per line)</span>
+                <textarea value={advFirstPeoplesPrinciples} onChange={(e) => { setAdvFirstPeoplesPrinciples(e.target.value); markUnsaved(); }} rows={5} style={styles.textarea} disabled={isDemo} />
+              </label>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {/* Lesson flow: template-first; first edit creates a day override */}
