@@ -106,6 +106,25 @@ export default function TeacherClient() {
 
   const selectedBlock = useMemo(() => blockOptions.find((o) => o.key === selectedBlockKey) ?? null, [blockOptions, selectedBlockKey]);
 
+  // When the selected block changes, clear Section 1 fields so they reload from the newly-selected class/template tags.
+  useEffect(() => {
+    if (!selectedBlockKey) return;
+    setSubject('');
+    setGrades([]);
+    setClassSize('');
+    setDiversity('');
+    setStandards('');
+    setUnitTopic('');
+    setUnitStage('');
+    setTools('');
+    setNotWorked('');
+    // Also clear any previously generated output/errors.
+    setErr(null);
+    setOkMsg(null);
+    setApplyErr(null);
+    setPhases(null);
+  }, [selectedBlockKey]);
+
   useEffect(() => {
     // Fetch week
     let cancelled = false;
