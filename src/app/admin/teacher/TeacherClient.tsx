@@ -108,8 +108,9 @@ export default function TeacherClient() {
 
   // When the selected block changes, clear Section 1 fields so they reload from the newly-selected class/template tags.
   useEffect(() => {
-    if (!selectedBlockKey) return;
+    // Whenever the block selection changes (including clearing it), reset Section 1.
     setSubject('');
+    setSubjectTags([]);
     setGrades([]);
     setClassSize('');
     setDiversity('');
