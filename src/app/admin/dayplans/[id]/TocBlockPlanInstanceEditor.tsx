@@ -143,6 +143,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
   };
 
   const [phases, setPhases] = useState<Phase[]>([]);
+  const phasesRef = useRef<Phase[]>([]);
   const phaseFieldRefs = useRef<
     Record<
       string,
@@ -731,6 +732,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         source_template_phase_id: null,
       }));
       setPhases(nextPhases);
+      phasesRef.current = nextPhases;
       setLessonOverride(true);
       setLessonTouched(false);
     } else {
@@ -754,7 +756,11 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
 
       // Only mark "override" when there are actual day-specific overrides (JSON override or legacy instance rows).
       const useLegacy = legacyPhases.length > 0;
-      setPhases(useLegacy ? legacyPhases : seededFromTemplate);
+      {
+        const next = useLegacy ? legacyPhases : seededFromTemplate;
+        setPhases(next);
+        phasesRef.current = next;
+      }
       setLessonOverride(useLegacy);
     }
 
@@ -1039,8 +1045,9 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         // Avoid DOM re-reads; those are brittle on mobile/IME and can miss the user's latest text.
         let effective: Phase[] = [];
 
-        if (phases.length) {
-          effective = phases;
+        const curPhases = (phasesRef.current?.length ? phasesRef.current : phases);
+        if (curPhases.length) {
+          effective = curPhases;
         } else if ((tplLessonFlow ?? []).length) {
           effective = (tplLessonFlow ?? []).map((r: any) => ({
             client_id: newClientId(),
@@ -1756,16 +1763,16 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                 disabled={!aiFlowSuggestion}
                 onClick={() => {
                   const sug = aiFlowSuggestion ?? [];
-                  setPhases(
-                    sug.map((p: any) => ({
-                      client_id: newClientId(),
-                      time_text: String(p.time_text ?? ''),
-                      phase_text: String(p.phase_text ?? ''),
-                      activity_text: String(p.activity_text ?? ''),
-                      purpose_text: String(p.purpose_text ?? ''),
-                      source_template_phase_id: null,
-                    }))
-                  );
+                  const next = sug.map((p: any) => ({
+                    client_id: newClientId(),
+                    time_text: String(p.time_text ?? ''),
+                    phase_text: String(p.phase_text ?? ''),
+                    activity_text: String(p.activity_text ?? ''),
+                    purpose_text: String(p.purpose_text ?? ''),
+                    source_template_phase_id: null,
+                  }));
+                  setPhases(next);
+                  phasesRef.current = next;
                   setLessonOverride(true);
                   setLessonTouched(true);
                   markUnsaved();
@@ -1811,6 +1818,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                   const copy = [...prev];
                   const [moved] = copy.splice(dragPhaseIdx, 1);
                   copy.splice(idx, 0, moved);
+                  phasesRef.current = copy;
                   return copy;
                 });
                 setDragPhaseIdx(null);
@@ -1833,7 +1841,11 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                 }}
                 onChange={(e) => {
                   const v = e.target.value;
-                  setPhases((prev) => prev.map((x) => (x.client_id === p.client_id ? { ...x, time_text: v } : x)));
+                  setPhases((prev) => {
+                    const next = prev.map((x) => (x.client_id === p.client_id ? { ...x, time_text: v } : x));
+                    phasesRef.current = next;
+                    return next;
+                  });
                   setLessonOverride(true);
                   setLessonTouched(true);
                   markUnsaved();
@@ -1856,7 +1868,11 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                 }}
                 onChange={(e) => {
                   const v = e.target.value;
-                  setPhases((prev) => prev.map((x) => (x.client_id === p.client_id ? { ...x, phase_text: v } : x)));
+                  setPhases((prev) => {
+                    const next = prev.map((x) => (x.client_id === p.client_id ? { ...x, phase_text: v } : x));
+                    phasesRef.current = next;
+                    return next;
+                  });
                   setLessonOverride(true);
                   setLessonTouched(true);
                   markUnsaved();
@@ -1879,7 +1895,11 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                 }}
                 onChange={(e) => {
                   const v = e.target.value;
-                  setPhases((prev) => prev.map((x) => (x.client_id === p.client_id ? { ...x, activity_text: v } : x)));
+                  setPhases((prev) => {
+                    const next = prev.map((x) => (x.client_id === p.client_id ? { ...x, activity_text: v } : x));
+                    phasesRef.current = next;
+                    return next;
+                  });
                   setLessonOverride(true);
                   setLessonTouched(true);
                   markUnsaved();
@@ -1903,7 +1923,11 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                 }}
                 onChange={(e) => {
                   const v = e.target.value;
-                  setPhases((prev) => prev.map((x) => (x.client_id === p.client_id ? { ...x, purpose_text: v } : x)));
+                  setPhases((prev) => {
+                    const next = prev.map((x) => (x.client_id === p.client_id ? { ...x, purpose_text: v } : x));
+                    phasesRef.current = next;
+                    return next;
+                  });
                   setLessonOverride(true);
                   setLessonTouched(true);
                   markUnsaved();
@@ -1930,10 +1954,14 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
             onClick={() => {
               setLessonTouched(true);
               markUnsaved();
-              setPhases((prev) => [
+              setPhases((prev) => {
+              const next = [
                 ...prev,
                 { client_id: newClientId(), time_text: '', phase_text: '', activity_text: '', purpose_text: '', source_template_phase_id: null },
-              ]);
+              ];
+              phasesRef.current = next;
+              return next;
+            });
             }}
             style={styles.secondaryBtn}
             disabled={isDemo}
