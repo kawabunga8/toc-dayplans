@@ -186,7 +186,7 @@ export async function POST(req: Request) {
 
     const dayplanContext = planDate || slot || className ? `Dayplan context:\n- Date: ${planDate || '—'}\n- Block: ${slot || '—'}\n- Class: ${className || '—'}\n\n` : '';
 
-    const prompt = `${section1}\n\n---\n\n${role.prompt}\n\n---\n\n${STANDING_GUARDRAILS}\n\n---\n\n${dayplanContext}Now do this task:\n${task}\n\n${constraints ? `Constraints:\n${constraints}\n\n` : ''}Output MUST be valid JSON only.\nReturn this exact shape:\n{"lesson_flow_phases": [{"time_text":"","phase_text":"","activity_text":"","purpose_text":""}]}`;
+    const prompt = `${section1}\n\n---\n\n${role.prompt}\n\n---\n\nIMPORTANT OVERRIDE FOR THIS TOOL:\n- Do NOT ask clarifying questions.\n- Do NOT output anything except valid JSON.\n- The user has provided sufficient context; make reasonable assumptions and proceed.\n- Your job is to generate a lesson flow (phases) now.\n\n---\n\n${STANDING_GUARDRAILS}\n\n---\n\n${dayplanContext}Now do this task:\n${task}\n\n${constraints ? `Constraints:\n${constraints}\n\n` : ''}Output MUST be valid JSON only.\nReturn this exact shape:\n{"lesson_flow_phases": [{"time_text":"","phase_text":"","activity_text":"","purpose_text":""}]}`;
 
     const { text } = await provider.generate(prompt);
 
