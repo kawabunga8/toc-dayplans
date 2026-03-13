@@ -2673,15 +2673,8 @@ begin
     ) order by p.plan_date asc, p.slot asc), '[]'::jsonb)
   into plans
   from day_plans p
-  where p.visibility = 'link'
-    and p.trashed_at is null
-    and p.plan_date between ws and we
-    and exists (
-      select 1
-      from day_plan_blocks b
-      join toc_block_plans tbp on tbp.day_plan_block_id = b.id
-      where b.day_plan_id = p.id
-    );
+  where p.trashed_at is null
+    and p.plan_date between ws and we;
 
   return plans;
 end;
