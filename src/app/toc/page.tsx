@@ -58,8 +58,8 @@ export default async function TocPage({
   const [{ data: plansDataDirect, error: plansErrDirect }, { data: classesData, error: classesErr }] = await Promise.all([
     supabase
       .from('day_plans')
-      .select('id,plan_date,slot,title,notes,share_expires_at')
-      .eq('visibility', 'link')
+      .select('id,plan_date,slot,title,notes,share_expires_at,visibility')
+      // Rule A: any non-trashed plan shows on /toc (visibility ignored)
       .is('trashed_at', null)
       .gte('plan_date', weekStart)
       .lte('plan_date', weekEnd)
@@ -70,6 +70,8 @@ export default async function TocPage({
 
   // Fallback: if RLS blocks direct select (common when SUPABASE_SERVICE_ROLE_KEY isn't set),
   // fall back to the public RPC.
+  // NOTE: the public RPC currently uses visibility='link' and may not match Rule A.
+  // For Rule A to work without the service key, update the DB function accordingly.
   let plansData: any = plansDataDirect;
   let plansErr: any = plansErrDirect;
   if (plansErrDirect) {
