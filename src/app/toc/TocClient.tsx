@@ -61,11 +61,13 @@ export default function TocClient({
   plans,
   classes,
   initialView,
+  debug,
 }: {
   weekStart: string;
   plans: PublicPlanSummary[];
   classes: PublicClass[];
   initialView?: 'today' | 'calendar';
+  debug?: boolean;
 }) {
   const today = useMemo(() => {
     // Default behavior (Pacific Time cutoff):
@@ -376,6 +378,11 @@ export default function TocClient({
             <div style={styles.headerKicker}>TOC</div>
             <div style={styles.headerTitle}>{view === 'today' ? 'Today' : `Week of ${weekStart}`}</div>
             <div style={styles.headerSub}>Only published plans are clickable.</div>
+            {debug ? (
+              <div style={{ marginTop: 8, fontSize: 12, opacity: 0.85, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>
+                debug: weekStart={weekStart} weekEnd={weekEnd} selectedDate={selectedDate} plansForDate={(plansByDate.get(selectedDate) ?? []).length} totalPlans={plans.length}
+              </div>
+            ) : null}
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-end' }}>

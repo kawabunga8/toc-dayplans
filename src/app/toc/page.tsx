@@ -23,6 +23,7 @@ export default async function TocPage({
   const sp = await searchParams;
   const week = sp.week;
   const viewParam = (sp.view ?? '').toString();
+  const debug = (sp as any).debug === '1' || (sp as any).debug === 'true';
 
   let weekStart: string;
   if (week && /^\d{4}-\d{2}-\d{2}$/.test(week)) {
@@ -92,6 +93,7 @@ export default async function TocPage({
       plans={(plansData ?? []) as any}
       classes={(classesData ?? []) as any}
       initialView={initialView}
+      debug={debug}
     />
   );
 }
