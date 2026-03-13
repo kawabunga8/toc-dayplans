@@ -154,29 +154,13 @@ export default function TocClient({
   const isSelectedFriday = useMemo(() => isFridayLocal(selectedDate), [selectedDate]);
 
   useEffect(() => {
-    // Friday behavior: choose Day 1/2 based on which day has published plans; prompt if both.
+    // Friday behavior: always require a Day 1/2 selection.
+    // Default to Day 1 so rotation loads immediately.
     if (!isSelectedFriday) {
       setSelectedFridayType('');
       return;
     }
-
-    let cancelled = false;
-    void (async () => {
-      try {
-        const { fetchFridayPublishedInfo, chooseFridayType } = await import('@/lib/appRules/friday');
-        const published = await fetchFridayPublishedInfo(selectedDate);
-        if (cancelled) return;
-
-        const next = chooseFridayType({ current: selectedFridayType, published });
-        if (next !== selectedFridayType) setSelectedFridayType(next);
-      } catch {
-        if (!cancelled && !selectedFridayType) setSelectedFridayType('day1');
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
+    if (!selectedFridayType) setSelectedFridayType('day1');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSelectedFriday, selectedDate]);
 
