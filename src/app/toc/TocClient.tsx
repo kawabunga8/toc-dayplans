@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import RcsBanner from '@/components/RcsBanner';
 import { nextSchoolDayIso, nextSchoolDayIsoFromIso, prevSchoolDayIsoFromIso } from '@/lib/appRules/dates';
 
@@ -110,6 +110,7 @@ export default function TocClient({
   }, []);
 
   const [view, setView] = useState<'today' | 'calendar'>(initialView ?? 'today');
+  const didAutoSwitchView = useRef(false);
 
   const weekEnd = useMemo(() => {
     const d = new Date(weekStart + 'T00:00:00');
@@ -185,6 +186,17 @@ export default function TocClient({
     }
     return m;
   }, [plansByDate, selectedDate]);
+
+  // If the landing "Today" view has no plans, auto-switch to Calendar once.
+  useEffect(() => {
+    if (didAutoSwitchView.current) return;
+    if (view !== 'today') return;
+    const count = (plansByDate.get(selectedDate) ?? []).length;
+    if (count === 0) {
+      didAutoSwitchView.current = true;
+      setView('calendar');
+    }
+  }, [view, selectedDate, plansByDate]);
 
   async function ensureNotes(planId: string) {
     if (!planId) return;
