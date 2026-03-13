@@ -38,12 +38,33 @@ export default async function TocPage({
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !anon) notFound();
 
-  const supabase = createClient(url, anon, {
+  const service = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  // Use service role server-side to avoid brittle "published" heuristics in SQL functions.
+  // (/toc should show any visibility=link plans in the week, even if no toc_block_plans exist yet.)
+  const supabase = createClient(url, service || anon, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
+  const weekEnd = (() => {
+    const d = new Date(weekStart + 'T00:00:00');
+    d.setDate(d.getDate() + 4);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const da = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${da}`;
+  })();
+
   const [{ data: plansData, error: plansErr }, { data: classesData, error: classesErr }] = await Promise.all([
-    supabase.rpc('get_public_plans_for_week', { week_start: weekStart }),
+    supabase
+      .from('day_plans')
+      .select('id,plan_date,slot,title,notes,share_expires_at')
+      .eq('visibility', 'link')
+      .is('trashed_at', null)
+      .gte('plan_date', weekStart)
+      .lte('plan_date', weekEnd)
+      .order('plan_date', { ascending: true })
+      .order('slot', { ascending: true }),
     supabase.rpc('get_public_classes'),
   ]);
 
