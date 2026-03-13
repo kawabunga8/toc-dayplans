@@ -55,7 +55,7 @@ export default async function TocPage({
     return `${y}-${m}-${da}`;
   })();
 
-  const [{ data: plansData, error: plansErr }, { data: classesData, error: classesErr }] = await Promise.all([
+  const [{ data: plansDataDirect, error: plansErrDirect }, { data: classesData, error: classesErr }] = await Promise.all([
     supabase
       .from('day_plans')
       .select('id,plan_date,slot,title,notes,share_expires_at')
@@ -67,6 +67,16 @@ export default async function TocPage({
       .order('slot', { ascending: true }),
     supabase.rpc('get_public_classes'),
   ]);
+
+  // Fallback: if RLS blocks direct select (common when SUPABASE_SERVICE_ROLE_KEY isn't set),
+  // fall back to the public RPC.
+  let plansData: any = plansDataDirect;
+  let plansErr: any = plansErrDirect;
+  if (plansErrDirect) {
+    const { data, error } = await createClient(url, anon, { auth: { persistSession: false, autoRefreshToken: false } }).rpc('get_public_plans_for_week', { week_start: weekStart });
+    plansData = data;
+    plansErr = error;
+  }
 
   if (plansErr || classesErr) {
     notFound();
