@@ -44,7 +44,7 @@ export async function POST(req: Request) {
 
   const plan_date = String(body?.plan_date ?? '').trim();
   const slot = String(body?.slot ?? '').trim();
-  const friday_type = (body?.friday_type ?? null) as 'day1' | 'day2' | null;
+  let friday_type = (body?.friday_type ?? null) as 'day1' | 'day2' | null;
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(plan_date)) return NextResponse.json({ error: 'Invalid plan_date (YYYY-MM-DD)' }, { status: 400 });
   if (!slot) return NextResponse.json({ error: 'Missing slot' }, { status: 400 });
@@ -78,6 +78,24 @@ export async function POST(req: Request) {
     .is('trashed_at', null)
     .limit(1);
   if (exErr) return NextResponse.json({ error: exErr.message }, { status: 400 });
+
+  // If Friday type isn't provided, try to infer it from an existing plan row.
+  if (!friday_type) {
+    const exFt = (existing?.[0] as any)?.friday_type as any;
+    if (exFt === 'day1' || exFt === 'day2') {
+      friday_type = exFt;
+    } else {
+      // Try any plan on that date that has friday_type set.
+      const { data: anyFtRows } = await adminDb
+        .from('day_plans')
+        .select('friday_type')
+        .eq('plan_date', plan_date)
+        .not('friday_type', 'is', null)
+        .limit(1);
+      const anyFt = (anyFtRows?.[0] as any)?.friday_type as any;
+      if (anyFt === 'day1' || anyFt === 'day2') friday_type = anyFt;
+    }
+  }
 
   let planId: string | null = (existing?.[0] as any)?.id ?? null;
 
