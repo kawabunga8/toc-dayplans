@@ -110,7 +110,22 @@ export default function TocClient({
   }, []);
 
   const [view, setView] = useState<'today' | 'calendar'>(initialView ?? 'today');
-  const [selectedDate, setSelectedDate] = useState<string>(today);
+
+  const weekEnd = useMemo(() => {
+    const d = new Date(weekStart + 'T00:00:00');
+    d.setDate(d.getDate() + 4);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const da = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${da}`;
+  }, [weekStart]);
+
+  const [selectedDate, setSelectedDate] = useState<string>(() => {
+    // Ensure the default selected date is inside the loaded week range.
+    // Otherwise the UI looks empty until you navigate around.
+    if (today >= weekStart && today <= weekEnd) return today;
+    return weekStart;
+  });
   const [selectedFridayType, setSelectedFridayType] = useState<'' | 'day1' | 'day2'>('');
 
   const [openPlanId, setOpenPlanId] = useState<string | null>(null);
