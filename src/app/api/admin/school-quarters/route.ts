@@ -22,8 +22,12 @@ function getSql() {
 }
 
 export async function GET() {
-  const sql = getSql();
+  if (!process.env.DATABASE_URL) {
+    return NextResponse.json({ error: 'DATABASE_URL env var is not set' }, { status: 500 });
+  }
+  let sql;
   try {
+    sql = getSql();
     const rows = await sql`
       SELECT id, label,
         TO_CHAR(start_date, 'YYYY-MM-DD') AS start_date,
@@ -32,8 +36,10 @@ export async function GET() {
       ORDER BY id
     `;
     return NextResponse.json(rows);
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message ?? String(e) }, { status: 500 });
   } finally {
-    await sql.end();
+    await sql?.end();
   }
 }
 
