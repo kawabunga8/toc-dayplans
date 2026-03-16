@@ -13,7 +13,10 @@ type ClassRow = {
   name: string;
   room: string | null;
   sort_order: number | null;
+  active_quarters: number[] | null;
 };
+
+type QuarterRow = { id: number; label: string; start_date: string; end_date: string };
 
 export default function DayPlansClient() {
   const { isDemo } = useDemo();
@@ -26,6 +29,7 @@ export default function DayPlansClient() {
   }, []);
 
   const [classes, setClasses] = useState<ClassRow[]>([]);
+  const [quarters, setQuarters] = useState<QuarterRow[]>([]);
 
   // Read initial state from URL so Back from a dayplan returns you to the same working date.
   const initialDate = useMemo(() => {
@@ -45,6 +49,7 @@ export default function DayPlansClient() {
 
   useEffect(() => {
     void loadClasses();
+    void loadQuarters();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -52,6 +57,15 @@ export default function DayPlansClient() {
     void loadRotationBlocks();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate, selectedFridayType]);
+
+  async function loadQuarters() {
+    try {
+      const res = await fetch('/api/admin/school-quarters');
+      if (res.ok) setQuarters(await res.json());
+    } catch {
+      // ignore — quarters are optional; without them all courses show
+    }
+  }
 
   async function loadClasses() {
     try {
@@ -123,14 +137,29 @@ export default function DayPlansClient() {
     return scheduleBlockLabelsForDate(selectedDate, selectedFridayType);
   }, [rotationBlocks, selectedDate, selectedFridayType]);
 
+  // Determine which quarter the selected date falls in (null = no match / no quarters configured)
+  const currentQuarterId = useMemo(() => {
+    if (!quarters.length || !selectedDate) return null;
+    for (const q of quarters) {
+      if (selectedDate >= q.start_date && selectedDate <= q.end_date) return q.id;
+    }
+    return null;
+  }, [quarters, selectedDate]);
+
   const classByBlock = useMemo(() => {
     const m = new Map<string, ClassRow>();
     for (const c of classes) {
       const bl = String(c.block_label ?? '').trim();
-      if (bl) m.set(bl.toUpperCase(), c);
+      if (!bl) continue;
+      // Filter by quarter: if active_quarters is set and we know the current quarter,
+      // only include the course if it runs in that quarter.
+      if (c.active_quarters !== null && currentQuarterId !== null) {
+        if (!c.active_quarters.includes(currentQuarterId)) continue;
+      }
+      m.set(bl.toUpperCase(), c);
     }
     return m;
-  }, [classes]);
+  }, [classes, currentQuarterId]);
 
   async function openOrCreatePlanForSlot(slotRaw: string, classRow?: ClassRow | null) {
     const clickTs = new Date().toISOString();

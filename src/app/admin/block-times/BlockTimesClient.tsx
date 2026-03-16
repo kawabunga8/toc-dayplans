@@ -4,7 +4,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { useDemo } from '@/app/admin/DemoContext';
 
-type TemplateKey = 'mon_thu' | 'fri' | 'rotation';
+type TemplateKey = 'mon_thu' | 'fri' | 'rotation' | 'quarters';
+
+type QuarterRow = { id: number; label: string; start_date: string; end_date: string };
 
 type BlockTimeRow = {
   id: string;
@@ -32,6 +34,54 @@ export default function BlockTimesClient() {
 
   const [monThuRows, setMonThuRows] = useState<Array<{ slot: string; start_time: string; end_time: string }>>([]);
   const [friRows, setFriRows] = useState<Array<{ slot: string; start_time: string; end_time: string }>>([]);
+
+  // Quarters state
+  const [quarters, setQuarters] = useState<QuarterRow[]>([
+    { id: 1, label: 'Q1', start_date: '', end_date: '' },
+    { id: 2, label: 'Q2', start_date: '', end_date: '' },
+    { id: 3, label: 'Q3', start_date: '', end_date: '' },
+    { id: 4, label: 'Q4', start_date: '', end_date: '' },
+  ]);
+  const [quartersStatus, setQuartersStatus] = useState<Status>('idle');
+  const [quartersError, setQuartersError] = useState<string | null>(null);
+
+  async function loadQuarters() {
+    setQuartersStatus('loading');
+    setQuartersError(null);
+    try {
+      const res = await fetch('/api/admin/school-quarters');
+      const j = await res.json();
+      if (!res.ok) throw new Error(j?.error ?? 'Failed to load quarters');
+      if (Array.isArray(j) && j.length === 4) setQuarters(j);
+      setQuartersStatus('idle');
+    } catch (e: any) {
+      setQuartersStatus('error');
+      setQuartersError(e?.message ?? 'Unknown error');
+    }
+  }
+
+  async function saveQuarters() {
+    setQuartersStatus('saving');
+    setQuartersError(null);
+    try {
+      const res = await fetch('/api/admin/school-quarters', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(quarters),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j?.error ?? 'Failed to save quarters');
+      setQuartersStatus('idle');
+    } catch (e: any) {
+      setQuartersStatus('error');
+      setQuartersError(e?.message ?? 'Unknown error');
+    }
+  }
+
+  useEffect(() => {
+    if (template === 'quarters') void loadQuarters();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [template]);
 
   // Rotation editor state (edit all days at once)
   const [rotStatus, setRotStatus] = useState<Status>('idle');
@@ -66,6 +116,7 @@ export default function BlockTimesClient() {
 
   const title = useMemo(() => {
     if (template === 'rotation') return 'Block Rotation';
+    if (template === 'quarters') return 'School Quarters';
     return 'Block Times';
   }, [template]);
 
@@ -351,10 +402,61 @@ export default function BlockTimesClient() {
         <button onClick={() => setTemplate('rotation')} style={template === 'rotation' ? styles.tabActive : styles.tab}>
           Block Rotation
         </button>
+        <button onClick={() => setTemplate('quarters')} style={template === 'quarters' ? styles.tabActive : styles.tab}>
+          School Quarters
+        </button>
       </div>
 
       <section style={styles.card}>
-        {template === 'rotation' ? (
+        {template === 'quarters' ? (
+          <>
+            <div style={styles.rowBetween}>
+              <div>
+                <div style={styles.sectionTitle}>School quarter dates</div>
+                <div style={styles.mutedSmall}>Set the start and end dates for Q1–Q4. These are used to filter which courses appear on a given date.</div>
+              </div>
+            </div>
+            <div style={{ marginTop: 16, display: 'grid', gap: 12 }}>
+              {quarters.map((q, i) => (
+                <div key={q.id} style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div style={{ width: 32, fontWeight: 900, color: RCS.midBlue }}>{q.label}</div>
+                  <label style={{ display: 'grid', gap: 4 }}>
+                    <div style={styles.label}>Start</div>
+                    <input
+                      type="date"
+                      value={q.start_date}
+                      onChange={(e) => setQuarters((prev) => prev.map((x, idx) => idx === i ? { ...x, start_date: e.target.value } : x))}
+                      style={styles.input}
+                    />
+                  </label>
+                  <label style={{ display: 'grid', gap: 4 }}>
+                    <div style={styles.label}>End</div>
+                    <input
+                      type="date"
+                      value={q.end_date}
+                      onChange={(e) => setQuarters((prev) => prev.map((x, idx) => idx === i ? { ...x, end_date: e.target.value } : x))}
+                      style={styles.input}
+                    />
+                  </label>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 12, marginTop: 16, flexWrap: 'wrap' }}>
+              <button onClick={saveQuarters} disabled={isDemo || quartersStatus === 'saving' || quartersStatus === 'loading'} style={styles.primaryBtn}>
+                {quartersStatus === 'saving' ? 'Saving…' : 'Save quarters'}
+              </button>
+              <button onClick={loadQuarters} disabled={quartersStatus === 'saving' || quartersStatus === 'loading'} style={styles.secondaryBtn}>
+                Reload
+              </button>
+            </div>
+            {quartersError && (
+              <div style={styles.errorBox}>
+                <div style={{ fontWeight: 700, marginBottom: 6 }}>Error</div>
+                <div>{quartersError}</div>
+              </div>
+            )}
+          </>
+        ) : template === 'rotation' ? (
           <>
             <div style={styles.rowBetween}>
               <div>

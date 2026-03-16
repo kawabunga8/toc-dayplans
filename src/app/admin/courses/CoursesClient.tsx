@@ -11,6 +11,7 @@ type CourseRow = {
   room: string | null;
   sort_order: number | null;
   block_label: string | null;
+  active_quarters: number[] | null;
 };
 
 type TemplateTagRow = {
@@ -30,6 +31,7 @@ export default function CoursesClient() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftName, setDraftName] = useState<string>('');
   const [draftRoom, setDraftRoom] = useState<string>('');
+  const [draftQuarters, setDraftQuarters] = useState<number[] | null>(null);
 
   async function load() {
     setStatus('loading');
@@ -39,7 +41,7 @@ export default function CoursesClient() {
       const supabase = getSupabaseClient();
       const { data, error } = await supabase
         .from('classes')
-        .select('id,name,room,sort_order,block_label')
+        .select('id,name,room,sort_order,block_label,active_quarters')
         .order('sort_order', { ascending: true, nullsFirst: false })
         .order('name', { ascending: true });
       if (error) throw error;
@@ -84,6 +86,7 @@ export default function CoursesClient() {
     setEditingId(row.id);
     setDraftName(row.name ?? '');
     setDraftRoom(row.room ?? '');
+    setDraftQuarters(row.active_quarters ?? null);
     setError(null);
   }
 
@@ -91,6 +94,18 @@ export default function CoursesClient() {
     setEditingId(null);
     setDraftName('');
     setDraftRoom('');
+    setDraftQuarters(null);
+  }
+
+  function toggleDraftQuarter(q: number) {
+    setDraftQuarters((prev) => {
+      if (prev === null) return [q]; // was "all year", now pin to just this one
+      if (prev.includes(q)) {
+        const next = prev.filter((x) => x !== q);
+        return next.length === 0 ? null : next; // if none left, back to all year
+      }
+      return [...prev, q].sort();
+    });
   }
 
   async function saveEdit() {
@@ -105,6 +120,7 @@ export default function CoursesClient() {
       const patch: any = {
         name: draftName.trim() || '—',
         room: draftRoom.trim() ? draftRoom.trim() : null,
+        active_quarters: draftQuarters,
         updated_at: new Date().toISOString(),
       };
 
@@ -122,7 +138,7 @@ export default function CoursesClient() {
       if (error) throw error;
 
       // update local list
-      setItems((prev) => prev.map((r) => (r.id === editingId ? { ...r, name: patch.name, room: patch.room } : r)));
+      setItems((prev) => prev.map((r) => (r.id === editingId ? { ...r, name: patch.name, room: patch.room, active_quarters: patch.active_quarters } : r)));
       setEditingId(null);
       setDraftName('');
       setDraftRoom('');
@@ -168,6 +184,7 @@ export default function CoursesClient() {
                   <th style={styles.th}>Block</th>
                   <th style={styles.th}>Class</th>
                   <th style={styles.th}>Room</th>
+                  <th style={styles.th}>Quarters</th>
                   <th style={styles.th}>#Tags</th>
                   <th style={styles.th}></th>
                   <th style={styles.th}></th>
@@ -189,6 +206,31 @@ export default function CoursesClient() {
                         <input value={draftRoom} onChange={(e) => setDraftRoom(e.target.value)} style={styles.inputInline} placeholder="(blank)" />
                       ) : (
                         c.room || '—'
+                      )}
+                    </td>
+                    <td style={styles.td}>
+                      {editingId === c.id ? (
+                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            onClick={() => setDraftQuarters(null)}
+                            style={{ ...styles.quarterPill, ...(draftQuarters === null ? styles.quarterPillActive : {}) }}
+                          >All year</button>
+                          {[1, 2, 3, 4].map((q) => (
+                            <button
+                              key={q}
+                              type="button"
+                              onClick={() => toggleDraftQuarter(q)}
+                              style={{ ...styles.quarterPill, ...((draftQuarters ?? []).includes(q) ? styles.quarterPillActive : {}) }}
+                            >Q{q}</button>
+                          ))}
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                          {c.active_quarters === null
+                            ? <span style={styles.quarterBadge}>All year</span>
+                            : c.active_quarters.map((q) => <span key={q} style={styles.quarterBadge}>Q{q}</span>)}
+                        </div>
                       )}
                     </td>
                     <td style={styles.td}> {(tagsByClassId[c.id] ?? []).map((t) => `#${t}`).join(' ')} </td>
@@ -335,6 +377,28 @@ const styles: Record<string, React.CSSProperties> = {
     color: RCS.midBlue,
     fontWeight: 800,
     width: 70,
+  },
+  quarterPill: {
+    padding: '3px 8px',
+    borderRadius: 6,
+    border: `1px solid ${RCS.deepNavy}`,
+    background: RCS.white,
+    color: RCS.deepNavy,
+    cursor: 'pointer',
+    fontSize: 11,
+    fontWeight: 700,
+  },
+  quarterPillActive: {
+    background: RCS.deepNavy,
+    color: RCS.white,
+  },
+  quarterBadge: {
+    padding: '2px 7px',
+    borderRadius: 6,
+    background: RCS.lightBlue,
+    color: RCS.deepNavy,
+    fontSize: 11,
+    fontWeight: 700,
   },
   errorBox: {
     marginTop: 12,
