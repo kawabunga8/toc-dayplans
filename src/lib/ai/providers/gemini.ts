@@ -44,36 +44,27 @@ export const geminiProvider: AIProvider = {
       return { text };
     };
 
-    try {
-      return await runOnce();
-    } catch (e: any) {
-      if (isRateLimit(e)) {
-        // Auto-retry once with a small backoff.
-        await sleep(1500);
-        try {
-          return await runOnce();
-        } catch (e2: any) {
-          if (isRateLimit(e2)) {
-            throw new Error('Rate limited by Gemini. Please retry in a moment.');
-          }
-          if (isModelNotFound(e2)) {
-            throw new Error(
-              `Gemini model not available. Set GEMINI_MODEL to an available model (e.g., gemini-1.5-flash or gemini-1.5-pro). Original error: ${String(
-                e2?.message ?? e2
-              )}`
-            );
-          }
-          throw e2;
+    // Exponential backoff: 2s, 5s, 10s
+    const RETRY_DELAYS = [2000, 5000, 10000];
+
+    for (let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++) {
+      try {
+        return await runOnce();
+      } catch (e: any) {
+        if (isModelNotFound(e)) {
+          throw new Error(
+            `Gemini model not available. Set GEMINI_MODEL to an available model (e.g., gemini-1.5-flash or gemini-1.5-pro). Original error: ${String(
+              e?.message ?? e
+            )}`
+          );
         }
+        if (isRateLimit(e) && attempt < RETRY_DELAYS.length) {
+          await sleep(RETRY_DELAYS[attempt]);
+          continue;
+        }
+        throw e;
       }
-      if (isModelNotFound(e)) {
-        throw new Error(
-          `Gemini model not available. Set GEMINI_MODEL to an available model (e.g., gemini-1.5-flash or gemini-1.5-pro). Original error: ${String(
-            e?.message ?? e
-          )}`
-        );
-      }
-      throw e;
     }
+    throw new Error('Rate limited by Gemini. Please retry in a moment.');
   },
 };
