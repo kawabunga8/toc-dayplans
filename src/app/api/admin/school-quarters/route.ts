@@ -25,7 +25,9 @@ export async function GET() {
   const sql = getSql();
   try {
     const rows = await sql`
-      SELECT id, label, start_date::text, end_date::text
+      SELECT id, label,
+        TO_CHAR(start_date, 'YYYY-MM-DD') AS start_date,
+        TO_CHAR(end_date, 'YYYY-MM-DD') AS end_date
       FROM school_quarters
       ORDER BY id
     `;
