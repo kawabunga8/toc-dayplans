@@ -81,7 +81,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const providerKey = (process.env.AI_BRAIN || 'anthropic') as keyof typeof providers;
+  // Allow per-request brain override via body field, falling back to env var.
+  let bodyForBrain: any = null;
+  try { bodyForBrain = await req.clone().json(); } catch { /* ignore */ }
+  const requestedBrain = bodyForBrain?.brain;
+  const providerKey = (
+    (requestedBrain && requestedBrain in providers) ? requestedBrain : (process.env.AI_BRAIN || 'anthropic')
+  ) as keyof typeof providers;
   const provider = (providers as any)[providerKey];
   if (!provider) {
     return NextResponse.json({ error: `Invalid AI_BRAIN (${String(providerKey)})` }, { status: 500 });

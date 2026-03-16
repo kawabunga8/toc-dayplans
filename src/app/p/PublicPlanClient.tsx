@@ -264,7 +264,7 @@ export default function PublicPlanClient({ plan, layout }: { plan: PublicPlan; l
         <header style={styles.header}>
           <div style={styles.titleBlock}>
             <div style={styles.titleText}>
-              <div style={styles.titleTeacher}>Mr. Kawamura</div>
+              <div style={styles.titleTeacher}>{plan.toc?.teacher_name || 'TOC Day Plan'}</div>
               <div style={styles.titleClass}>{plan.title}</div>
               <div style={styles.titleSub}>TOC Day Plan</div>
               <div style={styles.titleDetail}>
@@ -437,63 +437,75 @@ export default function PublicPlanClient({ plan, layout }: { plan: PublicPlan; l
                                   </div>
                                 ) : null,
 
-                                opening_routine: plan.toc.opening_routine_steps?.length ? (
+                                opening_routine: (
                                   <div style={styles.tocSection}>
-                                    <div style={styles.tocSectionTitle}>Opening routine</div>
-                                    <ol style={styles.tocList as any}>
-                                      {plan.toc.opening_routine_steps.map((s, idx) => (
-                                        <li key={idx} style={{ marginBottom: 4 }}>{s.step_text}</li>
-                                      ))}
-                                    </ol>
-                                  </div>
-                                ) : null,
-
-                                lesson_flow: plan.toc.plan_mode === 'lesson_flow' && plan.toc.lesson_flow_phases?.length ? (
-                                  <div style={{ ...styles.tocSection, background: RCS.lightGold, borderColor: RCS.gold }}>
-                                    <div style={styles.tocSectionTitle}>Lesson flow</div>
-                                    <table style={styles.printTable as any}>
-                                      <thead>
-                                        <tr>
-                                          <th style={styles.printTh as any}>TIME</th>
-                                          <th style={styles.printTh as any}>PHASE</th>
-                                          <th style={styles.printTh as any}>ACTIVITY</th>
-                                          <th style={styles.printTh as any}>PURPOSE</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {plan.toc.lesson_flow_phases.map((p, idx) => (
-                                          <tr key={idx} style={idx % 2 === 1 ? (styles.printTrAlt as any) : undefined}>
-                                            <td style={styles.printTd as any}><b>{p.time_text}</b></td>
-                                            <td style={styles.printTd as any}><b>{p.phase_text}</b></td>
-                                            <td style={{ ...(styles.printTd as any), whiteSpace: 'pre-wrap' } as any}>{p.activity_text}</td>
-                                            <td style={{ ...(styles.printTd as any), fontStyle: 'italic', whiteSpace: 'pre-wrap' } as any}>{p.purpose_text ?? ''}</td>
-                                          </tr>
+                                    <div style={styles.tocSectionTitle}>Opening Routine</div>
+                                    {plan.toc.opening_routine_steps?.length ? (
+                                      <ol style={styles.tocList as any}>
+                                        {plan.toc.opening_routine_steps.map((s, idx) => (
+                                          <li key={idx} style={{ marginBottom: 4 }}>{s.step_text}</li>
                                         ))}
-                                      </tbody>
-                                    </table>
+                                      </ol>
+                                    ) : (
+                                      <div style={{ fontSize: 12, opacity: 0.6, fontStyle: 'italic' }}>No opening routine provided.</div>
+                                    )}
+                                  </div>
+                                ),
+
+                                lesson_flow: plan.toc.plan_mode === 'lesson_flow' ? (
+                                  <div style={{ ...styles.tocSection, background: RCS.lightGold, borderColor: RCS.gold }}>
+                                    <div style={styles.tocSectionTitle}>Lesson Flow</div>
+                                    {plan.toc.lesson_flow_phases?.length ? (
+                                      <table style={styles.printTable as any}>
+                                        <thead>
+                                          <tr>
+                                            <th style={styles.printTh as any}>TIME</th>
+                                            <th style={styles.printTh as any}>PHASE</th>
+                                            <th style={styles.printTh as any}>ACTIVITY</th>
+                                            <th style={styles.printTh as any}>PURPOSE</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {plan.toc.lesson_flow_phases.map((p, idx) => (
+                                            <tr key={idx} style={idx % 2 === 1 ? (styles.printTrAlt as any) : undefined}>
+                                              <td style={styles.printTd as any}><b>{p.time_text}</b></td>
+                                              <td style={styles.printTd as any}><b>{p.phase_text}</b></td>
+                                              <td style={{ ...(styles.printTd as any), whiteSpace: 'pre-wrap' } as any}>{p.activity_text}</td>
+                                              <td style={{ ...(styles.printTd as any), fontStyle: 'italic', whiteSpace: 'pre-wrap' } as any}>{p.purpose_text ?? ''}</td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    ) : (
+                                      <div style={{ fontSize: 12, opacity: 0.6, fontStyle: 'italic' }}>No lesson flow provided.</div>
+                                    )}
                                   </div>
                                 ) : null,
 
-                                activity_options: plan.toc.plan_mode === 'activity_options' && plan.toc.activity_options?.length ? (
+                                activity_options: plan.toc.plan_mode === 'activity_options' ? (
                                   <div style={styles.tocSection}>
-                                    <div style={styles.tocSectionTitle}>Activity options</div>
-                                    <div style={{ display: 'grid', gap: 10 }}>
-                                      {plan.toc.activity_options.map((o, idx) => (
-                                        <div key={idx} style={styles.tocCard}>
-                                          <div style={{ fontWeight: 900 }}>{o.title}</div>
-                                          <div style={{ opacity: 0.9 }}>{o.description}</div>
-                                          <div style={{ marginTop: 6 }}>{o.details_text}</div>
-                                          {o.toc_role_text ? <div style={{ fontSize: 12, opacity: 0.85, marginTop: 6 }}><b>TOC role:</b> {o.toc_role_text}</div> : null}
-                                          {o.steps?.length ? (
-                                            <ol style={{ marginTop: 8 }}>
-                                              {o.steps.map((st, j) => (
-                                                <li key={j} style={{ marginBottom: 4 }}>{st.step_text}</li>
-                                              ))}
-                                            </ol>
-                                          ) : null}
-                                        </div>
-                                      ))}
-                                    </div>
+                                    <div style={styles.tocSectionTitle}>Activity Options</div>
+                                    {plan.toc.activity_options?.length ? (
+                                      <div style={{ display: 'grid', gap: 10 }}>
+                                        {plan.toc.activity_options.map((o, idx) => (
+                                          <div key={idx} style={styles.tocCard}>
+                                            <div style={{ fontWeight: 900 }}>{o.title}</div>
+                                            <div style={{ opacity: 0.9 }}>{o.description}</div>
+                                            <div style={{ marginTop: 6 }}>{o.details_text}</div>
+                                            {o.toc_role_text ? <div style={{ fontSize: 12, opacity: 0.85, marginTop: 6 }}><b>TOC role:</b> {o.toc_role_text}</div> : null}
+                                            {o.steps?.length ? (
+                                              <ol style={{ marginTop: 8 }}>
+                                                {o.steps.map((st, j) => (
+                                                  <li key={j} style={{ marginBottom: 4 }}>{st.step_text}</li>
+                                                ))}
+                                              </ol>
+                                            ) : null}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <div style={{ fontSize: 12, opacity: 0.6, fontStyle: 'italic' }}>No activity options provided.</div>
+                                    )}
                                   </div>
                                 ) : null,
 
@@ -766,7 +778,14 @@ function formatTime(t: string) {
 }
 
 function formatHeaderDate(d: string) {
-  return d;
+  try {
+    const [y, m, day] = d.split('-').map(Number);
+    return new Date(y, m - 1, day).toLocaleDateString('en-CA', {
+      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+    });
+  } catch {
+    return d;
+  }
 }
 
 function blockLabelFromClassName(className: string) {

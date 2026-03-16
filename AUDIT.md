@@ -1,102 +1,116 @@
 # TOC Dayplans - Comprehensive Audit Report
 **Date:** March 16, 2026
-**Previous Audit:** February 25, 2026
-**Status:** ✅ Mature, production-ready application
+**Previous Audit:** March 16, 2026 (earlier today)
+**Status:** ✅ Build clean — 27 API routes, 25 pages
 
 ---
 
 ## Build & Deployment Status
-- **Build:** ✅ Compiles successfully (TypeScript strict, no errors)
+- **Build:** ✅ No errors, no TypeScript failures
 - **Framework:** Next.js 16.1.6 (Turbopack)
-- **Routes:** 24 API routes, 9 admin pages, 3 public pages
+- **Routes compiled:** 27 API + 25 pages (all dynamic/server-rendered)
+- **Warning:** Next.js workspace root inference warning — cosmetic only, set `turbopack.root` in `next.config.ts` to silence
 
 ---
 
-## Feature Status
+## What Changed Since Last Audit
 
-### PUBLIC / TOC SIDE — ✅ Fully Implemented
+### New features
+| Area | Change |
+|------|--------|
+| `/toc` visibility | Now shows **all non-trashed plans** (Rule A); `visibility` field no longer gates TOC view |
+| `/toc/print` | New print page (`TocPrintClient.tsx`) for printing the full TOC week view |
+| `/p/[id]` live rendering | Switched from `published_payload` snapshot to **live RPC** (`get_public_day_plan_live`) — plan always reflects current data |
+| `by-date-slot/lesson-flow/append` | New API route: append phases by date+slot instead of block ID (useful when block ID isn't known) |
+| `debug/report` | New debug API route for generating diagnostic reports |
+| AI fallback | `suggest` route now automatically falls back to Anthropic when Gemini is rate-limited |
+| Gemini retries | Exponential backoff: 2s → 5s → 10s before giving up |
+| Teacher UI | `handleGenerate` extracted; **Retry button** shown inline next to error |
+| `/p` blueprint alignment | Section titles fixed (Opening Routine, Lesson Flow, Activity Options); empty states added; date formatted; teacher name dynamic |
+| Logo | Portrait logo (64×64) on far right of header |
+| `.vscode/settings.json` | Edge DevTools webhint disabled (suppresses inline-style warnings) |
+
+### New DB migrations
+| Migration | Purpose |
+|-----------|---------|
+| `add_grade_level_to_classes` | Adds `grade_level` column to `classes` |
+| `get_public_day_plan_live` | RPC for live plan rendering (replaces snapshot) |
+| `get_public_plans_for_week_live` | RPC for TOC week view (all non-trashed) |
+| `drop_materialized_public_payload` | Removes old materialized payload dependency |
+| `debug_events` | Debug event logging table |
+
+---
+
+## Full Feature Status
+
+### PUBLIC / TOC — ✅ Fully Implemented
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| TOC Calendar View (`/toc`) | ✅ | Week picker, day indicators, side panel |
-| Plan Detail Page (`/p/[id]`) | ✅ | Block selection, attendance lists, print |
-| Calendar API | ✅ | Mon-Fri week, groups by date, link-only plans |
-| Plan API | ✅ | Single plan with blocks + enrollment data |
-| Attendance DOCX | ✅ | `/api/docx/attendance` generates attendance sheets |
+| TOC Calendar (`/toc`) | ✅ | All non-trashed plans; auto-switches to calendar on load |
+| TOC Print (`/toc/print`) | ✅ | New — full week print view |
+| Plan Detail (`/p/[id]`) | ✅ | Live RPC rendering; blueprint-aligned sections |
+| Blueprint section order | ✅ | All 9 canonical sections present and ordered |
+| Empty states | ✅ | Opening Routine, Lesson Flow, Activity Options all handle empty |
+| Attendance Sheet | ✅ | Interactive + print table |
+| Attendance DOCX | ✅ | Download `.docx` per block |
 
-### ADMIN / STAFF SIDE
+### ADMIN — ✅ Fully Implemented
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Auth (magic link) | ✅ | Supabase, callback at `/auth/callback` |
-| Dashboard | ✅ | Staff guard via `is_staff()` RPC |
-| Dayplan List & Create | ✅ | Date, slot, Friday type, title, notes |
-| **Dayplan Detail Editor** | ✅ | Full editor — see below |
-| Schedule Block Management | ✅ | Auto-generate + manual edit |
-| TOC Block Plan Editor | ✅ | Per-block lesson flow, activity options, advanced |
-| Course Template Editor | ✅ | `/admin/courses/[id]/toc-template` |
-| Block Times Management | ✅ | `/admin/block-times` — Mon-Thu / Friday / Rotation |
-| Class & Student Roster | ✅ | Enroll students, upload photos (Supabase Storage) |
-| Learning Standards | ✅ | Browse/edit by subject+grade, rubric levels |
-| Core Competencies | ✅ | Browse, select, link to dayplans |
-| Pro Dev Goals | ✅ | Browse, link to assessment touch points |
-| TOC Snippets | ✅ | Reusable text library |
-| CSV Imports | ✅ | Standards, competencies, pro dev goals |
-| **AI Lesson Generator** | ✅ | 6 teacher roles, Gemini + Anthropic |
-| Publishing / Share Links | ✅ | Publish, revoke, trash, restore |
+| Auth (magic link) | ✅ | |
+| Dayplan list & create | ✅ | |
+| Dayplan detail editor | ✅ | Blocks, notes, standards, TOC plan |
+| Schedule generation | ✅ | Auto-generate from rotation + time defaults |
+| TOC block plan editor | ✅ | Lesson flow, activity options, advanced sections |
+| Course template editor | ✅ | `/admin/courses/[id]/toc-template` |
+| Block times management | ✅ | Mon-Thu / Friday / Rotation |
+| Class & student roster | ✅ | Enroll, photos, grade level |
+| Learning standards | ✅ | Browse, rubric levels, link to dayplans |
+| Core competencies | ✅ | Browse, link to dayplans |
+| Pro dev goals | ✅ | Browse, link to assessment touch points |
+| TOC snippets | ✅ | Reusable text library |
+| CSV imports | ✅ | Standards, competencies, pro dev goals |
+| AI lesson generator | ✅ | 6 roles, Gemini + Anthropic, retry + fallback |
+| Publishing | ✅ | Publish, revoke, trash, restore + share links |
 
 ---
 
-## Dayplan Detail Editor (`/admin/dayplans/[id]`)
+## All Pages (25)
 
-Previously a placeholder — now **fully implemented** (~1,330 lines).
+```
+/                             Home
+/login                        Magic link auth
+/auth/callback                Supabase callback
+/reset-password               Password reset
+/toc                          TOC week calendar
+/toc/print                    TOC week print view  ← NEW
+/p/[id]                       Public plan detail
 
-### Editing
-- Notes, learning standard focus, core competency focus, Friday type
-- Auto-save with status indicator
-
-### Schedule Blocks
-- **Generate:** Auto-creates blocks from block rotation + time defaults for the date
-- **Edit:** Class name, room, start/end time, details per block
-- **Save All:** Upserts all blocks, deletes removed ones
-
-### TOC Integration (per block with a class)
-- **TocBlockPlanInstanceEditor** — day-specific overrides:
-  - Lesson Flow mode: phases with timing, activity, purpose
-  - Activity Options mode: alternatives with steps and roles
-  - Advanced sections: central theme, deep hope, big idea, assessment touch points, PD connections
-  - Note to TOC with AI rewrite
-  - Publish mode toggle (`toc` vs `advanced`)
-- **Unpublished changes** banner when `toc_block_plans.updated_at > published_at`
-
-### Publish Workflow
-- Save All → Publish: calls `resolve_day_plan_payload` RPC → stores `published_payload` snapshot, sets `visibility='link'`, `published_at=now()`
-- Revoke, trash, restore via separate API routes
-
----
-
-## AI Integration
-
-**Providers:** Anthropic (default) + Gemini (set `AI_BRAIN=gemini`)
-Both have rate-limit handling with retry logic.
-
-**Suggest endpoint:** `POST /api/ai/suggest`
-
-| Section | Input | Output |
-|---------|-------|--------|
-| `note_to_toc_rewrite` | current note, class/date context | rewritten note string |
-| `lesson_flow_phases` | class name, duration, constraints | phases array |
-| `teacher_lesson_flow_phases` | role_id (1–6) + Section 1 context | phases array |
-
-**Teacher Page (`/admin/teacher`):**
-1. Pick week → select block → fill Section 1 context (subject, grade, class size, unit stage, tools, etc.)
-2. Choose one of 6 pedagogical roles (Co-Designer, Inspiration Hub, Design Tutor, Assessment Specialist, Equity Champion, Subject Expert)
-3. Write task + constraints → Generate
-4. Preview phases → Apply: appends to `toc_block_plans.lesson_flow_phases`, auto-republishes, redirects to dayplan detail
+/admin                        Staff dashboard
+/admin/dayplans               List & create
+/admin/dayplans/[id]          Detail editor
+/admin/block-times            Time defaults
+/admin/class-lists            Student roster + photos
+/admin/courses                Course list
+/admin/courses/[id]/toc-template  Course template editor
+/admin/policies               Learning standards
+/admin/policies/core-competencies
+/admin/policies/core-competencies/import
+/admin/policies/pro-dev-goals
+/admin/policies/pro-dev-goals/import
+/admin/policies/toc-snippets
+/admin/policies/import
+/admin/publish                Publish (legacy)
+/admin/publishing             Publish + share links
+/admin/teacher                AI lesson generator
+/admin/public-layout          Layout settings
+```
 
 ---
 
-## All API Routes
+## All API Routes (27)
 
 ```
 Admin
@@ -107,18 +121,19 @@ Admin
   POST       /api/admin/dayplans/[id]/revoke
   POST       /api/admin/dayplans/[id]/trash
   POST       /api/admin/dayplans/blocks/[blockId]/lesson-flow/append
+  POST       /api/admin/dayplans/by-date-slot/lesson-flow/append  ← NEW
   GET        /api/admin/dayplans/open
   GET        /api/admin/dayplans/week
   GET        /api/admin/debug/dayplans
   GET        /api/admin/debug/public-plan
-  POST       /api/admin/learning-standards/import
+  POST       /api/admin/debug/report                              ← NEW
   GET        /api/admin/learning-standards
   GET/PATCH  /api/admin/learning-standards/rubric
   POST       /api/admin/policies/import
   POST       /api/admin/pro-dev-goals/import
 
 AI
-  POST       /api/ai/suggest
+  POST       /api/ai/suggest  (Gemini → Anthropic fallback)
 
 DOCX
   GET        /api/docx/attendance
@@ -138,55 +153,16 @@ TOC
 
 ---
 
-## Database Tables
-
-```
-day_plans              → Main plan record (visibility, published_payload, published_at, trashed_at)
-day_plan_blocks        → Time blocks (start_time, end_time, room, class_name, class_id)
-toc_block_plans        → Day-specific TOC overrides (lesson_flow_phases, activity_options, plan_mode, etc.)
-class_toc_templates    → Reusable course-level template
-classes                → Course definitions (room, block_label, sort_order, grade_level)
-students               → Roster (first_name, last_name, photo_url)
-enrollments            → Class ↔ Student (many-to-many)
-block_time_defaults    → Mon-Thu / Friday time blocks
-block_rotations        → A/B/C/D schedule rotation
-learning_standards     → Curriculum standards with rubric levels
-core_competencies      → BC Core Competency definitions
-pro_dev_goals          → Professional development goals
-toc_snippet_templates  → Reusable TOC text fragments
-staff_profiles         → Authenticated users with roles
-```
-
-RLS enabled on all tables. `is_staff()` RPC gates all admin access.
-
----
-
-## Environment
-
-```bash
-# Required
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
-
-# AI (at least one required for AI features)
-ANTHROPIC_API_KEY=
-GOOGLE_GENERATIVE_AI_API_KEY=
-AI_BRAIN=anthropic   # or: gemini
-```
-
----
-
 ## Known Gaps
 
 | Priority | Gap |
 |----------|-----|
-| Medium | TOC template DOCX (`/api/docx/toc-template/[id]`) is a skeleton — no implementation |
-| Medium | No CSV import for block times / rotation data |
+| Medium | TOC template DOCX (`/api/docx/toc-template/[id]`) — skeleton only |
+| Medium | No CSV import for block times / rotation |
 | Medium | No bulk student roster import (CSV) |
-| Medium | `share_token_hash` / `share_expires_at` columns exist but unused — plans are accessible by UUID only |
-| Medium | No publish history / rollback to previous snapshot |
-| Low | No attendance CSV export or historical attendance tracking |
+| Medium | `share_token_hash` / `share_expires_at` exist but unused — plan UUID is the only access mechanism |
+| Medium | No publish history / snapshot rollback |
+| Low | `turbopack.root` not set in `next.config.ts` (cosmetic build warning) |
+| Low | No attendance CSV export or historical tracking |
 | Low | Mobile responsiveness not optimized |
-| Low | Some ARIA labels missing |
-| Low | No audit logging (who published what, when) |
+| Low | No audit logging (who changed what, when) |

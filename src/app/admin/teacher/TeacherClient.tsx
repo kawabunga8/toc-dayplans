@@ -54,6 +54,7 @@ export default function TeacherClient() {
   const [task, setTask] = useState('');
   const [constraints, setConstraints] = useState('');
 
+  const [brain, setBrain] = useState<'gemini' | 'anthropic'>('gemini');
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
@@ -75,6 +76,7 @@ export default function TeacherClient() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           section: 'teacher_lesson_flow_phases',
+          brain,
           input: {
             role_id: roleId,
             section1_fields: { subject: subject || selectedBlock?.class_name || '', grade: gradeText, class_size: classSize, diversity, standards, unit_topic: unitTopic, unit_stage: unitStage, tools, not_worked: notWorked },
@@ -643,6 +645,28 @@ export default function TeacherClient() {
           >
             {loading ? 'Generating…' : 'Generate'}
           </button>
+
+          {/* AI brain toggle */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 0, borderRadius: 8, overflow: 'hidden', border: '1px solid #D1D5DB', fontSize: 12, fontWeight: 700 }}>
+            {(['gemini', 'anthropic'] as const).map((b) => (
+              <button
+                key={b}
+                type="button"
+                onClick={() => setBrain(b)}
+                style={{
+                  padding: '6px 12px',
+                  background: brain === b ? '#1E3A5F' : '#F9FAFB',
+                  color: brain === b ? '#fff' : '#6B7280',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontWeight: brain === b ? 700 : 400,
+                  fontSize: 12,
+                }}
+              >
+                {b === 'gemini' ? '✦ Gemini' : '◆ Claude'}
+              </button>
+            ))}
+          </div>
 
           <button
             type="button"
