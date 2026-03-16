@@ -327,11 +327,6 @@ export default function PublicPlanClient({ plan, layout }: { plan: PublicPlan; l
       >
         <header style={styles.header}>
           <div style={styles.titleBlock}>
-            <div style={styles.titleLogoWrap}>
-              <a href="https://myrcs.ca" style={{ display: 'inline-block' }} aria-label="Open myrcs.ca">
-                <img src="/LOGO_Full_Colour_RCS_Landscape.png" alt="RCS" style={styles.titleLogo as any} />
-              </a>
-            </div>
             <div style={styles.titleText}>
               <div style={styles.titleTeacher}>Mr. Kawamura</div>
               <div style={styles.titleClass}>{plan.title}</div>
@@ -341,6 +336,11 @@ export default function PublicPlanClient({ plan, layout }: { plan: PublicPlan; l
                 {plan.friday_type ? ` · ${plan.friday_type === 'day1' ? 'Friday Day 1' : 'Friday Day 2'}` : ''}
                 {' · '} {formatHeaderDate(plan.plan_date)}
               </div>
+            </div>
+            <div style={styles.titleLogoWrap}>
+              <a href="https://myrcs.ca" style={{ display: 'inline-block' }} aria-label="Open myrcs.ca">
+                <img src="/LOGO_Full_Colour_RCS_Landscape.png" alt="RCS" style={styles.titleLogo as any} />
+              </a>
             </div>
           </div>
 
@@ -929,9 +929,10 @@ const styles: Record<string, React.CSSProperties> = {
   titleLogoWrap: {
     width: 230,
     flexShrink: 0,
+    marginLeft: 'auto',
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'flex-start',
+    justifyContent: 'flex-end',
     paddingRight: 10,
   },
   titleLogo: { maxWidth: 200, height: 'auto' },
