@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
+import postgres from 'postgres';
 
 export const runtime = 'nodejs';
 
@@ -16,16 +17,26 @@ async function getSupabase() {
   });
 }
 
+function getSql() {
+  return postgres(process.env.DATABASE_URL!, { ssl: 'require', max: 1 });
+}
+
 export async function GET() {
-  const supabase = await getSupabase();
-  const { data, error } = await supabase.rpc('get_school_quarters');
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(data);
+  const sql = getSql();
+  try {
+    const rows = await sql`
+      SELECT id, label, start_date::text, end_date::text
+      FROM school_quarters
+      ORDER BY id
+    `;
+    return NextResponse.json(rows);
+  } finally {
+    await sql.end();
+  }
 }
 
 export async function PATCH(req: Request) {
   const supabase = await getSupabase();
-
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const { data: isStaff } = await supabase.rpc('is_staff');
@@ -33,8 +44,17 @@ export async function PATCH(req: Request) {
 
   const quarters: Array<{ id: number; label: string; start_date: string; end_date: string }> = await req.json();
 
-  const { error } = await supabase.rpc('upsert_school_quarters', { quarters_json: quarters });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  return NextResponse.json({ ok: true });
+  const sql = getSql();
+  try {
+    for (const q of quarters) {
+      await sql`
+        UPDATE school_quarters
+        SET label = ${q.label}, start_date = ${q.start_date}::date, end_date = ${q.end_date}::date
+        WHERE id = ${q.id}
+      `;
+    }
+    return NextResponse.json({ ok: true });
+  } finally {
+    await sql.end();
+  }
 }
