@@ -31,14 +31,48 @@ No test suite is configured.
 ### Core data model
 
 ```
-day_plans           → One plan per staff member per date/slot
-day_plan_blocks     → Time blocks within a dayplan
-toc_block_plans     → TOC-specific overrides per block
-class_toc_templates → Reusable template content per class
-classes             → Course definitions
+day_plans           → One plan per (plan_date, slot, friday_type?) — visibility, published_payload, trashed_at
+day_plan_blocks     → Time blocks within a dayplan (start/end, room, class_name, class_id)
+toc_block_plans     → TOC-specific overrides per block (lesson_flow_phases, activity_options, plan_mode)
+class_toc_templates → Reusable template content per class (default_tags, etc.)
+classes             → Course definitions (block_label, grade_level, room)
 enrollments         → Class ↔ Student mappings
 toc_snippets        → Reusable text fragments
 ```
+
+### Publishing / visibility
+
+- `/toc` shows all non-trashed plans for the chosen week (`trashed_at IS NULL`)
+- `trashed_at` is the primary "unpublish" mechanism
+- `visibility='link'` may exist for share-link semantics but `/toc` does not depend on it
+- If you change publishing rules, update both UI queries (`TocClient.tsx`) and DB RPCs (`supabase/schema.sql`)
+
+### Friday handling
+
+Many features require explicit `friday_type` (day1/day2) when the date is a Friday:
+- Rotation comes from `get_rotation_for_date(plan_date, friday_type)`
+- If `friday_type` is missing on a Friday, rotation returns `[]`
+- When adding features that query rotation on Fridays, ensure the caller supplies `friday_type` or infers it from existing `day_plans` rows
+
+### AI integration (`/admin/teacher`)
+
+The teacher lesson flow generator:
+1. Selects a date + block, builds Section 1 context, selects an educator role
+2. Calls `POST /api/ai/suggest` → returns JSON phases
+3. Applies via `/api/admin/dayplans/blocks/[blockId]/lesson-flow/append`
+
+Important:
+- AI suggest endpoints must force JSON-only output
+- When applying to Friday blocks, include `friday_type`
+- Default provider is Anthropic (`AI_BRAIN=anthropic`); set `AI_BRAIN=gemini` to use Gemini
+- On rate limit, the suggest route automatically falls back to Anthropic
+
+### Where things usually break
+
+- **RLS / env**: anon vs service role key — check `SUPABASE_SERVICE_ROLE_KEY` is set server-side
+- **Friday rotation**: missing `friday_type` causes empty rotation
+- **Week vs selectedDate**: UI can look empty if selected date is outside the loaded week
+- **AI JSON parsing**: model outputs non-JSON unless strictly constrained in the prompt
 
 ### Path aliases
 
@@ -46,9 +80,19 @@ toc_snippets        → Reusable text fragments
 
 ### Environment
 
-Requires `.env.local` with:
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `ANTHROPIC_API_KEY` or `GOOGLE_GENERATIVE_AI_API_KEY` for AI features
+```bash
+# Required
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=   # needed for server-side admin API routes
 
-See `src/lib/env.ts` for all validated env vars.
+# AI (at least one required for AI features)
+ANTHROPIC_API_KEY=
+GEMINI_API_KEY=
+AI_BRAIN=anthropic            # or: gemini
+```
+
+### Deploy notes
+
+- DB changes in `supabase/schema.sql` are **not** automatically applied — run them in the Supabase SQL editor after deploying
+- `/p/[id]` should remain print-friendly; avoid exposing internal debug text there
