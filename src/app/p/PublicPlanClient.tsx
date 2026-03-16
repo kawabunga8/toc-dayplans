@@ -278,7 +278,7 @@ export default function PublicPlanClient({ plan, layout }: { plan: PublicPlan; l
             </div>
             <div style={styles.titleLogoWrap}>
               <a href="https://myrcs.ca" style={{ display: 'inline-block' }} aria-label="Open myrcs.ca">
-                <img src="/LOGO_Full_Colour_Portrait.png" alt="RCS" style={styles.titleLogo as any} />
+                <img src="/LOGO_Full_Colour_RCS_Landscape.png" alt="RCS" style={styles.titleLogo as any} />
               </a>
             </div>
           </div>
@@ -859,7 +859,7 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'flex-end',
     paddingLeft: 10,
   },
-  titleLogo: { width: 64, height: 64, objectFit: 'contain' },
+  titleLogo: { maxWidth: 180, height: 'auto' },
   titleText: { display: 'grid', gap: 3, flex: 1 },
   titleTeacher: { fontSize: 14, color: RCS.gold },
   titleClass: { fontSize: 22, fontWeight: 700, color: RCS.white, lineHeight: 1.2 },
