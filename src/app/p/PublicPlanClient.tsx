@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { getSupabaseClient } from '@/lib/supabaseClient';
 
 type Student = { id: string; first_name: string; last_name: string };
 
@@ -134,15 +133,6 @@ export default function PublicPlanClient({ plan, layout }: { plan: PublicPlan; l
     };
   }, [plan.plan_date, plan.friday_type]);
 
-  const debugEnabled = useMemo(() => {
-    try {
-      const sp = new URLSearchParams(window.location.search);
-      return sp.get('debug') === '1';
-    } catch {
-      return false;
-    }
-  }, []);
-
   // Auto-print support: /p/[id]?print=1 will trigger window.print() on load.
   useEffect(() => {
     try {
@@ -154,60 +144,6 @@ export default function PublicPlanClient({ plan, layout }: { plan: PublicPlan; l
       // ignore
     }
   }, []);
-
-  const [debugOk, setDebugOk] = useState(false);
-  const [debugLoading, setDebugLoading] = useState(false);
-  const [debugErr, setDebugErr] = useState<string | null>(null);
-  const [debugPayload, setDebugPayload] = useState<any>(null);
-
-  useEffect(() => {
-    if (!debugEnabled) return;
-
-    let cancelled = false;
-    void (async () => {
-      setDebugLoading(true);
-      setDebugErr(null);
-
-      try {
-        const supabase = getSupabaseClient();
-        const { data: sessionData } = await supabase.auth.getSession();
-        if (!sessionData.session) {
-          if (!cancelled) {
-            setDebugOk(false);
-            setDebugErr('Debug requires admin login (no session).');
-          }
-          return;
-        }
-        const { data: isStaff, error } = await supabase.rpc('is_staff');
-        if (error || !isStaff) {
-          if (!cancelled) {
-            setDebugOk(false);
-            setDebugErr('Debug requires staff permissions.');
-          }
-          return;
-        }
-
-        const res = await fetch(`/api/public/plan?id=${encodeURIComponent(plan.id)}`);
-        const j = await res.json();
-        if (!res.ok) throw new Error(j?.error ?? 'Failed to load public payload');
-        if (!cancelled) {
-          setDebugOk(true);
-          setDebugPayload(j);
-        }
-      } catch (e: any) {
-        if (!cancelled) {
-          setDebugOk(false);
-          setDebugErr(e?.message ?? 'Debug failed');
-        }
-      } finally {
-        if (!cancelled) setDebugLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [debugEnabled, plan.id]);
 
   // Show ONLY the selected plan (one block) when opened from TOC.
   const blocksToShow = useMemo(() => {
@@ -336,6 +272,9 @@ export default function PublicPlanClient({ plan, layout }: { plan: PublicPlan; l
                 {plan.friday_type ? ` · ${plan.friday_type === 'day1' ? 'Friday Day 1' : 'Friday Day 2'}` : ''}
                 {' · '} {formatHeaderDate(plan.plan_date)}
               </div>
+
+              {/* diagnostics removed */}
+              {/* (internal diagnostics hidden) */}
             </div>
             <div style={styles.titleLogoWrap}>
               <a href="https://myrcs.ca" style={{ display: 'inline-block' }} aria-label="Open myrcs.ca">
@@ -365,51 +304,7 @@ export default function PublicPlanClient({ plan, layout }: { plan: PublicPlan; l
             </button>
           </div>
 
-          {debugEnabled ? (
-            <div style={{ ...styles.notesBox, background: '#FDF3DC', borderColor: '#C9A84C' }}>
-              <div style={styles.notesLabel}>Debug (admin-only)</div>
-              {debugLoading ? <div style={{ opacity: 0.85 }}>Loading…</div> : null}
-              {debugErr ? <div style={{ color: '#7F1D1D', whiteSpace: 'pre-wrap' }}>{debugErr}</div> : null}
-
-              {debugOk && debugPayload?.plan ? (
-                <div style={{ display: 'grid', gap: 8 }}>
-                  <div style={{ fontSize: 12, opacity: 0.9 }}>
-                    <b>version</b>: {process.env.NEXT_PUBLIC_APP_VERSION || '—'}
-                  </div>
-                  <div style={{ fontSize: 12, opacity: 0.9 }}>
-                    <b>plan_id</b>: {String(debugPayload.plan.id)}
-                  </div>
-                  <div style={{ fontSize: 12, opacity: 0.9 }}>
-                    <b>slot</b>: {String(debugPayload.plan.slot)}
-                  </div>
-                  <div style={{ fontSize: 12, opacity: 0.9 }}>
-                    <b>blocks returned</b>: {(debugPayload.plan.blocks ?? []).length}
-                  </div>
-                  <pre style={{ margin: 0, fontSize: 11, overflowX: 'auto', whiteSpace: 'pre-wrap' }}>
-{JSON.stringify(
-  {
-    blocks: (debugPayload.plan.blocks ?? []).map((b: any) => ({
-      id: b.id,
-      block_label: b.block_label ?? null,
-      class_name: b.class_name,
-      class_id: b.class_id,
-    })),
-    toc: {
-      plan_mode: debugPayload.plan.toc?.plan_mode ?? null,
-      lesson_flow_count: (debugPayload.plan.toc?.lesson_flow_phases ?? []).length,
-      opening_count: (debugPayload.plan.toc?.opening_routine_steps ?? []).length,
-      what_if_count: (debugPayload.plan.toc?.what_to_do_if_items ?? []).length,
-      activity_options_count: (debugPayload.plan.toc?.activity_options ?? []).length,
-    },
-  },
-  null,
-  2
-)}
-                  </pre>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
+          {/* debug panel removed */}
 
           {plan.toc?.note_to_toc?.trim() ? (
             <div style={styles.notesBox}>
@@ -502,14 +397,16 @@ export default function PublicPlanClient({ plan, layout }: { plan: PublicPlan; l
                                         {plan.toc.class_overview_rows
                                           .filter((r) => {
                                             const k = String(r.label ?? '').trim().toLowerCase();
-                                            return k !== 'class' && k !== 'room' && k !== 'time';
+                                            if (k === 'class' || k === 'room' || k === 'time') return false;
+                                            const v = resolveTokens(String(r.value ?? ''), b).trim();
+                                            return !!v;
                                           })
                                           .map((r, idx) => {
-                                            const v = resolveTokens(String(r.value ?? ''), b);
+                                            const v = resolveTokens(String(r.value ?? ''), b).trim();
                                             return (
                                               <tr key={idx} style={idx % 2 === 1 ? (styles.printTrAlt as any) : undefined}>
                                                 <td style={styles.printTd as any}><b>{r.label}</b></td>
-                                                <td style={styles.printTd as any}>{v || ''}</td>
+                                                <td style={styles.printTd as any}>{v}</td>
                                               </tr>
                                             );
                                           })}
@@ -756,7 +653,14 @@ export default function PublicPlanClient({ plan, layout }: { plan: PublicPlan; l
                       );
                     })()}
                   </div>
-                ) : null}
+                ) : (
+                  <div style={{ ...styles.tocWrap, borderStyle: 'dashed', opacity: 0.9 }}>
+                    <div style={{ fontWeight: 900, marginBottom: 6 }}>TOC plan not available yet</div>
+                    <div style={{ fontSize: 12, opacity: 0.85 }}>
+                      This block hasn’t been published (or the public payload hasn’t been generated yet). Please check back later.
+                    </div>
+                  </div>
+                )}
 
                 {showAttendance && open && (
                   <div className="attendanceWrap" style={styles.attendanceWrap}>
@@ -923,20 +827,21 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '12px 20px',
     display: 'flex',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: 20,
     borderBottom: `4px solid ${RCS.gold}`,
   },
   titleLogoWrap: {
-    width: 230,
+    width: 'auto',
     flexShrink: 0,
     marginLeft: 'auto',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'flex-end',
-    paddingRight: 10,
+    paddingLeft: 10,
   },
-  titleLogo: { maxWidth: 200, height: 'auto' },
-  titleText: { display: 'grid', gap: 3 },
+  titleLogo: { maxWidth: 220, height: 'auto' },
+  titleText: { display: 'grid', gap: 3, flex: 1 },
   titleTeacher: { fontSize: 14, color: RCS.gold },
   titleClass: { fontSize: 22, fontWeight: 700, color: RCS.white, lineHeight: 1.2 },
   titleSub: { fontSize: 14, color: RCS.gold },

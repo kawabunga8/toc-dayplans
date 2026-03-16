@@ -61,6 +61,8 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
   const [saveAllStatus, setSaveAllStatus] = useState<SaveAllStatus>('idle');
   const [saveAllError, setSaveAllError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [tocUnsavedByBlockId, setTocUnsavedByBlockId] = useState<Record<string, boolean>>({});
+  const [metaDirty, setMetaDirty] = useState(false);
   const [plan, setPlan] = useState<DayPlanRow | null>(null);
 
   const [draftTitle, setDraftTitle] = useState('');
@@ -215,6 +217,122 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
 
   // Autosave disabled (use Save all)
 
+  // Track unsaved state from child TOC editors so we can warn before navigation.
+  useEffect(() => {
+    const handlers: Array<{ type: string; fn: any }> = [];
+
+    for (const b of blocks) {
+      if (!b?.id) continue;
+      const type = `toc-unsaved:${String(b.id)}`;
+      const fn = (e: Event) => {
+        const evt = e as CustomEvent<{ unsaved?: boolean }>;
+        const u = !!evt.detail?.unsaved;
+        setTocUnsavedByBlockId((prev) => ({ ...prev, [String(b.id)]: u }));
+      };
+      window.addEventListener(type, fn as any);
+      handlers.push({ type, fn });
+    }
+
+    return () => {
+      for (const h of handlers) window.removeEventListener(h.type, h.fn as any);
+    };
+  }, [blocks]);
+
+  const hasUnsavedChanges = useMemo(() => {
+    const tocUnsaved = Object.values(tocUnsavedByBlockId).some(Boolean);
+    return tocUnsaved || metaDirty;
+  }, [tocUnsavedByBlockId, metaDirty]);
+
+  const [navGuardOpen, setNavGuardOpen] = useState(false);
+  const [navGuardMsg, setNavGuardMsg] = useState('You have unsaved changes. Leave without saving?');
+  const pendingNavRef = useRef<null | (() => void)>(null);
+  const bypassGuardRef = useRef(false);
+
+  function requestNavigate(fn: () => void, msg?: string) {
+    if (!hasUnsavedChanges || bypassGuardRef.current) {
+      fn();
+      return;
+    }
+    pendingNavRef.current = fn;
+    if (msg) setNavGuardMsg(msg);
+    setNavGuardOpen(true);
+  }
+
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (!hasUnsavedChanges) return;
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [hasUnsavedChanges]);
+
+  // Block back/forward navigation with a custom modal.
+  useEffect(() => {
+    try {
+      // Create an extra history entry so Back triggers popstate within this page.
+      window.history.pushState({ dayplan_guard: true }, '', window.location.href);
+    } catch {
+      // ignore
+    }
+
+    const onPop = () => {
+      if (!hasUnsavedChanges || bypassGuardRef.current) return;
+      // Re-push current URL to effectively cancel back.
+      try {
+        window.history.pushState({ dayplan_guard: true }, '', window.location.href);
+      } catch {
+        // ignore
+      }
+      pendingNavRef.current = () => {
+        bypassGuardRef.current = true;
+        window.history.back();
+      };
+      setNavGuardMsg('You have unsaved changes. Go back anyway?');
+      setNavGuardOpen(true);
+    };
+
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [hasUnsavedChanges]);
+
+  // Intercept in-page link clicks (e.g. "TOC View") so you can't navigate away without confirming.
+  useEffect(() => {
+    const onClickCapture = (e: MouseEvent) => {
+      if (!hasUnsavedChanges || bypassGuardRef.current) return;
+      if (navGuardOpen) return;
+      if (e.defaultPrevented) return;
+      if (e.button !== 0) return; // left click only
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; // allow open-in-new-tab etc.
+
+      const target = e.target as HTMLElement | null;
+      const a = target?.closest?.('a[href]') as HTMLAnchorElement | null;
+      if (!a) return;
+      const href = a.getAttribute('href') || '';
+      if (!href) return;
+      if (a.target === '_blank') return;
+      if (href.startsWith('#')) return;
+
+      // Only intercept same-origin navigations.
+      let url: URL;
+      try {
+        url = new URL(href, window.location.origin);
+      } catch {
+        return;
+      }
+      if (url.origin !== window.location.origin) return;
+
+      e.preventDefault();
+      requestNavigate(() => {
+        window.location.href = url.toString();
+      }, 'You have unsaved changes. Continue without saving?');
+    };
+
+    document.addEventListener('click', onClickCapture, true);
+    return () => document.removeEventListener('click', onClickCapture, true);
+  }, [hasUnsavedChanges, navGuardOpen]);
+
   // Allow pickers to return selected values via query params.
   useEffect(() => {
     const cc = (searchParams.get('core_competency_focus') ?? '').trim();
@@ -343,7 +461,9 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
       await saveBlocks();
 
       // Publish should prune legacy TOC overrides (template-first) and save intended day overrides.
-      const ids = (blocks ?? []).map((b) => b.id).filter(Boolean) as string[];
+      const ids = (blocks ?? [])
+        .filter((b) => b.id && b.class_id)
+        .map((b) => b.id) as string[];
       for (const bid of ids) {
         await requestTocPublishForBlock(bid);
       }
@@ -522,6 +642,7 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
         class_id: b.class_id ?? null,
       })) as PlanBlockRow[]);
 
+      setMetaDirty(false);
       setStatus('idle');
     } catch (e: any) {
       setStatus('error');
@@ -624,17 +745,23 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
       // IMPORTANT: don't rely on local React state for block IDs here.
       // saveBlocks may insert new rows and setBlocks() is async, so ids can be stale.
       const supabase = getSupabaseClient();
-      const { data: bidRows, error: bidErr } = await supabase.from('day_plan_blocks').select('id').eq('day_plan_id', plan!.id);
+      const { data: bidRows, error: bidErr } = await supabase
+        .from('day_plan_blocks')
+        .select('id, class_id')
+        .eq('day_plan_id', plan!.id);
       if (bidErr) throw bidErr;
-      const ids = (bidRows ?? []).map((r: any) => String(r.id)).filter(Boolean);
+      const tocIds = (bidRows ?? [])
+        .filter((r: any) => r?.class_id) // only blocks that have a TOC editor/listener
+        .map((r: any) => String(r.id))
+        .filter(Boolean);
 
       // Save TOC edits.
-      for (const bid of ids) {
+      for (const bid of tocIds) {
         await requestTocSaveForBlock(bid);
       }
 
       // Save = Publish: always publish after saving so /p reflects latest changes.
-      for (const bid of ids) {
+      for (const bid of tocIds) {
         await requestTocPublishForBlock(bid);
       }
 
@@ -645,6 +772,7 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
       await load();
       setSavedAt(new Date().toISOString());
       setSaveAllStatus('saved');
+      setMetaDirty(false);
       setStatus('idle');
     } catch (e: any) {
       setSaveAllStatus('error');
@@ -787,6 +915,43 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
 
   return (
     <main style={styles.page}>
+      {navGuardOpen ? (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'grid', placeItems: 'center', zIndex: 9999, padding: 16 }}>
+          <div style={{ background: '#fff', borderRadius: 14, maxWidth: 520, width: '100%', border: '1px solid rgba(0,0,0,0.12)', padding: 16 }}>
+            <div style={{ fontWeight: 900, marginBottom: 8 }}>Unsaved changes</div>
+            <div style={{ fontSize: 13, opacity: 0.9, marginBottom: 14 }}>{navGuardMsg}</div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  pendingNavRef.current = null;
+                  setNavGuardOpen(false);
+                }}
+                style={styles.secondaryBtn}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const fn = pendingNavRef.current;
+                  pendingNavRef.current = null;
+                  setNavGuardOpen(false);
+                  bypassGuardRef.current = true;
+                  try {
+                    fn?.();
+                  } finally {
+                    // keep bypass true for the immediate navigation
+                  }
+                }}
+                style={styles.dangerBtn}
+              >
+                Continue without saving
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <div style={styles.rowBetween}>
         <div>
           <h1 style={styles.h1}>Dayplan Builder</h1>
@@ -829,7 +994,15 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
 
               <label style={{ display: 'grid', gap: 6 }}>
                 <span style={styles.label}>Notes (optional)</span>
-                <textarea value={draftNotes} onChange={(e) => setDraftNotes(e.target.value)} rows={4} style={styles.textarea} />
+                <textarea
+                  value={draftNotes}
+                  onChange={(e) => {
+                    setDraftNotes(e.target.value);
+                    setMetaDirty(true);
+                  }}
+                  rows={4}
+                  style={styles.textarea}
+                />
               </label>
 
               <label style={{ display: 'grid', gap: 6 }}>
@@ -837,7 +1010,10 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                 <div style={{ display: 'flex', gap: 10, alignItems: 'stretch', flexWrap: 'wrap' }}>
                   <textarea
                     value={draftLearningStandardFocus}
-                    onChange={(e) => setDraftLearningStandardFocus(e.target.value)}
+                    onChange={(e) => {
+                      setDraftLearningStandardFocus(e.target.value);
+                      setMetaDirty(true);
+                    }}
                     rows={2}
                     style={{ ...styles.textarea, flex: 1, minWidth: 260 }}
                     placeholder="(empty)"
@@ -864,7 +1040,9 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                       const ret = retQs.toString() ? `/admin/dayplans/${id}?${retQs.toString()}` : `/admin/dayplans/${id}`;
 
                       qs.set('return', ret);
-                      window.location.href = `/admin/policies?${qs.toString()}`;
+                      requestNavigate(() => {
+                        window.location.href = `/admin/policies?${qs.toString()}`;
+                      }, 'You have unsaved changes. Continue to Learning Standards selection without saving?');
                     }}
                     style={styles.secondaryBtn}
                   >
@@ -878,7 +1056,10 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                 <div style={{ display: 'flex', gap: 10, alignItems: 'stretch', flexWrap: 'wrap' }}>
                   <textarea
                     value={draftCoreCompetencyFocus}
-                    onChange={(e) => setDraftCoreCompetencyFocus(e.target.value)}
+                    onChange={(e) => {
+                      setDraftCoreCompetencyFocus(e.target.value);
+                      setMetaDirty(true);
+                    }}
                     rows={2}
                     style={{ ...styles.textarea, flex: 1, minWidth: 260 }}
                     placeholder="(empty)"
@@ -895,7 +1076,9 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                       const ret = retQs.toString() ? `/admin/dayplans/${id}?${retQs.toString()}` : `/admin/dayplans/${id}`;
 
                       qs.set('return', ret);
-                      window.location.href = `/admin/policies/core-competencies?${qs.toString()}`;
+                      requestNavigate(() => {
+                        window.location.href = `/admin/policies/core-competencies?${qs.toString()}`;
+                      }, 'You have unsaved changes. Continue to Core Competencies selection without saving?');
                     }}
                     style={styles.secondaryBtn}
                   >
@@ -909,7 +1092,10 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                   <span style={styles.label}>Friday Type</span>
                   <select
                     value={plan.friday_type ?? ''}
-                    onChange={(e) => setPlan((prev) => (prev ? { ...prev, friday_type: (e.target.value as any) || null } : prev))}
+                    onChange={(e) => {
+                      setPlan((prev) => (prev ? { ...prev, friday_type: (e.target.value as any) || null } : prev));
+                      setMetaDirty(true);
+                    }}
                     style={styles.input}
                   >
                     <option value="">Select…</option>
@@ -977,7 +1163,10 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                         <span style={styles.label}>Details (optional)</span>
                         <textarea
                           value={b.details ?? ''}
-                          onChange={(e) => setBlocks((prev) => prev.map((x, i) => (i === idx ? { ...x, details: e.target.value } : x)))}
+                          onChange={(e) => {
+                            setBlocks((prev) => prev.map((x, i) => (i === idx ? { ...x, details: e.target.value } : x)));
+                            setMetaDirty(true);
+                          }}
                           rows={2}
                           style={styles.textarea}
                         />
@@ -1011,6 +1200,25 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                     <span style={{ marginLeft: 10, opacity: 0.7 }}>
                       v{process.env.NEXT_PUBLIC_APP_VERSION || '—'}
                     </span>
+                    <span style={{ marginLeft: 10, opacity: 0.7 }}>
+                      • Plan ID: <span style={{ fontFamily: 'monospace' }}>{plan?.id || '—'}</span>
+                    </span>
+                    {plan?.id ? (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(String(plan.id));
+                            alert('Copied Plan ID');
+                          } catch {
+                            // ignore
+                          }
+                        }}
+                        style={{ marginLeft: 8, ...styles.secondaryBtn, padding: '4px 8px' } as any}
+                      >
+                        Copy
+                      </button>
+                    ) : null}
                   </div>
                   <button
                     type="button"
@@ -1042,6 +1250,52 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                   >
                     Debug lesson flow
                   </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const tags = {
+                          plan_id: plan?.id ?? null,
+                          plan_date: plan?.plan_date ?? null,
+                          slot: plan?.slot ?? null,
+                        };
+                        const toc = {
+                          has_unsaved_changes: hasUnsavedChanges,
+                          toc_unsaved_by_block_id: tocUnsavedByBlockId,
+                        };
+                        const res = await fetch('/api/admin/debug/report', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            plan_id: id,
+                            host: typeof window !== 'undefined' ? window.location.host : '',
+                            href: typeof window !== 'undefined' ? window.location.href : '',
+                            tags,
+                            toc,
+                          }),
+                        });
+                        const j = await res.json();
+                        if (!res.ok) throw new Error(j?.error ?? 'Failed');
+                        const diagId = String(j?.diagnostic_id ?? '').trim();
+                        if (diagId) {
+                          try {
+                            await navigator.clipboard.writeText(diagId);
+                          } catch {
+                            // ignore
+                          }
+                          alert(`Diagnostic ID: ${diagId} (copied)`);
+                        } else {
+                          alert('Diagnostic created');
+                        }
+                      } catch (e: any) {
+                        alert(e?.message ?? 'Diagnostic failed');
+                      }
+                    }}
+                    style={styles.secondaryBtn}
+                  >
+                    Report diagnostics
+                  </button>
+
                   <button onClick={recalcTimesFromDefaults} disabled={status !== 'idle'} style={styles.secondaryBtn}>
                     Fix times from defaults
                   </button>
@@ -1051,45 +1305,17 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
           </section>
 
           <section style={styles.card}>
-            <div style={styles.sectionHeader}>Publishing (TOC link)</div>
-            {trashed && (
-              <div style={{ ...styles.errorBox, marginTop: 0, marginBottom: 12 }}>
-                This plan is in the trash. Restore it to publish again.
-              </div>
-            )}
+            <div style={styles.sectionHeader}>Manage</div>
             <div style={{ display: 'grid', gap: 8 }}>
-              {hasUnpublishedChanges ? (
-                <div style={{ ...styles.callout, borderColor: '#C9A84C', background: '#FDF3DC' }}>
-                  <b>Unpublished changes</b> — the public page (<code>/p</code>) shows the last published version.
-                </div>
-              ) : null}
-
-              <div>
-                <b>Status:</b> {published ? <span>Published</span> : <span>Not published</span>}
+              <div style={{ ...styles.callout, borderColor: '#C9A84C', background: '#FDF3DC' }}>
+                Publishing is managed on the <b>/publishing</b> page.
               </div>
-
-              {published && publicUrl && (
-                <div style={styles.callout}>
-                  <div style={{ fontWeight: 900, color: RCS.deepNavy, marginBottom: 6 }}>Public URL</div>
-                  <div style={{ wordBreak: 'break-all' }}>{publicUrl}</div>
-                  <div style={{ display: 'flex', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
-                    <button onClick={copyLink} style={styles.secondaryBtn}>Copy link</button>
-                    <a href={publicUrl} target="_blank" rel="noreferrer" style={styles.primaryLink}>Open</a>
-                  </div>
-                </div>
-              )}
+              <div>
+                <b>Status:</b> {trashed ? <span>Trashed</span> : <span>Active</span>}
+              </div>
             </div>
 
             <div style={{ display: 'flex', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
-                <button onClick={publish} disabled={status !== 'idle' || trashed} style={styles.primaryBtn}>
-                  {status === 'publishing' ? 'Publishing…' : published ? 'Republish' : 'Publish'}
-                </button>
-                {hasUnpublishedChanges ? <span style={{ fontSize: 12, color: '#7F1D1D', fontWeight: 800 }}>Unpublished changes</span> : null}
-              </div>
-              <button onClick={revoke} disabled={!published || status !== 'idle'} style={styles.dangerBtn}>
-                Revoke
-              </button>
               {trashed ? (
                 <button onClick={restore} disabled={status !== 'idle'} style={styles.secondaryBtn}>
                   Restore

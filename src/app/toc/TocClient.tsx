@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import RcsBanner from '@/components/RcsBanner';
 import { nextSchoolDayIso, nextSchoolDayIsoFromIso, prevSchoolDayIsoFromIso } from '@/lib/appRules/dates';
 
@@ -61,11 +61,13 @@ export default function TocClient({
   plans,
   classes,
   initialView,
+  debug,
 }: {
   weekStart: string;
   plans: PublicPlanSummary[];
   classes: PublicClass[];
   initialView?: 'today' | 'calendar';
+  debug?: boolean;
 }) {
   const today = useMemo(() => {
     // Default behavior (Pacific Time cutoff):
@@ -110,7 +112,23 @@ export default function TocClient({
   }, []);
 
   const [view, setView] = useState<'today' | 'calendar'>(initialView ?? 'today');
-  const [selectedDate, setSelectedDate] = useState<string>(today);
+  const didAutoSwitchView = useRef(false);
+
+  const weekEnd = useMemo(() => {
+    const d = new Date(weekStart + 'T00:00:00');
+    d.setDate(d.getDate() + 4);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const da = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${da}`;
+  }, [weekStart]);
+
+  const [selectedDate, setSelectedDate] = useState<string>(() => {
+    // Ensure the default selected date is inside the loaded week range.
+    // Otherwise the UI looks empty until you navigate around.
+    if (today >= weekStart && today <= weekEnd) return today;
+    return weekStart;
+  });
   const [selectedFridayType, setSelectedFridayType] = useState<'' | 'day1' | 'day2'>('');
 
   const [openPlanId, setOpenPlanId] = useState<string | null>(null);
@@ -139,29 +157,13 @@ export default function TocClient({
   const isSelectedFriday = useMemo(() => isFridayLocal(selectedDate), [selectedDate]);
 
   useEffect(() => {
-    // Friday behavior: choose Day 1/2 based on which day has published plans; prompt if both.
+    // Friday behavior: always require a Day 1/2 selection.
+    // Default to Day 1 so rotation loads immediately.
     if (!isSelectedFriday) {
       setSelectedFridayType('');
       return;
     }
-
-    let cancelled = false;
-    void (async () => {
-      try {
-        const { fetchFridayPublishedInfo, chooseFridayType } = await import('@/lib/appRules/friday');
-        const published = await fetchFridayPublishedInfo(selectedDate);
-        if (cancelled) return;
-
-        const next = chooseFridayType({ current: selectedFridayType, published });
-        if (next !== selectedFridayType) setSelectedFridayType(next);
-      } catch {
-        if (!cancelled && !selectedFridayType) setSelectedFridayType('day1');
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
+    if (!selectedFridayType) setSelectedFridayType('day1');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSelectedFriday, selectedDate]);
 
@@ -186,6 +188,17 @@ export default function TocClient({
     }
     return m;
   }, [plansByDate, selectedDate]);
+
+  // If the landing "Today" view has no plans, auto-switch to Calendar once.
+  useEffect(() => {
+    if (didAutoSwitchView.current) return;
+    if (view !== 'today') return;
+    const count = (plansByDate.get(selectedDate) ?? []).length;
+    if (count === 0) {
+      didAutoSwitchView.current = true;
+      setView('calendar');
+    }
+  }, [view, selectedDate, plansByDate]);
 
   async function ensureNotes(planId: string) {
     if (!planId) return;
@@ -365,6 +378,11 @@ export default function TocClient({
             <div style={styles.headerKicker}>TOC</div>
             <div style={styles.headerTitle}>{view === 'today' ? 'Today' : `Week of ${weekStart}`}</div>
             <div style={styles.headerSub}>Only published plans are clickable.</div>
+            {debug ? (
+              <div style={{ marginTop: 8, fontSize: 12, opacity: 0.85, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>
+                debug: weekStart={weekStart} weekEnd={weekEnd} selectedDate={selectedDate} plansForDate={(plansByDate.get(selectedDate) ?? []).length} totalPlans={plans.length}
+              </div>
+            ) : null}
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-end' }}>

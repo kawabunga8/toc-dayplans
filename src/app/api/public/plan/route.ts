@@ -17,7 +17,9 @@ export async function GET(req: Request) {
   }
 
   const supabase = createClient(url, anon, { auth: { persistSession: false, autoRefreshToken: false } });
-  const { data, error } = await supabase.rpc('get_public_day_plan_from_toc', { plan_id: id });
+
+  // Live-only: compute payload directly from dayplan + templates + overrides.
+  const { data, error } = await supabase.rpc('get_public_day_plan_live', { plan_id: id });
 
   if (error || !data) {
     return NextResponse.json(

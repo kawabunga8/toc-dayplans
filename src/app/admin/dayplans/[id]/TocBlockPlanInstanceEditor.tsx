@@ -65,8 +65,22 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
   const [error, setError] = useState<string | null>(null);
 
   const [unsaved, setUnsaved] = useState(false);
+
+  // Report unsaved state to the parent dayplan page so it can warn on navigation.
+  useEffect(() => {
+    try {
+      window.dispatchEvent(
+        new CustomEvent(`toc-unsaved:${blockId}`, {
+          detail: { unsaved },
+        })
+      );
+    } catch {
+      // ignore
+    }
+  }, [unsaved, blockId]);
   const markUnsaved = () => setUnsaved(true);
   const [saveDebug, setSaveDebug] = useState<string | null>(null);
+  const [saveReceipt, setSaveReceipt] = useState<string | null>(null);
 
   const [tocBlockPlanId, setTocBlockPlanId] = useState<string | null>(null);
 
@@ -129,6 +143,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
   };
 
   const [phases, setPhases] = useState<Phase[]>([]);
+  const phasesRef = useRef<Phase[]>([]);
   const phaseFieldRefs = useRef<
     Record<
       string,
@@ -517,25 +532,9 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
       await supabase.from('toc_block_plans').update({ template_id: effectiveTplId }).eq('id', tocPlanId);
     }
 
-    // New architecture: copy template content into TOC instance cards once.
-    // /p reads ONLY from toc_* instance tables, so we must seed before public use.
-    try {
-      if (!((plan as any).seeded_at) && effectiveTplId) {
-        await supabase.rpc('seed_toc_block_plan_from_template', { p_toc_block_plan_id: tocPlanId });
-        // Reload plan row after seeding so subsequent reads use instance tables.
-        const { data: plan2, error: p2Err } = await supabase
-          .from('toc_block_plans')
-          .select('template_id,plan_mode,override_note_to_toc,override_assessment_touch_point,override_payload,seeded_at')
-          .eq('id', tocPlanId)
-          .single();
-        if (!p2Err && plan2) {
-          (plan as any).override_payload = (plan2 as any).override_payload;
-          (plan as any).seeded_at = (plan2 as any).seeded_at;
-        }
-      }
-    } catch {
-      // seeding is best-effort; editor can still function
-    }
+    // NOTE: We no longer auto-seed instance tables on load.
+    // /p reads live computed payload directly, and lesson flow overrides live in toc_block_plans.override_payload.
+    // Seeding mutates DB on page load and can cause confusing "disappearing" UI if it races with overrides.
 
     setTemplateId(effectiveTplId);
     setPlanMode(plan.plan_mode as PlanMode);
@@ -618,6 +617,10 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
     setTouchCycle(String(effectiveTp?.cyclical_loop_type ?? ''));
 
     // template previews
+    // IMPORTANT: keep local copies for any values we want to use immediately in this function.
+    // React state setters (setTplLessonFlow, etc.) are async and won't update within the same call.
+    let tplLessonFlowLocal: Array<{ time_text: string; phase_text: string; activity_text: string; purpose_text: string | null }> = [];
+
     if (effectiveTplId) {
       const [orRes, wiRes, lfRes, optRes, roleRes] = await Promise.all([
         supabase.from('class_opening_routine_steps').select('sort_order,step_text').eq('template_id', effectiveTplId).order('sort_order', { ascending: true }),
@@ -634,7 +637,14 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
 
       setTplOpeningSteps((orRes.data ?? []).map((r: any) => ({ step_text: r.step_text })));
       setTplWhatIf((wiRes.data ?? []).map((r: any) => ({ scenario_text: r.scenario_text, response_text: r.response_text })));
-      setTplLessonFlow((lfRes.data ?? []).map((r: any) => ({ time_text: r.time_text, phase_text: r.phase_text, activity_text: r.activity_text, purpose_text: r.purpose_text ?? null })));
+
+      tplLessonFlowLocal = (lfRes.data ?? []).map((r: any) => ({
+        time_text: r.time_text,
+        phase_text: r.phase_text,
+        activity_text: r.activity_text,
+        purpose_text: r.purpose_text ?? null,
+      }));
+      setTplLessonFlow(tplLessonFlowLocal);
 
       const tOpts = optRes.data ?? [];
       const optIds = tOpts.map((o: any) => o.id);
@@ -722,7 +732,9 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         source_template_phase_id: null,
       }));
       setPhases(nextPhases);
+      phasesRef.current = nextPhases;
       setLessonOverride(true);
+      setLessonTouched(false);
     } else {
       const legacyPhases: Phase[] = (lf2.data ?? []).map((r: any) => ({
         client_id: newClientId(),
@@ -733,7 +745,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         source_template_phase_id: r.source_template_phase_id ?? null,
       }));
 
-      const seededFromTemplate: Phase[] = (tplLessonFlow ?? []).map((r: any) => ({
+      const seededFromTemplate: Phase[] = (tplLessonFlowLocal ?? []).map((r: any) => ({
         client_id: newClientId(),
         time_text: String(r.time_text ?? ''),
         phase_text: String(r.phase_text ?? ''),
@@ -742,9 +754,14 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         source_template_phase_id: null,
       }));
 
-      const nextPhases = legacyPhases.length ? legacyPhases : seededFromTemplate;
-      setPhases(nextPhases);
-      setLessonOverride(nextPhases.length > 0);
+      // Only mark "override" when there are actual day-specific overrides (JSON override or legacy instance rows).
+      const useLegacy = legacyPhases.length > 0;
+      {
+        const next = useLegacy ? legacyPhases : seededFromTemplate;
+        setPhases(next);
+        phasesRef.current = next;
+      }
+      setLessonOverride(useLegacy);
     }
 
     setWhatIfItems((wi2.data ?? []).map((r: any) => ({ scenario_text: r.scenario_text, response_text: r.response_text, source_template_item_id: r.source_template_item_id ?? null })));
@@ -993,6 +1010,9 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
 
     try {
       const supabase = getSupabaseClient();
+      // Keep a local copy of override_payload as we mutate it during save.
+      // React state updates are async; using state as a merge base later can clobber earlier writes.
+      let workingPayload: any = overridePayload && typeof overridePayload === 'object' ? { ...(overridePayload as any) } : {};
 
       // header
       const { error: upErr } = await supabase
@@ -1021,52 +1041,13 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
       // We do this whenever the plan mode is lesson_flow so that /p never silently falls
       // back to the template due to missing rows.
       if (planMode === 'lesson_flow') {
-        // Source of truth: current input values (uncontrolled inputs + refs).
-        // This avoids browser timing issues with controlled textareas.
+        // Source of truth: React state (controlled inputs).
+        // Avoid DOM re-reads; those are brittle on mobile/IME and can miss the user's latest text.
         let effective: Phase[] = [];
 
-        const fromDom = (): Phase[] =>
-          phases.map((p, pIdx) => {
-            const r = phaseFieldRefs.current[p.client_id] ?? {};
-
-            const q = (field: string) => {
-              if (typeof document === 'undefined') return null;
-              // Prefer deterministic id-based lookup (most robust), then idx selector, then fallbacks.
-              const byId = document.getElementById(`lessonflow-${field}-${pIdx}`) as any;
-              if (byId && typeof byId.value !== 'undefined') return byId;
-
-              const byIdx = document.querySelector<HTMLInputElement | HTMLTextAreaElement>(
-                `[data-phase-idx="${pIdx}"][data-phase-field="${field}"]`
-              );
-              if (byIdx) return byIdx;
-
-              const all = Array.from(
-                document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(`[data-phase-field="${field}"]`)
-              );
-              const byList = all[pIdx] ?? null;
-              if (byList) return byList;
-
-              return document.querySelector<HTMLInputElement | HTMLTextAreaElement>(
-                `[data-phase-client-id="${p.client_id}"][data-phase-field="${field}"]`
-              );
-            };
-
-            const timeEl = q('time') ?? r.time;
-            const phaseEl = q('phase') ?? r.phase;
-            const actEl = q('activity') ?? r.activity;
-            const purpEl = q('purpose') ?? r.purpose;
-
-            return {
-              ...p,
-              time_text: (timeEl?.value ?? p.time_text ?? '').toString(),
-              phase_text: (phaseEl?.value ?? p.phase_text ?? '').toString(),
-              activity_text: (actEl?.value ?? p.activity_text ?? '').toString(),
-              purpose_text: (purpEl?.value ?? p.purpose_text ?? '').toString(),
-            };
-          });
-
-        if (phases.length) {
-          effective = fromDom();
+        const curPhases = (phasesRef.current?.length ? phasesRef.current : phases);
+        if (curPhases.length) {
+          effective = curPhases;
         } else if ((tplLessonFlow ?? []).length) {
           effective = (tplLessonFlow ?? []).map((r: any) => ({
             client_id: newClientId(),
@@ -1102,7 +1083,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         }
 
         const nextPayload = {
-          ...(overridePayload && typeof overridePayload === 'object' ? overridePayload : {}),
+          ...workingPayload,
           lesson_flow_phases: effective.map((p) => ({
             time_text: p.time_text,
             phase_text: p.phase_text,
@@ -1124,6 +1105,14 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         }
 
         setOverridePayload(persisted);
+        workingPayload = persisted;
+
+        try {
+          const sample = String((effective?.[0] as any)?.activity_text ?? '').replace(/\s+/g, ' ').trim();
+          setSaveReceipt(`Saved lesson flow (${effective.length} phases) • ${new Date().toLocaleTimeString()} • sample: ${sample.slice(0, 60)}`);
+        } catch {
+          setSaveReceipt(`Saved lesson flow (${effective.length} phases) • ${new Date().toLocaleTimeString()}`);
+        }
 
         // Legacy table cleanup (optional): keep empty so public RPC uses JSON override.
         await supabase.from('toc_lesson_flow_phases').delete().eq('toc_block_plan_id', tocBlockPlanId);
@@ -1161,7 +1150,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         nextAdvanced.pd_goal_connections.length === 0 &&
         nextAdvanced.first_peoples_principles.length === 0;
 
-      const base = (overridePayload && typeof overridePayload === 'object' ? { ...(overridePayload as any) } : {}) as any;
+      const base = (workingPayload && typeof workingPayload === 'object' ? { ...(workingPayload as any) } : {}) as any;
       const nextPayload2 = {
         ...base,
         publish_mode: publishMode,
@@ -1179,7 +1168,9 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         .select('override_payload')
         .maybeSingle();
       if (up2Err) throw up2Err;
-      setOverridePayload((saved2 as any)?.override_payload ?? nextPayload2);
+      const persisted2 = (saved2 as any)?.override_payload ?? nextPayload2;
+      setOverridePayload(persisted2);
+      workingPayload = persisted2;
 
       // Opening routine overrides only if created
       if (openingOverride) {
@@ -1284,12 +1275,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         }
       }
 
-      // Materialize the live render into toc_block_plans.public_payload for /p.
-      // Do NOT swallow errors here; if this fails then /p will appear blank.
-      {
-        const { error: pubErr } = await supabase.rpc('resolve_toc_block_plan_public_payload', { p_toc_block_plan_id: tocBlockPlanId });
-        if (pubErr) throw pubErr;
-      }
+      // No materialization step: /p reads live computed payload directly.
 
       // Reload state (optional)
       if (reload) await loadAll(supabase, tocBlockPlanId, templateId);
@@ -1321,8 +1307,13 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
           <div style={{ fontSize: 12, opacity: 0.85 }}>
             {status === 'saving' ? 'Saving…' : status === 'error' ? 'Not saved' : unsaved ? 'Unsaved changes (use Save all)' : 'Saved'}
           </div>
+          {saveReceipt ? (
+            <div style={{ fontSize: 11, opacity: 0.85, maxWidth: 520 }} title={saveReceipt}>
+              {saveReceipt}
+            </div>
+          ) : null}
           {saveDebug ? (
-            <div style={{ fontSize: 11, opacity: 0.75, maxWidth: 420 }} title={saveDebug}>
+            <div style={{ fontSize: 11, opacity: 0.6, maxWidth: 520 }} title={saveDebug}>
               {saveDebug}
             </div>
           ) : null}
@@ -1495,34 +1486,42 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
             A quick check-in embedded in your lesson (evidence + differentiation). Saved as a day override.
           </div>
 
-          <div style={styles.grid2}>
-            <label style={styles.field}>
-              <span style={styles.label}>Timing in lesson</span>
-              <input value={touchTiming} onChange={(e) => { setTouchTiming(e.target.value); markUnsaved(); }} style={styles.input} placeholder="e.g., 15 minutes into flow" />
-            </label>
-            <label style={styles.field}>
-              <span style={styles.label}>Cyclical loop type</span>
-              <input value={touchCycle} onChange={(e) => { setTouchCycle(e.target.value); markUnsaved(); }} style={styles.input} placeholder="design / rehearsal / refinement" />
-            </label>
-            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
-              <span style={styles.label}>Learning Standard focus (reference)</span>
-              <input value={touchStandard} onChange={(e) => { setTouchStandard(e.target.value); markUnsaved(); }} style={styles.input} placeholder="e.g., ADST > Define and Ideate" />
-            </label>
-            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
-              <span style={styles.label}>Evidence to collect</span>
-              <input value={touchEvidence} onChange={(e) => { setTouchEvidence(e.target.value); markUnsaved(); }} style={styles.input} placeholder="e.g., verbal articulation of…" />
-            </label>
-            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
-              <span style={styles.label}>Differentiation strategy (UDL / IEP)</span>
-              <input value={touchDiff} onChange={(e) => { setTouchDiff(e.target.value); markUnsaved(); }} style={styles.input} placeholder="e.g., chunking, sentence starters, extended time…" />
-            </label>
-          </div>
+          {publishMode === 'advanced' ? (
+            <>
+              <div style={styles.grid2}>
+                <label style={styles.field}>
+                  <span style={styles.label}>Timing in lesson</span>
+                  <input value={touchTiming} onChange={(e) => { setTouchTiming(e.target.value); markUnsaved(); }} style={styles.input} placeholder="e.g., 15 minutes into flow" />
+                </label>
+                <label style={styles.field}>
+                  <span style={styles.label}>Cyclical loop type</span>
+                  <input value={touchCycle} onChange={(e) => { setTouchCycle(e.target.value); markUnsaved(); }} style={styles.input} placeholder="design / rehearsal / refinement" />
+                </label>
+                <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                  <span style={styles.label}>Learning Standard focus (reference)</span>
+                  <input value={touchStandard} onChange={(e) => { setTouchStandard(e.target.value); markUnsaved(); }} style={styles.input} placeholder="e.g., ADST > Define and Ideate" />
+                </label>
+                <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                  <span style={styles.label}>Evidence to collect</span>
+                  <input value={touchEvidence} onChange={(e) => { setTouchEvidence(e.target.value); markUnsaved(); }} style={styles.input} placeholder="e.g., verbal articulation of…" />
+                </label>
+                <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                  <span style={styles.label}>Differentiation strategy (UDL / IEP)</span>
+                  <input value={touchDiff} onChange={(e) => { setTouchDiff(e.target.value); markUnsaved(); }} style={styles.input} placeholder="e.g., chunking, sentence starters, extended time…" />
+                </label>
+              </div>
 
-          {templateTouchPoint ? (
-            <div style={{ marginTop: 10, fontSize: 12, opacity: 0.8 }}>
-              Template baseline: {String((templateTouchPoint as any)?.timing_in_lesson ?? '').trim() ? 'set' : '—'}
+              {templateTouchPoint ? (
+                <div style={{ marginTop: 10, fontSize: 12, opacity: 0.8 }}>
+                  Template baseline: {String((templateTouchPoint as any)?.timing_in_lesson ?? '').trim() ? 'set' : '—'}
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <div style={{ fontSize: 12, opacity: 0.85 }}>
+              Hidden in Standard mode. Toggle <b>Advanced (Everything)</b> to view/edit.
             </div>
-          ) : null}
+          )}
         </div>
 
         <div style={{ gridColumn: '1 / -1', ...styles.touchCard }}>
@@ -1574,55 +1573,65 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         </div>
 
         <div style={{ gridColumn: '1 / -1', ...styles.touchCard }}>
-          <div style={{ ...styles.sectionHeader, marginBottom: 8 }}>Advanced Sections (editable; published only in Advanced mode)</div>
-
+          <div style={{ ...styles.sectionHeader, marginBottom: 8 }}>Materials Needed</div>
           <div style={styles.grid2}>
             <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
               <span style={styles.label}>Materials Needed (one per line) — <em>included in Standard + Advanced</em></span>
               <textarea value={advMaterialsNeeded} onChange={(e) => { setAdvMaterialsNeeded(e.target.value); markUnsaved(); }} rows={5} style={styles.textarea} disabled={isDemo} />
             </label>
-
-            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
-              <span style={styles.label}>Central Theme</span>
-              <textarea value={advCentralTheme} onChange={(e) => { setAdvCentralTheme(e.target.value); markUnsaved(); }} rows={2} style={styles.textarea} disabled={isDemo} />
-            </label>
-            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
-              <span style={styles.label}>Deep Hope</span>
-              <textarea value={advDeepHope} onChange={(e) => { setAdvDeepHope(e.target.value); markUnsaved(); }} rows={2} style={styles.textarea} disabled={isDemo} />
-            </label>
-            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
-              <span style={styles.label}>Big Idea</span>
-              <textarea value={advBigIdea} onChange={(e) => { setAdvBigIdea(e.target.value); markUnsaved(); }} rows={2} style={styles.textarea} disabled={isDemo} />
-            </label>
-            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
-              <span style={styles.label}>Learning Target</span>
-              <textarea value={advLearningTarget} onChange={(e) => { setAdvLearningTarget(e.target.value); markUnsaved(); }} rows={2} style={styles.textarea} disabled={isDemo} />
-            </label>
-            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
-              <span style={styles.label}>Collaborative Structure</span>
-              <textarea value={advCollaborativeStructure} onChange={(e) => { setAdvCollaborativeStructure(e.target.value); markUnsaved(); }} rows={2} style={styles.textarea} disabled={isDemo} />
-            </label>
-            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
-              <span style={styles.label}>Context</span>
-              <textarea value={advContext} onChange={(e) => { setAdvContext(e.target.value); markUnsaved(); }} rows={3} style={styles.textarea} disabled={isDemo} />
-            </label>
-
-            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
-              <span style={styles.label}>Assessment Touch Points (one per line)</span>
-              <textarea value={advAssessmentTouchPoints} onChange={(e) => { setAdvAssessmentTouchPoints(e.target.value); markUnsaved(); }} rows={5} style={styles.textarea} disabled={isDemo} />
-            </label>
-
-            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
-              <span style={styles.label}>PD Goal Connections (one per line)</span>
-              <textarea value={advPdGoalConnections} onChange={(e) => { setAdvPdGoalConnections(e.target.value); markUnsaved(); }} rows={5} style={styles.textarea} disabled={isDemo} />
-            </label>
-
-            <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
-              <span style={styles.label}>First Peoples Principles of Learning (one per line)</span>
-              <textarea value={advFirstPeoplesPrinciples} onChange={(e) => { setAdvFirstPeoplesPrinciples(e.target.value); markUnsaved(); }} rows={5} style={styles.textarea} disabled={isDemo} />
-            </label>
           </div>
         </div>
+
+        {publishMode === 'advanced' ? (
+          <div style={{ gridColumn: '1 / -1', ...styles.touchCard }}>
+            <div style={{ ...styles.sectionHeader, marginBottom: 8 }}>Advanced Sections</div>
+            <div style={{ fontSize: 12, opacity: 0.85, marginBottom: 10 }}>
+              These fields are only shown and published when Advanced is enabled.
+            </div>
+
+            <div style={styles.grid2}>
+              <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                <span style={styles.label}>Central Theme</span>
+                <textarea value={advCentralTheme} onChange={(e) => { setAdvCentralTheme(e.target.value); markUnsaved(); }} rows={2} style={styles.textarea} disabled={isDemo} />
+              </label>
+              <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                <span style={styles.label}>Deep Hope</span>
+                <textarea value={advDeepHope} onChange={(e) => { setAdvDeepHope(e.target.value); markUnsaved(); }} rows={2} style={styles.textarea} disabled={isDemo} />
+              </label>
+              <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                <span style={styles.label}>Big Idea</span>
+                <textarea value={advBigIdea} onChange={(e) => { setAdvBigIdea(e.target.value); markUnsaved(); }} rows={2} style={styles.textarea} disabled={isDemo} />
+              </label>
+              <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                <span style={styles.label}>Learning Target</span>
+                <textarea value={advLearningTarget} onChange={(e) => { setAdvLearningTarget(e.target.value); markUnsaved(); }} rows={2} style={styles.textarea} disabled={isDemo} />
+              </label>
+              <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                <span style={styles.label}>Collaborative Structure</span>
+                <textarea value={advCollaborativeStructure} onChange={(e) => { setAdvCollaborativeStructure(e.target.value); markUnsaved(); }} rows={2} style={styles.textarea} disabled={isDemo} />
+              </label>
+              <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                <span style={styles.label}>Context</span>
+                <textarea value={advContext} onChange={(e) => { setAdvContext(e.target.value); markUnsaved(); }} rows={3} style={styles.textarea} disabled={isDemo} />
+              </label>
+
+              <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                <span style={styles.label}>Assessment Touch Points (one per line)</span>
+                <textarea value={advAssessmentTouchPoints} onChange={(e) => { setAdvAssessmentTouchPoints(e.target.value); markUnsaved(); }} rows={5} style={styles.textarea} disabled={isDemo} />
+              </label>
+
+              <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                <span style={styles.label}>PD Goal Connections (one per line)</span>
+                <textarea value={advPdGoalConnections} onChange={(e) => { setAdvPdGoalConnections(e.target.value); markUnsaved(); }} rows={5} style={styles.textarea} disabled={isDemo} />
+              </label>
+
+              <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
+                <span style={styles.label}>First Peoples Principles of Learning (one per line)</span>
+                <textarea value={advFirstPeoplesPrinciples} onChange={(e) => { setAdvFirstPeoplesPrinciples(e.target.value); markUnsaved(); }} rows={5} style={styles.textarea} disabled={isDemo} />
+              </label>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {/* Lesson flow: template-first; first edit creates a day override */}
@@ -1754,16 +1763,16 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                 disabled={!aiFlowSuggestion}
                 onClick={() => {
                   const sug = aiFlowSuggestion ?? [];
-                  setPhases(
-                    sug.map((p: any) => ({
-                      client_id: newClientId(),
-                      time_text: String(p.time_text ?? ''),
-                      phase_text: String(p.phase_text ?? ''),
-                      activity_text: String(p.activity_text ?? ''),
-                      purpose_text: String(p.purpose_text ?? ''),
-                      source_template_phase_id: null,
-                    }))
-                  );
+                  const next = sug.map((p: any) => ({
+                    client_id: newClientId(),
+                    time_text: String(p.time_text ?? ''),
+                    phase_text: String(p.phase_text ?? ''),
+                    activity_text: String(p.activity_text ?? ''),
+                    purpose_text: String(p.purpose_text ?? ''),
+                    source_template_phase_id: null,
+                  }));
+                  setPhases(next);
+                  phasesRef.current = next;
                   setLessonOverride(true);
                   setLessonTouched(true);
                   markUnsaved();
@@ -1809,6 +1818,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                   const copy = [...prev];
                   const [moved] = copy.splice(dragPhaseIdx, 1);
                   copy.splice(idx, 0, moved);
+                  phasesRef.current = copy;
                   return copy;
                 });
                 setDragPhaseIdx(null);
@@ -1823,13 +1833,20 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                 data-phase-idx={idx}
                 data-phase-client-id={p.client_id}
                 data-phase-field="time"
-                defaultValue={String(p.time_text ?? '')}
+                value={String(p.time_text ?? '')}
                 ref={(el) => {
                   const rec = phaseFieldRefs.current[p.client_id] ?? {};
                   rec.time = el;
                   phaseFieldRefs.current[p.client_id] = rec;
                 }}
-                onChange={() => {
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setPhases((prev) => {
+                    const next = prev.map((x) => (x.client_id === p.client_id ? { ...x, time_text: v } : x));
+                    phasesRef.current = next;
+                    return next;
+                  });
+                  setLessonOverride(true);
                   setLessonTouched(true);
                   markUnsaved();
                 }}
@@ -1843,13 +1860,20 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                 data-phase-idx={idx}
                 data-phase-client-id={p.client_id}
                 data-phase-field="phase"
-                defaultValue={String(p.phase_text ?? '')}
+                value={String(p.phase_text ?? '')}
                 ref={(el) => {
                   const rec = phaseFieldRefs.current[p.client_id] ?? {};
                   rec.phase = el;
                   phaseFieldRefs.current[p.client_id] = rec;
                 }}
-                onChange={() => {
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setPhases((prev) => {
+                    const next = prev.map((x) => (x.client_id === p.client_id ? { ...x, phase_text: v } : x));
+                    phasesRef.current = next;
+                    return next;
+                  });
+                  setLessonOverride(true);
                   setLessonTouched(true);
                   markUnsaved();
                 }}
@@ -1863,13 +1887,20 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                 data-phase-idx={idx}
                 data-phase-client-id={p.client_id}
                 data-phase-field="activity"
-                defaultValue={String(p.activity_text ?? '')}
+                value={String(p.activity_text ?? '')}
                 ref={(el) => {
                   const rec = phaseFieldRefs.current[p.client_id] ?? {};
                   rec.activity = el;
                   phaseFieldRefs.current[p.client_id] = rec;
                 }}
-                onChange={() => {
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setPhases((prev) => {
+                    const next = prev.map((x) => (x.client_id === p.client_id ? { ...x, activity_text: v } : x));
+                    phasesRef.current = next;
+                    return next;
+                  });
+                  setLessonOverride(true);
                   setLessonTouched(true);
                   markUnsaved();
                 }}
@@ -1884,13 +1915,20 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                 data-phase-idx={idx}
                 data-phase-client-id={p.client_id}
                 data-phase-field="purpose"
-                defaultValue={String(p.purpose_text ?? '')}
+                value={String(p.purpose_text ?? '')}
                 ref={(el) => {
                   const rec = phaseFieldRefs.current[p.client_id] ?? {};
                   rec.purpose = el;
                   phaseFieldRefs.current[p.client_id] = rec;
                 }}
-                onChange={() => {
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setPhases((prev) => {
+                    const next = prev.map((x) => (x.client_id === p.client_id ? { ...x, purpose_text: v } : x));
+                    phasesRef.current = next;
+                    return next;
+                  });
+                  setLessonOverride(true);
                   setLessonTouched(true);
                   markUnsaved();
                 }}
@@ -1916,10 +1954,14 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
             onClick={() => {
               setLessonTouched(true);
               markUnsaved();
-              setPhases((prev) => [
+              setPhases((prev) => {
+              const next = [
                 ...prev,
                 { client_id: newClientId(), time_text: '', phase_text: '', activity_text: '', purpose_text: '', source_template_phase_id: null },
-              ]);
+              ];
+              phasesRef.current = next;
+              return next;
+            });
             }}
             style={styles.secondaryBtn}
             disabled={isDemo}
@@ -1969,16 +2011,36 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
               <div key={idx} style={styles.row3}>
                 <input
                   value={s.step_text}
-                  onChange={(e) => setOpeningSteps((prev) => prev.map((x, i) => (i === idx ? { ...x, step_text: e.target.value } : x)))}
+                  onChange={(e) => {
+                    setOpeningSteps((prev) => prev.map((x, i) => (i === idx ? { ...x, step_text: e.target.value } : x)));
+                    setOpeningTouched(true);
+                    markUnsaved();
+                  }}
                   style={styles.input}
                   disabled={isDemo}
                 />
-                <button onClick={() => setOpeningSteps((prev) => prev.filter((_, i) => i !== idx))} style={styles.dangerBtn} disabled={isDemo}>
+                <button
+                  onClick={() => {
+                    setOpeningSteps((prev) => prev.filter((_, i) => i !== idx));
+                    setOpeningTouched(true);
+                    markUnsaved();
+                  }}
+                  style={styles.dangerBtn}
+                  disabled={isDemo}
+                >
                   Remove
                 </button>
               </div>
             ))}
-            <button onClick={() => setOpeningSteps((p) => [...p, { step_text: '', source_template_step_id: null }])} style={styles.secondaryBtn} disabled={isDemo}>
+            <button
+              onClick={() => {
+                setOpeningSteps((p) => [...p, { step_text: '', source_template_step_id: null }]);
+                setOpeningTouched(true);
+                markUnsaved();
+              }}
+              style={styles.secondaryBtn}
+              disabled={isDemo}
+            >
               + Add step
             </button>
           </div>

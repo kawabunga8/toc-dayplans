@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
+import { getSupabaseClient } from '@/lib/supabaseClient';
 import { TEACHER_ROLES, buildSection1FromFields, STANDING_GUARDRAILS } from '@/lib/teacherSuperprompt/superprompt';
 
 type RoleId = 1 | 2 | 3 | 4 | 5 | 6;
@@ -31,14 +32,21 @@ export default function TeacherClient() {
   const [weekErr, setWeekErr] = useState<string | null>(null);
   const [weekPlans, setWeekPlans] = useState<any>(null);
   const [selectedBlockKey, setSelectedBlockKey] = useState<string>('');
+  const [fridayTypeOverride, setFridayTypeOverride] = useState<'day1' | 'day2' | ''>('');
+
+  const [rotationSlots, setRotationSlots] = useState<string[] | null>(null);
+  const [rotationLoading, setRotationLoading] = useState(false);
 
   const [subject, setSubject] = useState('');
-  const [grade, setGrade] = useState('');
+  const [grades, setGrades] = useState<number[]>([]);
   const [classSize, setClassSize] = useState('');
   const [unitStage, setUnitStage] = useState('');
   const [classesRows, setClassesRows] = useState<any[]>([]);
+  const [subjectTags, setSubjectTags] = useState<string[]>([]);
   const [diversity, setDiversity] = useState('');
   const [standards, setStandards] = useState('');
+  const [standardsRows, setStandardsRows] = useState<any[]>([]);
+  const [standardsLoading, setStandardsLoading] = useState(false);
   const [unitTopic, setUnitTopic] = useState('');
   const [tools, setTools] = useState('');
   const [notWorked, setNotWorked] = useState('');
@@ -56,24 +64,67 @@ export default function TeacherClient() {
   const role = useMemo(() => TEACHER_ROLES.find((r) => r.id === roleId)!, [roleId]);
 
   const blockOptions = useMemo(() => {
-    const plansByDate = (weekPlans?.plans ?? {}) as Record<string, any[]>;
     const out: Array<{ key: string; label: string; plan_date: string; slot: string; class_name: string; room: string; plan_id: string; block_id: string; class_id: string | null }> = [];
-    for (const [date, plans] of Object.entries(plansByDate)) {
-      for (const p of plans || []) {
-        for (const b of p.day_plan_blocks || []) {
-          const planId = String((p as any).id);
-          const blockId = String((b as any).id);
-          const classId = (b as any)?.class_id ? String((b as any).class_id) : null;
-          const key = `${planId}:${blockId}`;
-          const label = `${date} • Block ${p.slot} • ${b.class_name || '—'}${b.room ? ` (${b.room})` : ''}`;
-          out.push({ key, label, plan_date: date, slot: p.slot, class_name: b.class_name || '', room: b.room || '', plan_id: planId, block_id: blockId, class_id: classId });
-        }
-      }
+
+    const selectedDate = String(weekDate || '').trim();
+
+    // rotationSlots:
+    // - null => unknown (loading/error)
+    // - [] => no school
+    // - ['A','B',...] => allowed slots
+    if (!selectedDate || !/^\d{4}-\d{2}-\d{2}$/.test(selectedDate)) return out;
+    if (rotationSlots && rotationSlots.length === 0) return out;
+
+    const slots = Array.isArray(rotationSlots) ? rotationSlots : [];
+
+    for (const slotRaw of slots) {
+      const slot = String(slotRaw || '').trim().toUpperCase();
+      if (!slot) continue;
+
+      const cls = classesRows.find((c: any) => String(c?.block_label ?? '').toUpperCase() === slot) ?? null;
+      const classText = String(cls?.name ?? `Block ${slot}`).trim();
+      const roomText = String(cls?.room ?? '').trim();
+
+      const key = `${selectedDate}:${slot}`;
+      const label = `Block ${slot} • ${classText}${roomText ? ` (${roomText})` : ''}`;
+
+      out.push({
+        key,
+        label,
+        plan_date: selectedDate,
+        slot,
+        class_name: classText,
+        room: roomText,
+        plan_id: '',
+        block_id: '',
+        class_id: cls?.id ?? null,
+      });
     }
+
     return out;
-  }, [weekPlans]);
+  }, [weekDate, rotationSlots, classesRows]);
 
   const selectedBlock = useMemo(() => blockOptions.find((o) => o.key === selectedBlockKey) ?? null, [blockOptions, selectedBlockKey]);
+
+  // When the selected block changes, clear Section 1 fields so they reload from the newly-selected class/template tags.
+  useEffect(() => {
+    // Whenever the block selection changes (including clearing it), reset Section 1.
+    setSubject('');
+    setSubjectTags([]);
+    setGrades([]);
+    setClassSize('');
+    setDiversity('');
+    setStandards('');
+    setUnitTopic('');
+    setUnitStage('');
+    setTools('');
+    setNotWorked('');
+    // Also clear any previously generated output/errors.
+    setErr(null);
+    setOkMsg(null);
+    setApplyErr(null);
+    setPhases(null);
+  }, [selectedBlockKey]);
 
   useEffect(() => {
     // Fetch week
@@ -98,6 +149,67 @@ export default function TeacherClient() {
   }, [weekDate]);
 
   useEffect(() => {
+    // Fetch rotation slots for the selected date.
+    // This is the authoritative mapping of which blocks occur on that day.
+    let cancelled = false;
+    (async () => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(weekDate || '').trim())) {
+        setRotationSlots([]);
+        return;
+      }
+
+      setRotationLoading(true);
+      try {
+        const plansForDate = (weekPlans?.plans?.[weekDate] ?? []) as any[];
+        const fridayType = fridayTypeOverride || plansForDate?.[0]?.friday_type || null;
+
+        const qs = new URLSearchParams();
+        qs.set('date', weekDate);
+        if (fridayType) qs.set('friday_type', String(fridayType));
+
+        const res = await fetch(`/api/public/rotation?${qs.toString()}`);
+        const j = await res.json();
+        if (!res.ok) throw new Error(j?.error ?? 'Failed to load rotation');
+
+        const slots = Array.isArray(j?.blocks)
+          ? j.blocks
+              .map((b: any) => {
+                if (typeof b === 'string') return b.trim();
+                return String(b?.block_label ?? b?.block ?? b?.slot ?? '').trim();
+              })
+              .filter(Boolean)
+          : [];
+
+        if (!cancelled) setRotationSlots(slots);
+      } catch {
+        if (!cancelled) setRotationSlots(null);
+      } finally {
+        if (!cancelled) setRotationLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [weekDate, weekPlans, fridayTypeOverride]);
+
+  const loadStandards = async (subjects?: string[]) => {
+    setStandardsLoading(true);
+    try {
+      // If exactly one subject tag is present, ask the API to filter (less data).
+      const qs = new URLSearchParams();
+      if (subjects && subjects.length === 1) qs.set('subject', subjects[0]!);
+      const url = `/api/admin/learning-standards${qs.toString() ? `?${qs.toString()}` : ''}`;
+      const res = await fetch(url);
+      const j = await res.json();
+      if (!res.ok) return;
+      setStandardsRows(Array.isArray(j?.rows) ? j.rows : []);
+    } finally {
+      setStandardsLoading(false);
+    }
+  };
+
+  useEffect(() => {
     // Fetch classes (for grade dropdown, etc.)
     let cancelled = false;
     (async () => {
@@ -115,27 +227,120 @@ export default function TeacherClient() {
     };
   }, []);
 
+  useEffect(() => {
+    // Load standards initially
+    loadStandards(subjectTags).catch(() => null);
+
+    // Reload standards when returning to this tab (after editing Policies)
+    const onFocus = () => {
+      loadStandards(subjectTags).catch(() => null);
+    };
+    window.addEventListener('focus', onFocus);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [subjectTags]);
+
   const selectedClass = useMemo(() => {
     if (!selectedBlock?.class_id) return null;
     return classesRows.find((c: any) => String(c.id) === String(selectedBlock.class_id)) ?? null;
   }, [selectedBlock, classesRows]);
 
+  const parseTags = (text: string) => {
+    const s = String(text || '');
+    const tags = Array.from(s.matchAll(/#([A-Za-z]+|\d+)/g)).map((m) => String(m[1] ?? ''));
+    const subjects = tags
+      .filter((t) => /[A-Za-z]/.test(t))
+      .map((t) => t.toUpperCase())
+      .filter(Boolean);
+    const grades = tags
+      .filter((t) => /^\d+$/.test(t))
+      .map((t) => Number(t))
+      .filter((n) => Number.isFinite(n));
+    return { subjects: Array.from(new Set(subjects)), grades: Array.from(new Set(grades)).sort((a, b) => a - b) };
+  };
+
   useEffect(() => {
     // When a block is selected, auto-fill some context fields.
+    // Tags should come from the active TOC template (same source as /courses "#Tags" column).
     if (!selectedBlock) return;
-    if (!subject.trim()) setSubject(selectedBlock.class_name);
 
-    const g = (selectedClass as any)?.grade_level;
-    if (!grade.trim() && (typeof g === 'number' || typeof g === 'string') && String(g).trim()) {
-      setGrade(String(g));
-    }
-  }, [selectedBlock, selectedClass]);
+    let cancelled = false;
+
+    (async () => {
+      // 1) Subject/course label
+      // Keep Subject/Course aligned with the selected block by default.
+      // If the user has manually overridden Subject, we keep it.
+      // Otherwise, update it whenever the block selection changes.
+      if (!subject.trim() || subject.trim() === String(selectedBlock.class_name ?? '').trim()) {
+        setSubject(selectedBlock.class_name);
+      }
+
+      // 2) Load template default_tags (authoritative "tags")
+      let templateTags: string[] = [];
+      try {
+        if (selectedClass?.id) {
+          const supabase = getSupabaseClient();
+          const { data, error } = await supabase
+            .from('class_toc_templates')
+            .select('default_tags')
+            .eq('class_id', selectedClass.id)
+            .eq('is_active', true)
+            .order('updated_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (!error) {
+            templateTags = Array.isArray((data as any)?.default_tags)
+              ? ((data as any).default_tags as any[]).map((t) => String(t).trim()).filter(Boolean)
+              : [];
+          }
+        }
+      } catch {
+        // ignore
+      }
+
+      // 3) Compute subject tags + grade tags
+      const templateSubjects = templateTags.filter((t) => /[A-Za-z]/.test(t)).map((t) => t.toUpperCase());
+      const templateGrades = templateTags.filter((t) => /^\d+$/.test(t)).map((t) => Number(t)).filter((n) => Number.isFinite(n));
+
+      // Fallback: parse #tags from name if template has none
+      const fallback = parseTags(selectedBlock.class_name);
+      const subjTags = Array.from(new Set([...(templateSubjects.length ? templateSubjects : fallback.subjects)]));
+      const gradeTags = templateGrades.length ? templateGrades : fallback.grades;
+
+      if (!cancelled) setSubjectTags(subjTags);
+
+      // 4) Auto-fill grade only if user hasn't picked grades yet.
+      if (grades.length === 0) {
+        // Prefer DB grade_level if present.
+        const g = (selectedClass as any)?.grade_level;
+        if ((typeof g === 'number' || typeof g === 'string') && String(g).trim()) {
+          const n = Number(g);
+          if (Number.isFinite(n)) {
+            if (!cancelled) setGrades([n]);
+          }
+        } else if (gradeTags.length) {
+          if (!cancelled) setGrades(gradeTags);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedBlock, selectedClass, subject, grades.length]);
+
+  const gradeText = useMemo(() => {
+    if (!grades.length) return '';
+    if (grades.length === 1) return `Grade ${grades[0]}`;
+    return `Grades ${grades.join('/')}`;
+  }, [grades]);
 
   const section1 = useMemo(
     () =>
       buildSection1FromFields({
         subject: subject || selectedBlock?.class_name || '',
-        grade,
+        grade: gradeText,
         classSize,
         diversity,
         standards,
@@ -144,7 +349,7 @@ export default function TeacherClient() {
         tools,
         notWorked,
       }),
-    [subject, grade, classSize, diversity, standards, unitTopic, unitStage, tools, notWorked, selectedBlock]
+    [subject, gradeText, classSize, diversity, standards, unitTopic, unitStage, tools, notWorked, selectedBlock]
   );
 
   const fullPromptPreview = useMemo(() => {
@@ -168,13 +373,32 @@ export default function TeacherClient() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10, alignItems: 'end' }}>
           <label style={{ display: 'grid', gap: 6 }}>
             <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.8 }}>Week containing date</div>
-            <input type="date" value={weekDate} onChange={(e) => setWeekDate(e.target.value)} style={styles.input} />
+            <input
+              type="date"
+              value={weekDate}
+              onChange={(e) => {
+                setWeekDate(e.target.value);
+                setSelectedBlockKey('');
+              }}
+              style={styles.input}
+            />
           </label>
 
           <label style={{ display: 'grid', gap: 6 }}>
-            <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.8 }}>Block</div>
+            <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.8 }}>Friday Type (only for Fridays)</div>
+            <select value={fridayTypeOverride} onChange={(e) => { setFridayTypeOverride(e.target.value as any); setSelectedBlockKey(''); }} style={styles.input}>
+              <option value="">—</option>
+              <option value="day1">Friday Day 1</option>
+              <option value="day2">Friday Day 2</option>
+            </select>
+          </label>
+
+          <label style={{ display: 'grid', gap: 6 }}>
+            <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.8 }}>Block (for selected date)</div>
             <select value={selectedBlockKey} onChange={(e) => setSelectedBlockKey(e.target.value)} style={styles.input}>
-              <option value="">{weekLoading ? 'Loading…' : 'Select a block'}</option>
+              <option value="">
+                {weekLoading || rotationLoading ? 'Loading…' : blockOptions.length ? 'Select a block' : rotationSlots && rotationSlots.length === 0 ? 'No school' : 'No blocks'}
+              </option>
               {blockOptions.map((o) => (
                 <option key={o.key} value={o.key}>
                   {o.label}
@@ -190,6 +414,10 @@ export default function TeacherClient() {
           <div style={{ marginTop: 10, fontSize: 12, opacity: 0.9 }}>
             Using: <b>{selectedBlock.plan_date}</b> • <b>Block {selectedBlock.slot}</b> • <b>{selectedBlock.class_name}</b>
           </div>
+        ) : blockOptions.length === 0 && weekDate ? (
+          <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>
+            No school (or no schedule loaded) for <b>{weekDate}</b>.
+          </div>
         ) : (
           <div style={{ marginTop: 10, fontSize: 12, opacity: 0.7 }}>Pick a block to auto-fill context (you can still edit fields below).</div>
         )}
@@ -200,36 +428,103 @@ export default function TeacherClient() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10 }}>
           <Field label="Subject / Course" value={subject} setValue={setSubject} placeholder={selectedBlock?.class_name ? selectedBlock.class_name : 'e.g., ADST'} />
 
-          <label style={{ display: 'grid', gap: 6 }}>
+          <label style={{ display: 'grid', gap: 6, minWidth: 0 }}>
             <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.8 }}>Year/Grade</div>
-            <select
-              value={grade}
-              onChange={async (e) => {
-                const v = e.target.value;
-                setGrade(v);
-                // Persist to class record when possible.
-                if (selectedClass?.id) {
-                  const n = v ? Number(v) : null;
-                  await fetch('/api/admin/classes', {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id: selectedClass.id, grade_level: Number.isFinite(n as any) ? n : null }),
-                  }).catch(() => null);
-                }
-              }}
-              style={styles.input}
-            >
-              <option value="">—</option>
-              {Array.from({ length: 13 }).map((_, i) => (
-                <option key={i} value={i === 0 ? '' : String(i)}>
-                  {i === 0 ? '—' : `Grade ${i}`}
-                </option>
-              ))}
-            </select>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+              {[9, 10, 11, 12].map((g) => {
+                const checked = grades.includes(g);
+                return (
+                  <label key={g} style={{ display: 'inline-flex', gap: 6, alignItems: 'center', fontSize: 12, opacity: 0.95 }}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={async () => {
+                        const next = checked ? grades.filter((x) => x !== g) : [...grades, g].sort((a, b) => a - b);
+                        setGrades(next);
+
+                        // Persist to class record only if exactly one grade is selected.
+                        if (selectedClass?.id) {
+                          const patchGrade = next.length === 1 ? next[0] : null;
+                          await fetch('/api/admin/classes', {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ id: selectedClass.id, grade_level: patchGrade }),
+                          }).catch(() => null);
+                        }
+                      }}
+                    />
+                    <span>{g}</span>
+                  </label>
+                );
+              })}
+              {grades.length ? <span style={{ fontSize: 12, opacity: 0.7 }}>Selected: {grades.join('/')}</span> : <span style={{ fontSize: 12, opacity: 0.7 }}>—</span>}
+            </div>
           </label>
           <Field label="Class size" value={classSize} setValue={setClassSize} placeholder="e.g., 28" />
           <Field label="Learner diversity" value={diversity} setValue={setDiversity} placeholder="e.g., EAL, IEP, mixed prior knowledge" />
-          <Field label="Standards" value={standards} setValue={setStandards} placeholder="e.g., ADST — Define / Ideate" />
+          <label style={{ display: 'grid', gap: 6, minWidth: 0 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.8 }}>Standards</div>
+              <button
+                type="button"
+                onClick={() => window.location.href = '/admin/policies?return=/admin/teacher'}
+                style={{
+                  padding: '6px 10px',
+                  borderRadius: 10,
+                  border: `1px solid ${RCS.deepNavy}`,
+                  background: 'transparent',
+                  color: RCS.deepNavy,
+                  fontWeight: 900,
+                  cursor: 'pointer',
+                  fontSize: 12,
+                }}
+              >
+                Policies…
+              </button>
+            </div>
+            <select value={standards} onChange={(e) => setStandards(e.target.value)} style={styles.input}>
+              <option value="">{standardsLoading ? 'Loading…' : '—'}</option>
+              {(() => {
+                let rows = [...(standardsRows ?? [])];
+
+                // Filter by detected subject tag(s) if present.
+                if (subjectTags.length) {
+                  const allow = new Set(subjectTags.map((s) => s.toUpperCase()));
+                  rows = rows.filter((r: any) => allow.has(String(r?.subject ?? '').toUpperCase()));
+                }
+
+                rows.sort((a: any, b: any) => {
+                  const as = String(a?.subject ?? '');
+                  const bs = String(b?.subject ?? '');
+                  if (as !== bs) return as.localeCompare(bs);
+                  const at = String(a?.standard_title ?? '');
+                  const bt = String(b?.standard_title ?? '');
+                  return at.localeCompare(bt);
+                });
+
+                const bySubject = new Map<string, any[]>();
+                for (const r of rows) {
+                  const s = String(r?.subject ?? 'Other') || 'Other';
+                  const arr = bySubject.get(s) ?? [];
+                  arr.push(r);
+                  bySubject.set(s, arr);
+                }
+
+                return Array.from(bySubject.entries()).map(([subject, items]) => (
+                  <optgroup key={subject} label={subject}>
+                    {items.map((s: any) => {
+                      const label = `${s.subject || ''}${s.standard_key ? ` ${s.standard_key}` : ''} — ${s.standard_title || ''}`.trim();
+                      return (
+                        <option key={s.id} value={label}>
+                          {label}
+                        </option>
+                      );
+                    })}
+                  </optgroup>
+                ));
+              })()}
+            </select>
+          </label>
           <Field label="Unit topic" value={unitTopic} setValue={setUnitTopic} placeholder="e.g., Design thinking" />
           <label style={{ display: 'grid', gap: 6 }}>
             <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.8 }}>Unit stage</div>
@@ -312,7 +607,7 @@ export default function TeacherClient() {
                     section: 'teacher_lesson_flow_phases',
                     input: {
                       role_id: roleId,
-                      section1_fields: { subject: subject || selectedBlock?.class_name || '', grade, class_size: classSize, diversity, standards, unit_topic: unitTopic, unit_stage: unitStage, tools, not_worked: notWorked },
+                      section1_fields: { subject: subject || selectedBlock?.class_name || '', grade: gradeText, class_size: classSize, diversity, standards, unit_topic: unitTopic, unit_stage: unitStage, tools, not_worked: notWorked },
                       task,
                       constraints,
                       plan_date: selectedBlock?.plan_date ?? null,
@@ -378,10 +673,15 @@ export default function TeacherClient() {
                 setApplyErr(null);
                 setOkMsg(null);
                 try {
-                  const res = await fetch(`/api/admin/dayplans/blocks/${encodeURIComponent(selectedBlock.block_id)}/lesson-flow/append`, {
+                  const res = await fetch(`/api/admin/dayplans/by-date-slot/lesson-flow/append`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ phases }),
+                    body: JSON.stringify({
+                      plan_date: selectedBlock.plan_date,
+                      slot: selectedBlock.slot,
+                      friday_type: fridayTypeOverride || (weekPlans?.plans?.[selectedBlock.plan_date]?.[0]?.friday_type ?? null),
+                      phases,
+                    }),
                   });
 
                   let j: any = null;
@@ -397,26 +697,8 @@ export default function TeacherClient() {
                     throw new Error(String(msg));
                   }
 
-                  // Republish the day plan so /toc and /p reflect the changes.
-                  const pubRes = await fetch(`/api/admin/dayplans/${encodeURIComponent(selectedBlock.plan_id)}/publish`, {
-                    method: 'POST',
-                  });
-                  let pubJ: any = null;
-                  try {
-                    pubJ = await pubRes.json();
-                  } catch {
-                    // ignore
-                  }
-                  if (!pubRes.ok) {
-                    throw new Error(pubJ?.error ?? `Republish failed (${pubRes.status})`);
-                  }
-
-                  setOkMsg(
-                    `Applied + republished: appended ${j?.appended ?? '?'} phase(s) to ${selectedBlock.plan_date} block ${selectedBlock.slot} (${selectedBlock.class_name}). Redirecting…`
-                  );
-
-                  // Jump to the dayplan detail page.
-                  window.location.href = `/admin/dayplans/${encodeURIComponent(selectedBlock.plan_id)}`;
+                  setOkMsg(`Applied: appended ${j?.appended ?? '?'} phase(s) to ${selectedBlock.plan_date} block ${selectedBlock.slot}. Redirecting…`);
+                  window.location.href = `/admin/dayplans/${encodeURIComponent(String(j?.plan_id ?? ''))}`;
                 } catch (e: any) {
                   setApplyErr(e?.message ?? 'Apply failed');
                 } finally {
@@ -425,7 +707,7 @@ export default function TeacherClient() {
               }}
               style={styles.primaryBtn}
             >
-              {applyLoading ? 'Applying…' : 'Apply to selected dayplan (append)'}
+              {applyLoading ? 'Applying…' : 'Apply (append + create plan if missing)'}
             </button>
           ) : null}
         </div>
@@ -455,7 +737,7 @@ export default function TeacherClient() {
 
 function Field(props: { label: string; value: string; setValue: (v: string) => void; placeholder?: string }) {
   return (
-    <label style={{ display: 'grid', gap: 6 }}>
+    <label style={{ display: 'grid', gap: 6, minWidth: 0 }}>
       <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.8 }}>{props.label}</div>
       <input value={props.value} onChange={(e) => props.setValue(e.target.value)} style={styles.input} placeholder={props.placeholder} />
     </label>
@@ -463,8 +745,8 @@ function Field(props: { label: string; value: string; setValue: (v: string) => v
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  input: { padding: '10px 12px', borderRadius: 10, border: '1px solid rgba(0,0,0,0.2)', fontSize: 14 },
-  textarea: { padding: '10px 12px', borderRadius: 10, border: '1px solid rgba(0,0,0,0.2)', fontSize: 14, fontFamily: 'inherit' },
+  input: { width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10, border: '1px solid rgba(0,0,0,0.2)', fontSize: 14, minWidth: 0 },
+  textarea: { width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10, border: '1px solid rgba(0,0,0,0.2)', fontSize: 14, fontFamily: 'inherit', minWidth: 0 },
   primaryBtn: {
     padding: '10px 12px',
     borderRadius: 10,

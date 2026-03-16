@@ -51,17 +51,73 @@ export async function anthropicMessages(args: {
 }
 
 export function extractJsonObject(text: string): any {
-  // Prefer exact JSON
+  const raw = String(text ?? '').trim();
+  if (!raw) throw new Error('Failed to parse JSON from model output');
+
+  // 1) Prefer exact JSON
   try {
-    return JSON.parse(text);
+    return JSON.parse(raw);
   } catch {
-    // try to find first {...} block
-    const start = text.indexOf('{');
-    const end = text.lastIndexOf('}');
+    // continue
+  }
+
+  // 2) If wrapped in ```json ... ``` fences
+  {
+    const m = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+    if (m?.[1]) {
+      const inner = m[1].trim();
+      try {
+        return JSON.parse(inner);
+      } catch {
+        // continue
+      }
+    }
+  }
+
+  // 3) Find the first balanced JSON object {...}
+  {
+    const start = raw.indexOf('{');
+    if (start >= 0) {
+      let depth = 0;
+      let inStr = false;
+      let esc = false;
+      for (let i = start; i < raw.length; i++) {
+        const ch = raw[i];
+        if (inStr) {
+          if (esc) {
+            esc = false;
+          } else if (ch === '\\') {
+            esc = true;
+          } else if (ch === '"') {
+            inStr = false;
+          }
+          continue;
+        }
+        if (ch === '"') {
+          inStr = true;
+          continue;
+        }
+        if (ch === '{') depth++;
+        if (ch === '}') {
+          depth--;
+          if (depth === 0) {
+            const slice = raw.slice(start, i + 1);
+            return JSON.parse(slice);
+          }
+        }
+      }
+    }
+  }
+
+  // 4) Last resort: old heuristic first '{'..last '}'
+  {
+    const start = raw.indexOf('{');
+    const end = raw.lastIndexOf('}');
     if (start >= 0 && end > start) {
-      const slice = text.slice(start, end + 1);
+      const slice = raw.slice(start, end + 1);
       return JSON.parse(slice);
     }
-    throw new Error('Failed to parse JSON from model output');
   }
+
+  throw new Error('Failed to parse JSON from model output');
 }

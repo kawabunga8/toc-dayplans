@@ -109,7 +109,12 @@ export async function POST(req: Request) {
 
     const { text } = await provider.generate(prompt);
 
-    const parsed = extractJsonObject(text);
+    let parsed: any;
+    try {
+      parsed = extractJsonObject(text);
+    } catch (e: any) {
+      return NextResponse.json({ error: e?.message ?? 'Failed to parse JSON from model output', raw: String(text).slice(0, 1200) }, { status: 400 });
+    }
     const note = String(parsed?.note_to_toc ?? '').trim();
     if (!note) {
       return NextResponse.json({ error: 'Model returned empty note_to_toc' }, { status: 400 });
@@ -130,7 +135,12 @@ export async function POST(req: Request) {
 
     const { text } = await provider.generate(prompt);
 
-    const parsed = extractJsonObject(text);
+    let parsed: any;
+    try {
+      parsed = extractJsonObject(text);
+    } catch (e: any) {
+      return NextResponse.json({ error: e?.message ?? 'Failed to parse JSON from model output', raw: String(text).slice(0, 1200) }, { status: 400 });
+    }
     const phases = Array.isArray(parsed?.lesson_flow_phases) ? parsed.lesson_flow_phases : null;
     if (!phases) return NextResponse.json({ error: 'Model returned missing lesson_flow_phases' }, { status: 400 });
 
@@ -176,11 +186,16 @@ export async function POST(req: Request) {
 
     const dayplanContext = planDate || slot || className ? `Dayplan context:\n- Date: ${planDate || '—'}\n- Block: ${slot || '—'}\n- Class: ${className || '—'}\n\n` : '';
 
-    const prompt = `${section1}\n\n---\n\n${role.prompt}\n\n---\n\n${STANDING_GUARDRAILS}\n\n---\n\n${dayplanContext}Now do this task:\n${task}\n\n${constraints ? `Constraints:\n${constraints}\n\n` : ''}Output MUST be valid JSON only.\nReturn this exact shape:\n{"lesson_flow_phases": [{"time_text":"","phase_text":"","activity_text":"","purpose_text":""}]}`;
+    const prompt = `${section1}\n\n---\n\n${role.prompt}\n\n---\n\nIMPORTANT OVERRIDE FOR THIS TOOL:\n- Do NOT ask clarifying questions.\n- Do NOT output anything except valid JSON.\n- The user has provided sufficient context; make reasonable assumptions and proceed.\n- Your job is to generate a lesson flow (phases) now.\n\n---\n\n${STANDING_GUARDRAILS}\n\n---\n\n${dayplanContext}Now do this task:\n${task}\n\n${constraints ? `Constraints:\n${constraints}\n\n` : ''}Output MUST be valid JSON only.\nReturn this exact shape:\n{"lesson_flow_phases": [{"time_text":"","phase_text":"","activity_text":"","purpose_text":""}]}`;
 
     const { text } = await provider.generate(prompt);
 
-    const parsed = extractJsonObject(text);
+    let parsed: any;
+    try {
+      parsed = extractJsonObject(text);
+    } catch (e: any) {
+      return NextResponse.json({ error: e?.message ?? 'Failed to parse JSON from model output', raw: String(text).slice(0, 1200) }, { status: 400 });
+    }
     const phases = Array.isArray(parsed?.lesson_flow_phases) ? parsed.lesson_flow_phases : null;
     if (!phases) return NextResponse.json({ error: 'Model returned missing lesson_flow_phases' }, { status: 400 });
 

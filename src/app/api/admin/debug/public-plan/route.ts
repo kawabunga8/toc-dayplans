@@ -45,10 +45,29 @@ export async function GET(req: Request) {
 
     const { data: blocks, error: blocksErr } = await supabase
       .from('day_plan_blocks')
-      .select('id,day_plan_id,class_name,class_id,room,start_time,end_time')
+      .select('id,day_plan_id,class_name,class_id,room,start_time,end_time,classes(block_label)')
       .eq('day_plan_id', id)
       .order('start_time', { ascending: true });
     if (blocksErr) throw blocksErr;
+
+    // Pick the primary block for this plan using the plan's slot.
+    const norm = (s: string) => String(s || '').trim().toUpperCase();
+    const parseBlockLabel = (className: string) => {
+      const s = String(className || '');
+      const m1 = s.match(/\(Block\s+([^\)]+)\)/i);
+      if (m1?.[1]) return m1[1];
+      const m2 = s.match(/Block\s+([A-Za-z0-9]+)/i);
+      if (m2?.[1]) return m2[1];
+      return '';
+    };
+
+    const slotLabel = norm((planRow as any).slot);
+    const primaryBlock = (blocks ?? []).find((b: any) => {
+      const bl = norm((b as any)?.classes?.block_label || parseBlockLabel((b as any).class_name));
+      return bl && slotLabel && bl === slotLabel;
+    }) ?? (blocks ?? [])[0] ?? null;
+
+    const primaryBlockId = primaryBlock?.id ? String(primaryBlock.id) : null;
 
     const blockIds = (blocks ?? []).map((b: any) => b.id);
 
@@ -57,6 +76,8 @@ export async function GET(req: Request) {
       .select('id,day_plan_block_id,template_id,plan_mode,updated_at,override_payload')
       .in('day_plan_block_id', blockIds.length ? blockIds : ['00000000-0000-0000-0000-000000000000']);
     if (tbpErr) throw tbpErr;
+
+    const tbp0 = primaryBlockId ? (tbps ?? []).find((t: any) => String(t.day_plan_block_id) === primaryBlockId) ?? null : null;
 
     const tbpIdByBlockId = new Map<string, string>();
     for (const r of tbps ?? []) tbpIdByBlockId.set(String((r as any).day_plan_block_id), String((r as any).id));
@@ -78,7 +99,8 @@ export async function GET(req: Request) {
       }
     }
 
-    const { data: publicPlan, error: pubErr } = await supabase.rpc('get_public_day_plan_by_id', { plan_id: id });
+    // /p reads from get_public_day_plan_live (computed from dayplan + templates + overrides)
+    const { data: publicPlan, error: pubErr } = await supabase.rpc('get_public_day_plan_live', { plan_id: id });
     if (pubErr) throw pubErr;
 
     const debug_build = {
@@ -91,7 +113,6 @@ export async function GET(req: Request) {
     const only = (searchParams.get('only') ?? '').trim();
 
     if (only === 'lesson_flow') {
-      const tbp0 = (tbps ?? [])[0] ?? null;
       return NextResponse.json({
         ok: true,
         debug_build,

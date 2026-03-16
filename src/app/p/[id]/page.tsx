@@ -5,6 +5,15 @@ import PublicPlanClient from '../PublicPlanClient';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
+function extractBlockLabel(className: string): string | null {
+  const s = String(className ?? '');
+  const m1 = s.match(/\(Block\s+([^\)]+)\)/i);
+  if (m1?.[1]) return m1[1].trim();
+  const m2 = s.match(/\bBlock\s+([A-Za-z0-9]+)\b/i);
+  if (m2?.[1]) return m2[1].trim();
+  return null;
+}
+
 export default async function PublicPlanPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
@@ -18,7 +27,10 @@ export default async function PublicPlanPage({ params }: { params: Promise<{ id:
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  const { data, error } = await supabase.rpc('get_public_day_plan_from_toc', { plan_id: id });
+  // Live-only: /p reads computed payload directly from dayplan + templates + overrides.
+  const { data, error } = await supabase.rpc('get_public_day_plan_live', { plan_id: id });
+  const payloadSource: 'live' | 'none' = data ? 'live' : 'none';
+
   const { data: layoutData } = await supabase.rpc('get_public_page_layout', { layout_id: 'public_plan' });
 
   if (error || !data) {
