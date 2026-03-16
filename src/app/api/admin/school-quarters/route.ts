@@ -18,10 +18,7 @@ async function getSupabase() {
 
 export async function GET() {
   const supabase = await getSupabase();
-  const { data, error } = await supabase
-    .from('school_quarters')
-    .select('*')
-    .order('id', { ascending: true });
+  const { data, error } = await supabase.rpc('get_school_quarters');
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data);
 }
@@ -36,13 +33,8 @@ export async function PATCH(req: Request) {
 
   const quarters: Array<{ id: number; label: string; start_date: string; end_date: string }> = await req.json();
 
-  for (const q of quarters) {
-    const { error } = await supabase
-      .from('school_quarters')
-      .update({ label: q.label, start_date: q.start_date, end_date: q.end_date })
-      .eq('id', q.id);
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  }
+  const { error } = await supabase.rpc('upsert_school_quarters', { quarters_json: quarters });
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json({ ok: true });
 }
