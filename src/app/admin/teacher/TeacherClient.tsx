@@ -63,6 +63,51 @@ export default function TeacherClient() {
 
   const role = useMemo(() => TEACHER_ROLES.find((r) => r.id === roleId)!, [roleId]);
 
+  const handleGenerate = async () => {
+    setLoading(true);
+    setErr(null);
+    setOkMsg(null);
+    setApplyErr(null);
+    setPhases(null);
+    try {
+      const res = await fetch('/api/ai/suggest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          section: 'teacher_lesson_flow_phases',
+          input: {
+            role_id: roleId,
+            section1_fields: { subject: subject || selectedBlock?.class_name || '', grade: gradeText, class_size: classSize, diversity, standards, unit_topic: unitTopic, unit_stage: unitStage, tools, not_worked: notWorked },
+            task,
+            constraints,
+            plan_date: selectedBlock?.plan_date ?? null,
+            slot: selectedBlock?.slot ?? null,
+            class_name: selectedBlock?.class_name ?? null,
+          },
+        }),
+      });
+
+      let j: any = null;
+      let rawText: string | null = null;
+      try {
+        j = await res.json();
+      } catch {
+        rawText = await res.text().catch(() => null);
+      }
+
+      if (!res.ok) {
+        const msg = j?.error || rawText || `AI suggest failed (${res.status})`;
+        throw new Error(String(msg));
+      }
+
+      setPhases(j?.suggestion?.lesson_flow_phases ?? null);
+    } catch (e: any) {
+      setErr(e?.message ?? 'AI suggest failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const blockOptions = useMemo(() => {
     const out: Array<{ key: string; label: string; plan_date: string; slot: string; class_name: string; room: string; plan_id: string; block_id: string; class_id: string | null }> = [];
 
@@ -593,50 +638,7 @@ export default function TeacherClient() {
           <button
             type="button"
             disabled={loading}
-            onClick={async () => {
-              setLoading(true);
-              setErr(null);
-              setOkMsg(null);
-              setApplyErr(null);
-              setPhases(null);
-              try {
-                const res = await fetch('/api/ai/suggest', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    section: 'teacher_lesson_flow_phases',
-                    input: {
-                      role_id: roleId,
-                      section1_fields: { subject: subject || selectedBlock?.class_name || '', grade: gradeText, class_size: classSize, diversity, standards, unit_topic: unitTopic, unit_stage: unitStage, tools, not_worked: notWorked },
-                      task,
-                      constraints,
-                      plan_date: selectedBlock?.plan_date ?? null,
-                      slot: selectedBlock?.slot ?? null,
-                      class_name: selectedBlock?.class_name ?? null,
-                    },
-                  }),
-                });
-
-                let j: any = null;
-                let rawText: string | null = null;
-                try {
-                  j = await res.json();
-                } catch {
-                  rawText = await res.text().catch(() => null);
-                }
-
-                if (!res.ok) {
-                  const msg = j?.error || rawText || `AI suggest failed (${res.status})`;
-                  throw new Error(String(msg));
-                }
-
-                setPhases(j?.suggestion?.lesson_flow_phases ?? null);
-              } catch (e: any) {
-                setErr(e?.message ?? 'AI suggest failed');
-              } finally {
-                setLoading(false);
-              }
-            }}
+            onClick={handleGenerate}
             style={styles.primaryBtn}
           >
             {loading ? 'Generating…' : 'Generate'}
@@ -712,7 +714,14 @@ export default function TeacherClient() {
           ) : null}
         </div>
 
-        {err ? <div style={{ marginTop: 10, color: '#B00020', fontWeight: 800 }}>{err}</div> : null}
+        {err ? (
+          <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <span style={{ color: '#B00020', fontWeight: 800 }}>{err}</span>
+            <button type="button" onClick={handleGenerate} disabled={loading} style={styles.secondaryBtn}>
+              Retry
+            </button>
+          </div>
+        ) : null}
         {applyErr ? <div style={{ marginTop: 10, color: '#B00020', fontWeight: 800 }}>{applyErr}</div> : null}
         {okMsg ? <div style={{ marginTop: 10, color: '#2D6A4F', fontWeight: 900 }}>{okMsg}</div> : null}
 
