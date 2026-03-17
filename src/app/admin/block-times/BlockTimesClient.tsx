@@ -194,7 +194,7 @@ export default function BlockTimesClient() {
   }
 
   useEffect(() => {
-    if (template === 'rotation') return;
+    if (template === 'rotation' || template === 'quarters') return;
     void loadCurrent();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [template]);

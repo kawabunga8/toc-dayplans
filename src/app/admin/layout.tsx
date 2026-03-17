@@ -51,8 +51,6 @@ export default function AdminLayout({ children }: PropsWithChildren) {
       if (!cancelled) setState({ status: 'authed', role, email });
     }
 
-    void check();
-
     const supabase = getSupabaseClient();
     const { data: sub } = supabase.auth.onAuthStateChange(() => {
       void check();
@@ -208,7 +206,7 @@ export default function AdminLayout({ children }: PropsWithChildren) {
           </div>
         </header>
 
-        <main style={isDemo ? { filter: 'grayscale(0.35)', opacity: 0.92 } : undefined}>{children}</main>
+        <div style={isDemo ? { filter: 'grayscale(0.35)', opacity: 0.92 } : undefined}>{children}</div>
       </div>
     </DemoProvider>
   );
