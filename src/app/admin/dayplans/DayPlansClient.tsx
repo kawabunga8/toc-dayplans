@@ -153,7 +153,7 @@ export default function DayPlansClient() {
       if (!bl) continue;
       // Filter by quarter: if active_quarters is set and we know the current quarter,
       // only include the course if it runs in that quarter.
-      if (c.active_quarters !== null && currentQuarterId !== null) {
+      if (c.active_quarters != null && currentQuarterId !== null) {
         if (!c.active_quarters.includes(currentQuarterId)) continue;
       }
       m.set(bl.toUpperCase(), c);
