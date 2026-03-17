@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { PropsWithChildren, useEffect, useState } from 'react';
+import { PropsWithChildren, startTransition, useEffect, useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { DemoProvider } from './DemoContext';
 
@@ -20,15 +20,15 @@ export default function AdminLayout({ children }: PropsWithChildren) {
   useEffect(() => {
     let cancelled = false;
 
-    async function check() {
-      const supabase = getSupabaseClient();
-      const { data } = await supabase.auth.getSession();
-
-      if (!data.session) {
+    // Use the session provided by the event (avoids a redundant getSession() call
+    // and eliminates the race where rpc('is_staff') fires before the JWT is set).
+    async function check(session: any) {
+      if (!session) {
         if (!cancelled) setState({ status: 'not-logged-in' });
         return;
       }
 
+      const supabase = getSupabaseClient();
       // We created `is_staff()` in schema.sql — use it for a clean allow/deny check.
       const { data: isStaff, error } = await supabase.rpc('is_staff');
 
@@ -43,17 +43,15 @@ export default function AdminLayout({ children }: PropsWithChildren) {
         return;
       }
 
-      // role is optional (and the RPC may not exist); skip to avoid noisy 404s in console.
       const role: string | null = null;
-
-      const email = (data.session.user?.email as string | undefined) ?? null;
+      const email = (session.user?.email as string | undefined) ?? null;
 
       if (!cancelled) setState({ status: 'authed', role, email });
     }
 
     const supabase = getSupabaseClient();
-    const { data: sub } = supabase.auth.onAuthStateChange(() => {
-      void check();
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      startTransition(() => { void check(session); });
     });
 
     return () => {
