@@ -174,11 +174,10 @@ export default function ProDevGoalsClient() {
   return (
     <main style={styles.page}>
       <h1 style={styles.h1}>Professional Development Goals</h1>
-      <p style={styles.muted}>View and edit your PD goals. Click a goal to edit it inline.</p>
+      <p style={styles.muted}>View and edit your PD goals inline.</p>
 
       <div style={{ marginTop: -8, marginBottom: 14, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         <a href="/admin/policies" style={styles.secondaryBtn}>← Back to Policies</a>
-        <a href="/admin/policies/pro-dev-goals/import" style={styles.secondaryBtn}>Import CSV (replace)…</a>
       </div>
 
       {status === 'error' && error ? <div style={styles.errorBox}>{error}</div> : null}
