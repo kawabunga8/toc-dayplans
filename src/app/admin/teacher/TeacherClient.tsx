@@ -706,6 +706,7 @@ export default function TeacherClient() {
                       plan_date: selectedBlock.plan_date,
                       slot: selectedBlock.slot,
                       friday_type: fridayTypeOverride || (weekPlans?.plans?.[selectedBlock.plan_date]?.[0]?.friday_type ?? null),
+                      class_id: selectedBlock.class_id ?? null,
                       phases,
                     }),
                   });

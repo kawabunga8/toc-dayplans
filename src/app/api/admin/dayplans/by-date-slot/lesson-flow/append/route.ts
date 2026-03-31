@@ -9,6 +9,7 @@ type ReqBody = {
   plan_date: string; // YYYY-MM-DD
   slot: string; // e.g., A/B/C...
   friday_type?: 'day1' | 'day2' | null;
+  class_id?: string | null;
   phases: Array<{ time_text: string; phase_text: string; activity_text: string; purpose_text?: string | null }>;
 };
 
@@ -45,6 +46,7 @@ export async function POST(req: Request) {
   const plan_date = String(body?.plan_date ?? '').trim();
   const slot = String(body?.slot ?? '').trim();
   let friday_type = (body?.friday_type ?? null) as 'day1' | 'day2' | null;
+  const class_id_hint = body?.class_id ? String(body.class_id).trim() : null;
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(plan_date)) return NextResponse.json({ error: 'Invalid plan_date (YYYY-MM-DD)' }, { status: 400 });
   if (!slot) return NextResponse.json({ error: 'Missing slot' }, { status: 400 });
@@ -133,13 +135,13 @@ export async function POST(req: Request) {
   }
 
   // 2) Ensure primary day_plan_block exists for this plan+slot, based on classes + block times
-  const { data: cls, error: clsErr } = await adminDb
-    .from('classes')
-    .select('id,name,room,block_label')
-    .eq('block_label', slot)
-    .maybeSingle();
+  const clsQuery = class_id_hint
+    ? adminDb.from('classes').select('id,name,room,block_label').eq('id', class_id_hint).limit(1)
+    : adminDb.from('classes').select('id,name,room,block_label').eq('block_label', slot).limit(1);
+  const { data: clsRows, error: clsErr } = await clsQuery;
   if (clsErr) return NextResponse.json({ error: clsErr.message }, { status: 400 });
-  if (!cls?.id) return NextResponse.json({ error: `No class found for block_label=${slot} (Courses/Rooms)` }, { status: 400 });
+  const cls = (clsRows as any[])?.[0] ?? null;
+  if (!cls?.id) return NextResponse.json({ error: `No class found for ${class_id_hint ? `id=${class_id_hint}` : `block_label=${slot}`} (Courses/Rooms)` }, { status: 400 });
 
   // Find existing block row
   const { data: blocks, error: blkErr } = await adminDb
