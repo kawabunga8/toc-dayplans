@@ -1,6 +1,8 @@
 import Link from 'next/link';
+import { classListsFlag } from '@/flags';
 
-export default function AdminHome() {
+export default async function AdminHome() {
+  const classListsEnabled = await classListsFlag();
   return (
     <main style={styles.page}>
       <h1 style={styles.h1}>Admin</h1>
@@ -49,10 +51,12 @@ export default function AdminHome() {
             <div style={styles.tileText}>Global layout template for /p (section order + titles).</div>
           </Link>
 
-          <Link href="/admin/class-lists" style={styles.tile}>
-            <div style={styles.tileTitle}>Class lists</div>
-            <div style={styles.tileText}>Rosters and student photos (coming).</div>
-          </Link>
+          {classListsEnabled && (
+            <Link href="/admin/class-lists" style={styles.tile}>
+              <div style={styles.tileTitle}>Class lists</div>
+              <div style={styles.tileText}>Rosters and student photos.</div>
+            </Link>
+          )}
         </div>
       </section>
 
