@@ -75,6 +75,14 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
   const [blocks, setBlocks] = useState<PlanBlockRow[]>([]);
   const [classes, setClasses] = useState<ClassRow[]>([]);
 
+  // Copy-to dialog
+  const [copyOpen, setCopyOpen] = useState(false);
+  const [copyDate, setCopyDate] = useState('');
+  const [copySlot, setCopySlot] = useState('');
+  const [copyFridayType, setCopyFridayType] = useState<'day1' | 'day2' | ''>('');
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'copying' | 'done' | 'error'>('idle');
+  const [copyError, setCopyError] = useState<string | null>(null);
+
   // Autosave disabled (use Save all)
 
   const publicUrl = useMemo(() => {
@@ -835,6 +843,47 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
     }
   }
 
+  async function copyPlan() {
+    if (!copyDate || !copySlot) {
+      setCopyError('Please enter a target date and slot.');
+      return;
+    }
+    const targetDate = copyDate.trim();
+    const targetSlot = copySlot.trim().toUpperCase();
+    const [y, m, d] = targetDate.split('-').map(Number);
+    const isFri = new Date(y, m - 1, d).getDay() === 5;
+    if (isFri && !copyFridayType) {
+      setCopyError('Friday Type is required for the target date.');
+      return;
+    }
+
+    setCopyStatus('copying');
+    setCopyError(null);
+
+    try {
+      const res = await fetch(`/api/admin/dayplans/${id}/copy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          target_date: targetDate,
+          target_slot: targetSlot,
+          target_friday_type: isFri ? (copyFridayType || null) : null,
+        }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j?.error ?? 'Copy failed');
+      setCopyStatus('done');
+      // Navigate to the target plan
+      const targetId = String(j.target_plan_id);
+      const params = new URLSearchParams({ date: targetDate });
+      if (isFri && copyFridayType) params.set('friday_type', copyFridayType);
+      router.push(`/admin/dayplans/${targetId}?${params.toString()}`);
+    } catch (e: any) {
+      setCopyStatus('error');
+      setCopyError(e?.message ?? 'Copy failed');
+    }
+  }
+
   async function revoke() {
     setStatus('revoking');
     setError(null);
@@ -1325,7 +1374,81 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                   Trash
                 </button>
               )}
+              <button
+                type="button"
+                onClick={() => {
+                  setCopyOpen((v) => !v);
+                  setCopyStatus('idle');
+                  setCopyError(null);
+                  if (!copySlot && plan?.slot) setCopySlot(plan.slot);
+                }}
+                style={styles.secondaryBtn}
+              >
+                Copy to…
+              </button>
             </div>
+
+            {copyOpen && (
+              <div style={{ marginTop: 16, padding: 16, background: RCS.lightGray, borderRadius: 8, display: 'grid', gap: 12 }}>
+                <div style={{ fontWeight: 700, color: RCS.deepNavy }}>Copy plan content to another day</div>
+                <div style={{ fontSize: 12, opacity: 0.8 }}>
+                  Copies the lesson flow and plan overrides to the target day/block. Room, class name, and times will come from the target slot&apos;s schedule. You will be taken to the target plan to review and publish.
+                </div>
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                  <label style={{ display: 'grid', gap: 4 }}>
+                    <span style={styles.label}>Target date</span>
+                    <input
+                      type="date"
+                      value={copyDate}
+                      onChange={(e) => { setCopyDate(e.target.value); setCopyStatus('idle'); setCopyError(null); }}
+                      style={styles.input}
+                    />
+                  </label>
+                  <label style={{ display: 'grid', gap: 4 }}>
+                    <span style={styles.label}>Target slot (block letter)</span>
+                    <input
+                      type="text"
+                      value={copySlot}
+                      onChange={(e) => { setCopySlot(e.target.value.toUpperCase()); setCopyStatus('idle'); setCopyError(null); }}
+                      placeholder="e.g. A, B, C…"
+                      style={{ ...styles.input, width: 80 }}
+                    />
+                  </label>
+                  {copyDate && (() => { const [y, m, d] = copyDate.split('-').map(Number); return new Date(y, m - 1, d).getDay() === 5; })() && (
+                    <label style={{ display: 'grid', gap: 4 }}>
+                      <span style={styles.label}>Friday type</span>
+                      <select
+                        value={copyFridayType}
+                        onChange={(e) => setCopyFridayType(e.target.value as 'day1' | 'day2' | '')}
+                        style={styles.input}
+                      >
+                        <option value="">Select…</option>
+                        <option value="day1">Day 1</option>
+                        <option value="day2">Day 2</option>
+                      </select>
+                    </label>
+                  )}
+                </div>
+                {copyError && <div style={styles.errorBox}>{copyError}</div>}
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button
+                    type="button"
+                    onClick={copyPlan}
+                    disabled={copyStatus === 'copying'}
+                    style={styles.primaryBtn}
+                  >
+                    {copyStatus === 'copying' ? 'Copying…' : 'Copy'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setCopyOpen(false); setCopyStatus('idle'); setCopyError(null); }}
+                    style={styles.secondaryBtn}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </section>
         </>
       )}
