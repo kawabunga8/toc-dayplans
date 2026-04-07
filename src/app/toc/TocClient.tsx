@@ -639,6 +639,15 @@ export default function TocClient({
                                 >
                                   Print
                                 </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => window.open(`/toc/shape?id=${plan!.id}`, '_blank', 'noopener,noreferrer,width=1280,height=800')}
+                                  style={styles.shapeBtn}
+                                  title="Open student-facing Shape of the Day for projector"
+                                >
+                                  Shape of Day
+                                </button>
                               </div>
                             ) : (
                               <span style={{ opacity: 0.6, fontWeight: 700 }}>No plan</span>
@@ -1020,6 +1029,21 @@ const styles: Record<string, React.CSSProperties> = {
     background: 'transparent',
     color: RCS.deepNavy,
     textDecoration: 'none',
+    fontWeight: 900,
+    cursor: 'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    lineHeight: 1,
+    whiteSpace: 'nowrap',
+    height: 'fit-content',
+    alignSelf: 'flex-start',
+  },
+  shapeBtn: {
+    padding: '6px 10px',
+    borderRadius: 10,
+    border: `1px solid ${RCS.deepNavy}`,
+    background: RCS.deepNavy,
+    color: RCS.white,
     fontWeight: 900,
     cursor: 'pointer',
     display: 'inline-flex',
