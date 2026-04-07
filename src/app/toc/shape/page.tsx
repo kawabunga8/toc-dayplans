@@ -17,7 +17,6 @@ type PlanData = {
   };
 };
 
-const FIXED_ITEMS = ['Review', 'Check-in', 'Prayer'];
 
 const RCS = {
   deepNavy: '#1F4E79',
@@ -74,18 +73,12 @@ function ShapeContent() {
     );
   }
 
-  // Build topic list from lesson flow phases (excluding fixed items to avoid duplication)
   const phases = plan.toc?.lesson_flow_phases ?? [];
   const activityOptions = plan.toc?.activity_options ?? [];
 
-  const topics: string[] = phases.length
+  const allItems: string[] = phases.length
     ? phases.map((p) => p.phase_text).filter(Boolean)
     : activityOptions.map((a) => a.title).filter(Boolean);
-
-  // Combine: fixed items first, then any topics not already in fixed items
-  const fixedSet = new Set(FIXED_ITEMS.map((s) => s.toLowerCase()));
-  const extraTopics = topics.filter((t) => !fixedSet.has(t.toLowerCase()));
-  const allItems = [...FIXED_ITEMS, ...extraTopics];
 
   const dateLabel = plan.plan_date
     ? new Date(plan.plan_date + 'T12:00:00').toLocaleDateString('en-CA', {
