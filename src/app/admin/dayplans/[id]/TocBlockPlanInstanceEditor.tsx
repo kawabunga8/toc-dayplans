@@ -195,6 +195,14 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [blockId, classId]);
 
+  // Keep a ref to saveAll that is always current. This prevents stale-closure bugs
+  // in event handlers below whose dep arrays don't include every piece of state
+  // that saveAll reads (e.g. publishMode, advCentralTheme, etc.).
+  const saveAllRef = useRef<(opts?: { reload?: boolean; silent?: boolean }) => Promise<void>>(async () => {});
+  useEffect(() => {
+    saveAllRef.current = saveAll;
+  });
+
   // Allow parent to request a save (no pruning).
   // Important: the parent may request a save before this editor finished loading.
   // In that case, ensure the plan exists/loaded before saving.
@@ -211,7 +219,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
           await ensureAndLoad();
         }
 
-        await saveAll({ reload: false, silent: true });
+        await saveAllRef.current({ reload: false, silent: true });
         evt.detail?.resolve?.(true);
       } catch (err) {
         evt.detail?.reject?.(err);
@@ -234,7 +242,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
         // Give React a moment to flush any last onChange() state updates
         await new Promise((r) => setTimeout(r, 50));
 
-        await saveAll({ reload: false, silent: true });
+        await saveAllRef.current({ reload: false, silent: true });
         evt.detail?.resolve?.(true);
       } catch (err) {
         evt.detail?.reject?.(err);
