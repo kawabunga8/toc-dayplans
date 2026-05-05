@@ -82,7 +82,7 @@ export default async function TocPage({
   }
 
   if (plansErr || classesErr) {
-    notFound();
+    throw new Error(plansErr?.message ?? classesErr?.message ?? 'Failed to load plans');
   }
 
   const initialView = viewParam === 'calendar' ? 'calendar' : 'today';
