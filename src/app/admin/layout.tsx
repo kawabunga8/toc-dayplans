@@ -5,12 +5,56 @@ import { usePathname, useRouter } from 'next/navigation';
 import { PropsWithChildren, startTransition, useEffect, useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { DemoProvider } from './DemoContext';
+import { SchoolYearProvider, useSchoolYear } from './SchoolYearContext';
 
 type GuardState =
   | { status: 'loading' }
   | { status: 'authed'; role: string | null; email: string | null }
   | { status: 'not-logged-in' }
   | { status: 'not-staff' };
+
+function SchoolYearPicker() {
+  const { schoolYear, setSchoolYear } = useSchoolYear();
+  const [years, setYears] = useState<string[]>([]);
+
+  useEffect(() => {
+    const supabase = getSupabaseClient();
+    supabase
+      .from('classes')
+      .select('school_year')
+      .not('school_year', 'is', null)
+      .then(({ data }) => {
+        const unique = [...new Set((data ?? []).map((r: any) => r.school_year as string))].sort().reverse();
+        setYears(unique);
+      });
+  }, []);
+
+  const badgeStyle: React.CSSProperties = {
+    padding: '5px 10px',
+    borderRadius: 8,
+    border: '1px solid #C9A84C',
+    background: '#FDF3DC',
+    color: '#1F4E79',
+    fontWeight: 900,
+    fontSize: 13,
+  };
+
+  if (years.length <= 1) {
+    return <span style={badgeStyle}>{schoolYear}</span>;
+  }
+
+  return (
+    <select
+      value={schoolYear}
+      onChange={(e) => setSchoolYear(e.target.value)}
+      style={{ ...badgeStyle, cursor: 'pointer' }}
+    >
+      {years.map((y) => (
+        <option key={y} value={y}>{y}</option>
+      ))}
+    </select>
+  );
+}
 
 export default function AdminLayout({ children }: PropsWithChildren) {
   const router = useRouter();
@@ -133,6 +177,7 @@ export default function AdminLayout({ children }: PropsWithChildren) {
   const isDemo = role === 'demo';
 
   return (
+    <SchoolYearProvider>
     <DemoProvider value={{ isDemo, role }}>
       <div style={{ fontFamily: 'system-ui' }}>
         <header
@@ -174,6 +219,7 @@ export default function AdminLayout({ children }: PropsWithChildren) {
           </div>
 
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <SchoolYearPicker />
             {email ? (
               <div style={{ fontSize: 12, fontWeight: 900, color: '#1F4E79', opacity: 0.9 }}>
                 {email}
@@ -204,9 +250,10 @@ export default function AdminLayout({ children }: PropsWithChildren) {
           </div>
         </header>
 
-        <div style={isDemo ? { filter: 'grayscale(0.35)', opacity: 0.92 } : undefined}>{children}</div>
+        <div key={pathname} className="page-zoom-in" style={isDemo ? { filter: 'grayscale(0.35)', opacity: 0.92 } : undefined}>{children}</div>
       </div>
     </DemoProvider>
+    </SchoolYearProvider>
   );
 }
 

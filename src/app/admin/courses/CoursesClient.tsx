@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { useDemo } from '@/app/admin/DemoContext';
+import { useSchoolYear } from '@/app/admin/SchoolYearContext';
 
 type CourseRow = {
   id: string;
@@ -20,6 +21,7 @@ type QuarterFilter = 'all' | 1 | 2 | 3 | 4;
 
 export default function CoursesClient() {
   const { isDemo } = useDemo();
+  const { schoolYear } = useSchoolYear();
   const [items, setItems] = useState<CourseRow[]>([]);
   const [tagsByClassId, setTagsByClassId] = useState<Record<string, string[]>>({});
   const [status, setStatus] = useState<Status>('loading');
@@ -45,11 +47,13 @@ export default function CoursesClient() {
 
     try {
       const supabase = getSupabaseClient();
-      const { data, error } = await supabase
+      const classQuery = supabase
         .from('classes')
         .select('id,name,room,sort_order,block_label,active_quarters')
         .order('sort_order', { ascending: true, nullsFirst: false })
         .order('name', { ascending: true });
+      if (schoolYear) classQuery.eq('school_year', schoolYear);
+      const { data, error } = await classQuery;
       if (error) throw error;
 
       const rows = (data ?? []) as CourseRow[];
@@ -85,7 +89,7 @@ export default function CoursesClient() {
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [schoolYear]);
 
   const filteredItems = useMemo(() => {
     if (quarterFilter === 'all') return items;
@@ -188,6 +192,7 @@ export default function CoursesClient() {
         block_label: newBlock.trim() ? newBlock.trim().toUpperCase() : null,
         active_quarters: newQuarters,
         sort_order: maxOrder + 1,
+        school_year: schoolYear || null,
       };
 
       const { data, error } = await supabase.from('classes').insert(insert).select('id,name,room,sort_order,block_label,active_quarters').single();

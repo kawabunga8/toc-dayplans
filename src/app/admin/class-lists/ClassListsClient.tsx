@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { useDemo } from '@/app/admin/DemoContext';
+import { useSchoolYear } from '@/app/admin/SchoolYearContext';
 
 type ClassRow = { id: string; name: string; room: string | null; block_label: string | null };
 
@@ -16,6 +17,7 @@ const STUDENT_PHOTOS_BUCKET = 'Student Photos';
 
 export default function ClassListsClient() {
   const { isDemo } = useDemo();
+  const { schoolYear } = useSchoolYear();
   const [status, setStatus] = useState<Status>('loading');
   const [error, setError] = useState<string | null>(null);
 
@@ -39,10 +41,12 @@ export default function ClassListsClient() {
     try {
       const supabase = getSupabaseClient();
 
-      const { data: classData, error: classErr } = await supabase
+      const classQuery = supabase
         .from('classes')
         .select('id,name,room,block_label,sort_order')
         .order('sort_order', { ascending: true, nullsFirst: false });
+      if (schoolYear) classQuery.eq('school_year', schoolYear);
+      const { data: classData, error: classErr } = await classQuery;
 
       if (classErr) throw classErr;
 
@@ -96,9 +100,10 @@ export default function ClassListsClient() {
   }
 
   useEffect(() => {
+    setSelectedClassId('');
     void loadClassesAndStudents();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [schoolYear]);
 
   useEffect(() => {
     if (!selectedClassId) return;
