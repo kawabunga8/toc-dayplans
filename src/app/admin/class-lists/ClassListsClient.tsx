@@ -76,10 +76,12 @@ export default function ClassListsClient() {
 
     try {
       const supabase = getSupabaseClient();
-      const { data, error } = await supabase
+      const enrollmentQuery = supabase
         .from('enrollments')
         .select('student:students(id,first_name,last_name,photo_url)')
         .eq('class_id', classId);
+      if (schoolYear) enrollmentQuery.eq('school_year', schoolYear);
+      const { data, error } = await enrollmentQuery;
       if (error) throw error;
 
       const list = (data ?? [])
@@ -231,7 +233,7 @@ export default function ClassListsClient() {
 
     try {
       const supabase = getSupabaseClient();
-      const { error } = await supabase.from('enrollments').insert({ class_id: selectedClassId, student_id: student.id });
+      const { error } = await supabase.from('enrollments').insert({ class_id: selectedClassId, student_id: student.id, school_year: schoolYear || null });
       if (error) throw error;
 
       setRoster((prev) => {
@@ -261,11 +263,13 @@ export default function ClassListsClient() {
 
     try {
       const supabase = getSupabaseClient();
-      const { error } = await supabase
+      const deleteQuery = supabase
         .from('enrollments')
         .delete()
         .eq('class_id', selectedClassId)
         .eq('student_id', student.id);
+      if (schoolYear) deleteQuery.eq('school_year', schoolYear);
+      const { error } = await deleteQuery;
       if (error) throw error;
 
       setRoster((prev) => prev.filter((s) => s.id !== student.id));
