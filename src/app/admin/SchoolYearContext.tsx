@@ -2,7 +2,13 @@
 
 import { createContext, useContext, useState } from 'react';
 
-const CURRENT_YEAR = '2026-27';
+function currentSchoolYear(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1; // 1-based
+  const startYear = month >= 9 ? year : year - 1;
+  return `${startYear}-${String(startYear + 1).slice(2)}`;
+}
 
 type SchoolYearContextValue = {
   schoolYear: string;
@@ -10,12 +16,12 @@ type SchoolYearContextValue = {
 };
 
 const SchoolYearContext = createContext<SchoolYearContextValue>({
-  schoolYear: CURRENT_YEAR,
+  schoolYear: currentSchoolYear(),
   setSchoolYear: () => {},
 });
 
 export function SchoolYearProvider({ children }: { children: React.ReactNode }) {
-  const [schoolYear, setSchoolYear] = useState(CURRENT_YEAR);
+  const [schoolYear, setSchoolYear] = useState(currentSchoolYear);
   return (
     <SchoolYearContext.Provider value={{ schoolYear, setSchoolYear }}>
       {children}
