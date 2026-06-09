@@ -386,6 +386,9 @@ export default function TocClient({
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-end' }}>
+            <span style={{ padding: '5px 10px', borderRadius: 8, border: `1px solid ${RCS.gold}`, background: RCS.paleGold, color: RCS.deepNavy, fontWeight: 900, fontSize: 13 }}>
+              {currentSchoolYear()}
+            </span>
             <div style={styles.navBtns}>
               <a href="/" style={styles.secondaryLink}>
                 Home
@@ -970,10 +973,19 @@ const RCS = {
   midBlue: '#2E75B6',
   lightBlue: '#D6E4F0',
   gold: '#C9A84C',
+  paleGold: '#FDF3DC',
   white: '#FFFFFF',
   lightGray: '#F5F5F5',
   textDark: '#1A1A1A',
 } as const;
+
+function currentSchoolYear(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+  const startYear = month >= 9 ? year : year - 1;
+  return `${startYear}-${String(startYear + 1).slice(2)}`;
+}
 
 const styles: Record<string, React.CSSProperties> = {
   shell: { minHeight: '100vh', background: RCS.white, color: RCS.textDark, fontFamily: 'system-ui' },
