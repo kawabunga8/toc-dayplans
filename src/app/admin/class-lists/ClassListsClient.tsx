@@ -63,8 +63,14 @@ export default function ClassListsClient() {
 
       setClasses(cls);
 
-      if (!selectedClassId && cls.length > 0) {
+      // Auto-select the first course whenever the currently selected one isn't in this
+      // list -- covers both "nothing selected yet" and "switched school year, so the old
+      // course id belongs to a different year's row and no longer applies".
+      if (cls.length > 0 && !cls.some((c) => c.id === selectedClassId)) {
         setSelectedClassId(cls[0]!.id);
+      } else if (cls.length === 0) {
+        setSelectedClassId('');
+        setRoster([]);
       }
 
       setStatus('idle');
@@ -106,7 +112,6 @@ export default function ClassListsClient() {
   }
 
   useEffect(() => {
-    setSelectedClassId('');
     void loadClassesAndStudents();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schoolYear]);
