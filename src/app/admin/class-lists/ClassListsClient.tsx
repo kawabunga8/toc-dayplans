@@ -7,6 +7,8 @@ import { useSchoolYear } from '@/app/admin/SchoolYearContext';
 
 type ClassRow = { id: string; name: string; room: string | null; block_label: string | null };
 
+const STUDENT_HUB_URL = process.env.NEXT_PUBLIC_STUDENT_HUB_URL ?? 'https://student-hub-ten-pearl.vercel.app';
+
 type StudentRow = { id: string; first_name: string; last_name: string; photo_url?: string | null };
 
 type Status = 'loading' | 'idle' | 'working' | 'error';
@@ -42,8 +44,10 @@ export default function ClassListsClient() {
       const supabase = getSupabaseClient();
 
       const classQuery = supabase
-        .from('classes')
-        .select('id,name,room,block_label,sort_order')
+        .from('courses')
+        .select('id,name,room,block,sort_order')
+        .eq('type', 'academic')
+        .is('superseded_by', null)
         .order('sort_order', { ascending: true, nullsFirst: false });
       if (schoolYear) classQuery.eq('school_year', schoolYear);
       const { data: classData, error: classErr } = await classQuery;
@@ -54,7 +58,7 @@ export default function ClassListsClient() {
         id: c.id,
         name: c.name,
         room: c.room ?? null,
-        block_label: c.block_label ?? null,
+        block_label: c.block ?? null,
       })) as ClassRow[];
 
       setClasses(cls);
@@ -79,7 +83,7 @@ export default function ClassListsClient() {
       const enrollmentQuery = supabase
         .from('enrollments')
         .select('student:students(id,first_name,last_name,photo_url)')
-        .eq('class_id', classId);
+        .eq('course_id', classId);
       if (schoolYear) enrollmentQuery.eq('school_year', schoolYear);
       const { data, error } = await enrollmentQuery;
       if (error) throw error;
@@ -233,7 +237,7 @@ export default function ClassListsClient() {
 
     try {
       const supabase = getSupabaseClient();
-      const { error } = await supabase.from('enrollments').insert({ class_id: selectedClassId, student_id: student.id, school_year: schoolYear || null });
+      const { error } = await supabase.from('enrollments').insert({ course_id: selectedClassId, student_id: student.id, school_year: schoolYear || null });
       if (error) throw error;
 
       setRoster((prev) => {
@@ -266,7 +270,7 @@ export default function ClassListsClient() {
       const deleteQuery = supabase
         .from('enrollments')
         .delete()
-        .eq('class_id', selectedClassId)
+        .eq('course_id', selectedClassId)
         .eq('student_id', student.id);
       if (schoolYear) deleteQuery.eq('school_year', schoolYear);
       const { error } = await deleteQuery;
@@ -283,7 +287,12 @@ export default function ClassListsClient() {
   return (
     <main style={styles.page}>
       <h1 style={styles.h1}>Class lists</h1>
-      <p style={styles.muted}>Select a course and edit its roster (adds/removes are saved immediately).</p>
+      <p style={styles.muted}>
+        Select a course and edit its roster (adds/removes are saved immediately). Course names/grades come from{' '}
+        <a href={`${STUDENT_HUB_URL}/courses`} target="_blank" rel="noopener noreferrer" style={{ color: RCS.midBlue, fontWeight: 800 }}>
+          Student Hub →
+        </a>
+      </p>
 
       <section style={styles.card}>
         <div style={styles.sectionHeader}>Course</div>
@@ -325,6 +334,9 @@ export default function ClassListsClient() {
                 Missing photos: <b>{missingCount}</b>
               </span>
             ) : null}
+            <a href={`${STUDENT_HUB_URL}/students`} target="_blank" rel="noopener noreferrer" style={{ marginLeft: 10, fontSize: 12, color: RCS.midBlue, fontWeight: 800 }}>
+              Edit students in Student Hub →
+            </a>
           </div>
 
           <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
