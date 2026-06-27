@@ -266,10 +266,12 @@ export default function ClassListsClient() {
     <main style={styles.page}>
       <h1 style={styles.h1}>Class lists</h1>
       <p style={styles.muted}>
-        Select a course and edit its roster (adds/removes are saved immediately). Course names/grades come from{' '}
-        <a href={`${STUDENT_HUB_URL}/courses`} target="_blank" rel="noopener noreferrer" style={{ color: RCS.midBlue, fontWeight: 800 }}>
+        Select a course and edit its roster (adds/removes are saved immediately). Course and student records come from{' '}
+        <a href={STUDENT_HUB_URL} target="_blank" rel="noopener noreferrer" style={{ color: RCS.midBlue, fontWeight: 800 }}>
           Student Hub →
         </a>
+        {' '}— <a href={`${STUDENT_HUB_URL}/courses`} target="_blank" rel="noopener noreferrer" style={{ color: RCS.midBlue }}>courses</a>{' '}/{' '}
+        <a href={`${STUDENT_HUB_URL}/students`} target="_blank" rel="noopener noreferrer" style={{ color: RCS.midBlue }}>students</a>
       </p>
 
       <section style={styles.card}>
@@ -312,9 +314,6 @@ export default function ClassListsClient() {
                 Missing photos: <b>{missingCount}</b>
               </span>
             ) : null}
-            <a href={`${STUDENT_HUB_URL}/students`} target="_blank" rel="noopener noreferrer" style={{ marginLeft: 10, fontSize: 12, color: RCS.midBlue, fontWeight: 800 }}>
-              Edit students in Student Hub →
-            </a>
           </div>
 
           <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
