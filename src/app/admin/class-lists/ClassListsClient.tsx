@@ -257,33 +257,6 @@ export default function ClassListsClient() {
     }
   }
 
-  async function removeStudent(student: StudentRow) {
-    if (!selectedClassId) return;
-    const ok = window.confirm(`Remove ${student.first_name} ${student.last_name} from this class?`);
-    if (!ok) return;
-
-    setStatus('working');
-    setError(null);
-
-    try {
-      const supabase = getSupabaseClient();
-      const deleteQuery = supabase
-        .from('enrollments')
-        .delete()
-        .eq('course_id', selectedClassId)
-        .eq('student_id', student.id);
-      if (schoolYear) deleteQuery.eq('school_year', schoolYear);
-      const { error } = await deleteQuery;
-      if (error) throw error;
-
-      setRoster((prev) => prev.filter((s) => s.id !== student.id));
-      setStatus('idle');
-    } catch (e: any) {
-      setStatus('error');
-      setError(humanizeError(e));
-    }
-  }
-
   return (
     <main style={styles.page}>
       <h1 style={styles.h1}>Class lists</h1>
@@ -413,10 +386,6 @@ export default function ClassListsClient() {
                     </div>
                   </div>
                 </div>
-
-                <button onClick={() => removeStudent(s)} disabled={isDemo || status === 'working' || status === 'loading'} style={styles.dangerBtn}>
-                  Remove
-                </button>
               </div>
             );
           })}
