@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { useDemo } from '@/app/admin/DemoContext';
+import { useSchoolYear } from '@/app/admin/SchoolYearContext';
 
 type Level = 'emerging' | 'developing' | 'proficient' | 'extending';
 
@@ -27,6 +28,8 @@ type Status = 'loading' | 'idle' | 'saving' | 'error';
 
 const SUBJECTS = ['ADST', 'FA', 'Bible'] as const;
 
+const STUDENT_HUB_URL = process.env.NEXT_PUBLIC_STUDENT_HUB_URL ?? 'https://student-hub.vercel.app';
+
 const LEVELS: Array<{ level: Level; label: string }> = [
   { level: 'emerging', label: 'Emerging' },
   { level: 'developing', label: 'Developing' },
@@ -36,6 +39,7 @@ const LEVELS: Array<{ level: Level; label: string }> = [
 
 export default function PoliciesClient() {
   const { isDemo } = useDemo();
+  const { schoolYear } = useSchoolYear();
   const searchParams = useSearchParams();
 
   const returnHref = useMemo(() => {
@@ -86,7 +90,7 @@ export default function PoliciesClient() {
     if (!selectedSubject) return;
     void loadStandards(selectedSubject);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedSubject]);
+  }, [selectedSubject, schoolYear]);
 
   useEffect(() => {
     if (!selectedStandardId) {
@@ -122,15 +126,12 @@ export default function PoliciesClient() {
 
     try {
       const supabase = getSupabaseClient();
-      const { data, error } = await supabase
-        .from('learning_standards')
-        .select('id,subject,standard_key,standard_title')
-        .eq('subject', subject)
-        .order('standard_key', { ascending: true })
-        .order('standard_title', { ascending: true });
+      const { data, error } = await supabase.rpc('current_learning_standards', { p_school_year: schoolYear });
       if (error) throw error;
 
-      const rows = (data ?? []) as StandardRow[];
+      const rows = ((data ?? []) as StandardRow[])
+        .filter((s) => s.subject === subject)
+        .sort((a, b) => a.standard_key.localeCompare(b.standard_key) || a.standard_title.localeCompare(b.standard_title));
       setStandards(rows);
       if (rows.length > 0) setSelectedStandardId((prev) => (prev && rows.some((s) => s.id === prev) ? prev : rows[0].id));
       else setSelectedStandardId('');
@@ -262,7 +263,15 @@ export default function PoliciesClient() {
       </div>
 
       <section style={styles.card}>
-        <div style={styles.sectionHeader}>Learning Standards</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <div style={styles.sectionHeader}>Learning Standards</div>
+          <a href={`${STUDENT_HUB_URL}/standards`} target="_blank" rel="noopener noreferrer" style={styles.secondaryBtn}>
+            Edit in Student Hub →
+          </a>
+        </div>
+        <div style={{ marginBottom: 12, fontSize: 12, opacity: 0.75 }}>
+          Standards are owned and versioned in Student Hub. This page is read-only — pick a standard to attach as a focus below.
+        </div>
 
         {returnHref ? (
           <div style={{ marginBottom: 12 }}>

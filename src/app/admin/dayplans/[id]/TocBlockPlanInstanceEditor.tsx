@@ -13,6 +13,7 @@ type PlanMode = 'lesson_flow' | 'activity_options';
 type AssessmentTouchPoint = {
   timing_in_lesson: string;
   learning_standard_focus: string;
+  learning_standard_id?: string | null;
   evidence_to_collect: string;
   differentiation_strategy: string;
   cyclical_loop_type: string;
@@ -116,6 +117,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
   const [templateTouchPoint, setTemplateTouchPoint] = useState<AssessmentTouchPoint | null>(null);
   const [touchTiming, setTouchTiming] = useState('');
   const [touchStandard, setTouchStandard] = useState('');
+  const [touchStandardId, setTouchStandardId] = useState<string | null>(null);
   const [touchEvidence, setTouchEvidence] = useState('');
   const [touchDiff, setTouchDiff] = useState('');
   const [touchCycle, setTouchCycle] = useState('');
@@ -620,6 +622,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
     const effectiveTp = tp && Object.keys(tp).length ? tp : baseTp;
     setTouchTiming(String(effectiveTp?.timing_in_lesson ?? ''));
     setTouchStandard(String(effectiveTp?.learning_standard_focus ?? ''));
+    setTouchStandardId(effectiveTp?.learning_standard_id ?? null);
     setTouchEvidence(String(effectiveTp?.evidence_to_collect ?? ''));
     setTouchDiff(String(effectiveTp?.differentiation_strategy ?? ''));
     setTouchCycle(String(effectiveTp?.cyclical_loop_type ?? ''));
@@ -1036,6 +1039,7 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
           override_assessment_touch_point: {
             timing_in_lesson: touchTiming.trim(),
             learning_standard_focus: touchStandard.trim(),
+            learning_standard_id: touchStandardId,
             evidence_to_collect: touchEvidence.trim(),
             differentiation_strategy: touchDiff.trim(),
             cyclical_loop_type: touchCycle.trim(),
@@ -1506,8 +1510,11 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                   <input value={touchCycle} onChange={(e) => { setTouchCycle(e.target.value); markUnsaved(); }} style={styles.input} placeholder="design / rehearsal / refinement" />
                 </label>
                 <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
-                  <span style={styles.label}>Learning Standard focus (reference)</span>
-                  <input value={touchStandard} onChange={(e) => { setTouchStandard(e.target.value); markUnsaved(); }} style={styles.input} placeholder="e.g., ADST > Define and Ideate" />
+                  <span style={styles.label}>
+                    Learning Standard focus (reference)
+                    {touchStandardId ? <span style={{ marginLeft: 8, fontSize: 11, opacity: 0.7 }}>linked to catalog standard</span> : null}
+                  </span>
+                  <input value={touchStandard} onChange={(e) => { setTouchStandard(e.target.value); setTouchStandardId(null); markUnsaved(); }} style={styles.input} placeholder="e.g., ADST > Define and Ideate" />
                 </label>
                 <label style={{ ...styles.field, gridColumn: '1 / -1' }}>
                   <span style={styles.label}>Evidence to collect</span>
