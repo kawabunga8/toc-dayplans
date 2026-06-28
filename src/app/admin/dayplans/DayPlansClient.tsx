@@ -137,13 +137,16 @@ export default function DayPlansClient() {
     return scheduleBlockLabelsForDate(selectedDate, selectedFridayType);
   }, [rotationBlocks, selectedDate, selectedFridayType]);
 
-  // Determine which quarter the selected date falls in (null = no match / no quarters configured)
+  // Determine which quarter the selected date falls in. If it's outside every defined
+  // quarter (summer break, or between quarters), fall back to the most recently-ended
+  // one rather than no match, so quarter-specific courses still resolve to something.
   const currentQuarterId = useMemo(() => {
     if (!quarters.length || !selectedDate) return null;
     for (const q of quarters) {
       if (selectedDate >= q.start_date && selectedDate <= q.end_date) return q.id;
     }
-    return null;
+    const past = quarters.filter((q) => q.end_date < selectedDate).sort((a, b) => b.end_date.localeCompare(a.end_date));
+    return past[0]?.id ?? null;
   }, [quarters, selectedDate]);
 
   const classByBlock = useMemo(() => {
