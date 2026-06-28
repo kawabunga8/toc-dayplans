@@ -22,6 +22,7 @@ type Status = 'loading' | 'idle' | 'saving' | 'error';
 
 const DEFAULT_SLOTS_MON_THU = ['P1', 'P2', 'Flex', 'Lunch', 'P5', 'P6'];
 const DEFAULT_SLOTS_FRI = ['P1', 'P2', 'Chapel', 'Lunch', 'P5', 'P6'];
+const STUDENT_HUB_URL = process.env.NEXT_PUBLIC_STUDENT_HUB_URL ?? 'https://student-hub-ten-pearl.vercel.app';
 
 export default function BlockTimesClient() {
   const { isDemo } = useDemo();
@@ -53,24 +54,6 @@ export default function BlockTimesClient() {
       const j = await res.json();
       if (!res.ok) throw new Error(j?.error ?? 'Failed to load quarters');
       if (Array.isArray(j) && j.length === 4) setQuarters(j);
-      setQuartersStatus('idle');
-    } catch (e: any) {
-      setQuartersStatus('error');
-      setQuartersError(e?.message ?? 'Unknown error');
-    }
-  }
-
-  async function saveQuarters() {
-    setQuartersStatus('saving');
-    setQuartersError(null);
-    try {
-      const res = await fetch('/api/admin/school-quarters', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(quarters),
-      });
-      const j = await res.json();
-      if (!res.ok) throw new Error(j?.error ?? 'Failed to save quarters');
       setQuartersStatus('idle');
     } catch (e: any) {
       setQuartersStatus('error');
@@ -413,38 +396,31 @@ export default function BlockTimesClient() {
             <div style={styles.rowBetween}>
               <div>
                 <div style={styles.sectionTitle}>School quarter dates</div>
-                <div style={styles.mutedSmall}>Set the start and end dates for Q1–Q4. These are used to filter which courses appear on a given date.</div>
+                <div style={styles.mutedSmall}>
+                  Used to filter which courses appear on a given date. Owned and edited in{' '}
+                  <a href={`${STUDENT_HUB_URL}/quarters`} target="_blank" rel="noopener noreferrer" style={{ color: RCS.midBlue, fontWeight: 800 }}>
+                    Student Hub →
+                  </a>
+                  — this page is read-only.
+                </div>
               </div>
             </div>
             <div style={{ marginTop: 16, display: 'grid', gap: 12 }}>
-              {quarters.map((q, i) => (
+              {quarters.map((q) => (
                 <div key={q.id} style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
                   <div style={{ width: 32, fontWeight: 900, color: RCS.midBlue }}>{q.label}</div>
-                  <label style={{ display: 'grid', gap: 4 }}>
+                  <div style={{ display: 'grid', gap: 4 }}>
                     <div style={styles.label}>Start</div>
-                    <input
-                      type="date"
-                      value={q.start_date}
-                      onChange={(e) => setQuarters((prev) => prev.map((x, idx) => idx === i ? { ...x, start_date: e.target.value } : x))}
-                      style={styles.input}
-                    />
-                  </label>
-                  <label style={{ display: 'grid', gap: 4 }}>
+                    <div>{q.start_date || '—'}</div>
+                  </div>
+                  <div style={{ display: 'grid', gap: 4 }}>
                     <div style={styles.label}>End</div>
-                    <input
-                      type="date"
-                      value={q.end_date}
-                      onChange={(e) => setQuarters((prev) => prev.map((x, idx) => idx === i ? { ...x, end_date: e.target.value } : x))}
-                      style={styles.input}
-                    />
-                  </label>
+                    <div>{q.end_date || '—'}</div>
+                  </div>
                 </div>
               ))}
             </div>
             <div style={{ display: 'flex', gap: 12, marginTop: 16, flexWrap: 'wrap' }}>
-              <button onClick={saveQuarters} disabled={isDemo || quartersStatus === 'saving' || quartersStatus === 'loading'} style={styles.primaryBtn}>
-                {quartersStatus === 'saving' ? 'Saving…' : 'Save quarters'}
-              </button>
               <button onClick={loadQuarters} disabled={quartersStatus === 'saving' || quartersStatus === 'loading'} style={styles.secondaryBtn}>
                 Reload
               </button>

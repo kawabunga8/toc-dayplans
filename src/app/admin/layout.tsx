@@ -20,7 +20,7 @@ function SchoolYearPicker() {
   useEffect(() => {
     const supabase = getSupabaseClient();
     supabase
-      .from('classes')
+      .from('courses')
       .select('school_year')
       .not('school_year', 'is', null)
       .then(({ data }) => {
