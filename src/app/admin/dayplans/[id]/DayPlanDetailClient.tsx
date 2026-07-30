@@ -1356,12 +1356,35 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
           <section style={styles.card}>
             <div style={styles.sectionHeader}>Manage</div>
             <div style={{ display: 'grid', gap: 8 }}>
-              <div style={{ ...styles.callout, borderColor: '#C9A84C', background: '#FDF3DC' }}>
-                Publishing is managed on the <b>/publishing</b> page.
-              </div>
               <div>
-                <b>Status:</b> {trashed ? <span>Trashed</span> : <span>Active</span>}
+                <b>Status:</b>{' '}
+                {trashed ? (
+                  <span style={{ color: '#991b1b' }}>Trashed</span>
+                ) : published ? (
+                  <span style={{ color: '#166534' }}>Published</span>
+                ) : (
+                  <span style={{ color: '#6b7280' }}>Draft</span>
+                )}
               </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 12, marginTop: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+              {!trashed && (
+                published ? (
+                  <>
+                    <button onClick={copyLink} disabled={status !== 'idle'} style={styles.secondaryBtn}>
+                      Copy link
+                    </button>
+                    <button onClick={revoke} disabled={status !== 'idle'} style={styles.dangerBtn}>
+                      Unpublish
+                    </button>
+                  </>
+                ) : (
+                  <button onClick={publish} disabled={status !== 'idle'} style={styles.primaryBtn}>
+                    {status === 'publishing' ? 'Publishing…' : 'Publish'}
+                  </button>
+                )
+              )}
             </div>
 
             <div style={{ display: 'flex', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
