@@ -30,9 +30,8 @@ export default function CoursesClient() {
   const [quarterFilter, setQuarterFilter] = useState<QuarterFilter>('all');
   const [hasAppliedDefaultQuarter, setHasAppliedDefaultQuarter] = useState(false);
 
-  // Default the filter to whichever quarter today falls in, same source DayPlansClient
-  // uses (public.school_quarters). If today isn't in any quarter (summer break, or
-  // between quarters), fall back to the most recently-ended one instead of 'all'.
+  // Default the filter to whichever quarter today falls in. If today isn't in any
+  // quarter (summer break, between quarters), leave the default as 'all'.
   useEffect(() => {
     if (hasAppliedDefaultQuarter) return;
     fetch('/api/admin/school-quarters')
@@ -40,9 +39,7 @@ export default function CoursesClient() {
       .then((quarters: QuarterRow[] | null) => {
         if (!quarters) return;
         const today = new Date().toISOString().split('T')[0]!;
-        const current =
-          quarters.find((q) => today >= q.start_date && today <= q.end_date) ??
-          quarters.filter((q) => q.end_date < today).sort((a, b) => b.end_date.localeCompare(a.end_date))[0];
+        const current = quarters.find((q) => today >= q.start_date && today <= q.end_date);
         if (current) setQuarterFilter(current.id as QuarterFilter);
         setHasAppliedDefaultQuarter(true);
       })
