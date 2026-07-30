@@ -24,7 +24,7 @@ type DayPlanRow = {
   published_at?: string | null;
 };
 
-type ClassRow = { id: string; block_label: string | null; name: string; room: string | null };
+type ClassRow = { id: string; block_label: string | null; name: string; room: string | null; active_quarters: number[] | null };
 
 type PlanBlockRow = {
   id?: string;
@@ -134,9 +134,13 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
           .maybeSingle();
       })();
 
-      const [{ data: planData, error: planErr }, { data: blockData, error: blockErr }, { data: classData, error: classErr }] =
+      // Load plan first so we can filter classes by its school year
+      const { data: planData, error: planErr } = await planPromise;
+
+      const planSchoolYear = planData ? getPlanSchoolYear((planData as DayPlanRow).plan_date) : null;
+
+      const [{ data: blockData, error: blockErr }, { data: classData, error: classErr }] =
         await Promise.all([
-          planPromise,
           supabase
             .from('day_plan_blocks')
             .select('id,day_plan_id,start_time,end_time,room,class_name,details,class_id')
@@ -144,8 +148,12 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
             .order('start_time', { ascending: true }),
           supabase
             .from('classes')
-            .select('id,block_label,name,room,sort_order')
-            .order('sort_order', { ascending: true, nullsFirst: false }),
+            .select('id,block_label,name,room,sort_order,active_quarters')
+            .or(planSchoolYear
+              ? `school_year.eq.${planSchoolYear},block_label.in.(FLEX,LUNCH,CHAPEL)`
+              : 'block_label.in.(FLEX,LUNCH,CHAPEL)')
+            .order('sort_order', { ascending: true, nullsFirst: false })
+            .order('name', { ascending: true }),
         ]);
 
       if (planErr) throw planErr;
@@ -184,6 +192,7 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
         block_label: c.block_label ?? null,
         name: c.name,
         room: c.room ?? null,
+        active_quarters: Array.isArray(c.active_quarters) ? c.active_quarters : null,
       })) as ClassRow[]);
 
       // Unpublished TOC changes indicator: compare latest toc_block_plans.updated_at to day_plans.published_at
@@ -587,10 +596,23 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
       if (mapping.length === 0) throw new Error(`No schedule mapping found for block “${plan.slot}” on ${plan.plan_date}.`);
 
 
-      // classes lookup by block_label
-      const classByLabel = new Map<string, ClassRow>();
+      // Quarter-aware class lookup: build label → classes[], then pick by plan quarter
+      const planQuarter = quarterFromDate(plan.plan_date);
+      const classesByLabel = new Map<string, ClassRow[]>();
       for (const c of classes) {
-        if (c.block_label) classByLabel.set(String(c.block_label).toUpperCase(), c);
+        if (!c.block_label) continue;
+        const key = String(c.block_label).toUpperCase();
+        const arr = classesByLabel.get(key) ?? [];
+        arr.push(c);
+        classesByLabel.set(key, arr);
+      }
+      function pickClass(label: string): ClassRow | undefined {
+        const candidates = classesByLabel.get(String(label).toUpperCase()) ?? [];
+        return (
+          candidates.find(c => Array.isArray(c.active_quarters) && c.active_quarters.includes(planQuarter)) ??
+          candidates.find(c => c.active_quarters === null) ??
+          candidates[0]
+        );
       }
 
       const gen: PlanBlockRow[] = mapping.map((m) => {
@@ -603,7 +625,7 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
 
         // Flex/Chapel/CLE/Lunch are seeded into the classes table (see schema.sql) so they can have templates.
         // Prefer a real class match when it exists.
-        const c = label ? classByLabel.get(label) : undefined;
+        const c = label ? pickClass(label) : undefined;
 
         const room = c?.room ?? '—';
         const className = c?.name ?? (labelRaw || '—');
@@ -1489,6 +1511,20 @@ const RCS = {
   lightGray: '#F5F5F5',
   textDark: '#1A1A1A',
 } as const;
+
+function getPlanSchoolYear(yyyyMmDd: string): string {
+  const [y, m] = yyyyMmDd.split('-').map(Number);
+  const startYear = m >= 7 ? y : y - 1;
+  return `${startYear}-${String(startYear + 1).slice(2)}`;
+}
+
+function quarterFromDate(yyyyMmDd: string): number {
+  const m = parseInt(yyyyMmDd.split('-')[1]!, 10);
+  if (m >= 9 && m <= 11) return 1;
+  if (m === 12 || m === 1) return 2;
+  if (m >= 2 && m <= 4) return 3;
+  return 4;
+}
 
 function isFridayLocal(yyyyMmDd: string): boolean {
   const [y, m, d] = yyyyMmDd.split('-').map((x) => Number(x));
