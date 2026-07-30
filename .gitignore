@@ -40,3 +40,12 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 node_modules/
+
+# AI tool skill packages (installed locally, not tracked)
+.agents/
+.kiro/
+.qwen/
+.windsurf/
+skills/
+skills-lock.json
+.mcp.json
