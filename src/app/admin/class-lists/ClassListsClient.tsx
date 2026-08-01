@@ -48,7 +48,10 @@ export default function ClassListsClient() {
         .select('id,name,room,block,sort_order')
         .eq('type', 'academic')
         .is('superseded_by', null)
-        .order('sort_order', { ascending: true, nullsFirst: false });
+        // sort_order groups by block; name breaks ties so courses sharing a block
+        // (Band 10/11/12) list in a stable, readable order rather than arbitrarily.
+        .order('sort_order', { ascending: true, nullsFirst: false })
+        .order('name', { ascending: true });
       if (schoolYear) classQuery.eq('school_year', schoolYear);
       const { data: classData, error: classErr } = await classQuery;
 
