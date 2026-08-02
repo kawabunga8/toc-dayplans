@@ -17,7 +17,12 @@ type CourseRow = {
 type Status = 'loading' | 'idle' | 'error';
 
 type QuarterFilter = 'all' | 1 | 2 | 3 | 4;
-type QuarterRow = { id: number; start_date: string; end_date: string };
+type QuarterRow = { id: number; label?: string; start_date: string; end_date: string };
+
+function quarterNumber(q: QuarterRow): number {
+  const n = parseInt(String(q.label ?? '').replace(/[^0-9]/g, ''), 10);
+  return Number.isNaN(n) ? q.id : n;
+}
 
 const STUDENT_HUB_URL = process.env.NEXT_PUBLIC_STUDENT_HUB_URL ?? 'https://student-hub-ten-pearl.vercel.app';
 
@@ -34,17 +39,19 @@ export default function CoursesClient() {
   // quarter (summer break, between quarters), leave the default as 'all'.
   useEffect(() => {
     if (hasAppliedDefaultQuarter) return;
-    fetch('/api/admin/school-quarters')
+    fetch(`/api/admin/school-quarters?school_year=${encodeURIComponent(schoolYear)}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((quarters: QuarterRow[] | null) => {
         if (!quarters) return;
         const today = new Date().toISOString().split('T')[0]!;
         const current = quarters.find((q) => today >= q.start_date && today <= q.end_date);
-        if (current) setQuarterFilter(current.id as QuarterFilter);
+        // Use the quarter number from the label — row ids are per school year and are
+        // not 1-4, whereas courses.active_quarters holds 1-4.
+        if (current) setQuarterFilter(quarterNumber(current) as QuarterFilter);
         setHasAppliedDefaultQuarter(true);
       })
       .catch(() => setHasAppliedDefaultQuarter(true));
-  }, [hasAppliedDefaultQuarter]);
+  }, [hasAppliedDefaultQuarter, schoolYear]);
 
   async function load() {
     setStatus('loading');

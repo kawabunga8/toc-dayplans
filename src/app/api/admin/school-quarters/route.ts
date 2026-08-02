@@ -16,12 +16,23 @@ async function getSupabase() {
   });
 }
 
-export async function GET() {
+function currentSchoolYear(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const startYear = now.getMonth() + 1 >= 7 ? y : y - 1;
+  return `${startYear}-${String(startYear + 1).slice(2)}`;
+}
+
+export async function GET(req: Request) {
   const supabase = await getSupabase();
+  // Quarters are per school year; without this filter every year's rows come back
+  // and quarter detection picks whichever sorts first.
+  const year = new URL(req.url).searchParams.get('school_year') || currentSchoolYear();
   const { data, error } = await supabase
     .from('school_quarters')
     .select('*')
-    .order('id', { ascending: true });
+    .eq('school_year', year)
+    .order('label', { ascending: true });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data);
 }

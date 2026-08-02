@@ -142,11 +142,16 @@ export default function DayPlansClient() {
   // one rather than no match, so quarter-specific courses still resolve to something.
   const currentQuarterId = useMemo(() => {
     if (!quarters.length || !selectedDate) return null;
+    // Quarter number comes from the label; row ids are per school year, not 1-4.
+    const num = (q: QuarterRow) => {
+      const n = parseInt(String(q.label ?? '').replace(/[^0-9]/g, ''), 10);
+      return Number.isNaN(n) ? q.id : n;
+    };
     for (const q of quarters) {
-      if (selectedDate >= q.start_date && selectedDate <= q.end_date) return q.id;
+      if (selectedDate >= q.start_date && selectedDate <= q.end_date) return num(q);
     }
     const past = quarters.filter((q) => q.end_date < selectedDate).sort((a, b) => b.end_date.localeCompare(a.end_date));
-    return past[0]?.id ?? null;
+    return past[0] ? num(past[0]) : null;
   }, [quarters, selectedDate]);
 
   const classByBlock = useMemo(() => {
