@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { useDemo } from '@/app/admin/DemoContext';
+import { STUDENT_HUB_URL } from '@/lib/studentHub';
 
 type TemplateKey = 'mon_thu' | 'fri' | 'rotation' | 'quarters';
 
@@ -22,7 +23,6 @@ type Status = 'loading' | 'idle' | 'saving' | 'error';
 
 const DEFAULT_SLOTS_MON_THU = ['P1', 'P2', 'Flex', 'Lunch', 'P5', 'P6'];
 const DEFAULT_SLOTS_FRI = ['P1', 'P2', 'Chapel', 'Lunch', 'P5', 'P6'];
-const STUDENT_HUB_URL = process.env.NEXT_PUBLIC_STUDENT_HUB_URL ?? 'https://student-hub-ten-pearl.vercel.app';
 
 export default function BlockTimesClient() {
   const { isDemo } = useDemo();

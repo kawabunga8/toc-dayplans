@@ -4,10 +4,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { useDemo } from '@/app/admin/DemoContext';
 import { useSchoolYear } from '@/app/admin/SchoolYearContext';
+import { STUDENT_HUB_URL } from '@/lib/studentHub';
 
 type ClassRow = { id: string; name: string; room: string | null; block_label: string | null };
 
-const STUDENT_HUB_URL = process.env.NEXT_PUBLIC_STUDENT_HUB_URL ?? 'https://student-hub-ten-pearl.vercel.app';
 
 type StudentRow = { id: string; first_name: string; last_name: string; photo_url?: string | null };
 

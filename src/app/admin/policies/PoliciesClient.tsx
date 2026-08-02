@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { useDemo } from '@/app/admin/DemoContext';
 import { useSchoolYear } from '@/app/admin/SchoolYearContext';
+import { STUDENT_HUB_URL } from '@/lib/studentHub';
 
 type Level = 'emerging' | 'developing' | 'proficient' | 'extending';
 
@@ -28,7 +29,6 @@ type Status = 'loading' | 'idle' | 'saving' | 'error';
 
 const SUBJECTS = ['ADST', 'FA', 'Bible'] as const;
 
-const STUDENT_HUB_URL = process.env.NEXT_PUBLIC_STUDENT_HUB_URL ?? 'https://student-hub.vercel.app';
 
 const LEVELS: Array<{ level: Level; label: string }> = [
   { level: 'emerging', label: 'Emerging' },

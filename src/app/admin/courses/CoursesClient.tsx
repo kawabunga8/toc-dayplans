@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { useSchoolYear } from '@/app/admin/SchoolYearContext';
+import { STUDENT_HUB_URL } from '@/lib/studentHub';
 
 type CourseRow = {
   id: string;
@@ -24,7 +25,6 @@ function quarterNumber(q: QuarterRow): number {
   return Number.isNaN(n) ? q.id : n;
 }
 
-const STUDENT_HUB_URL = process.env.NEXT_PUBLIC_STUDENT_HUB_URL ?? 'https://student-hub-ten-pearl.vercel.app';
 
 export default function CoursesClient() {
   const { schoolYear } = useSchoolYear();
