@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useDemo } from '@/app/admin/DemoContext';
+import { getSupabaseClient } from '@/lib/supabaseClient';
 
 type Subject = 'ADST' | 'FA' | 'Bible' | 'all';
 
@@ -12,8 +13,43 @@ export default function ImportClient() {
   const [subject, setSubject] = useState<Subject>('all');
   const [status, setStatus] = useState<Status>('idle');
   const [out, setOut] = useState<string>('');
+  // Importing deletes and re-inserts rubric rows with edited_text cleared, so any
+  // hand-edited rubric text for these subjects is destroyed. Count it up front.
+  const [overrides, setOverrides] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const sb = getSupabaseClient();
+        let q = sb.from('learning_standards').select('id');
+        if (subject !== 'all') q = q.eq('subject', subject);
+        const { data: stds } = await q;
+        const ids = (stds ?? []).map((r: any) => r.id);
+        if (ids.length === 0) { if (!cancelled) setOverrides(0); return; }
+        const { count } = await sb
+          .from('learning_standard_rubrics')
+          .select('id', { count: 'exact', head: true })
+          .in('learning_standard_id', ids)
+          .not('edited_text', 'is', null);
+        if (!cancelled) setOverrides(count ?? 0);
+      } catch {
+        if (!cancelled) setOverrides(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [subject]);
 
   async function run() {
+    const scope = subject === 'all' ? 'ADST, FA and Bible' : subject;
+    const lead = overrides && overrides > 0
+      ? `This will permanently discard ${overrides} hand-edited rubric text${overrides === 1 ? '' : 's'} for ${scope}.\n\n`
+      : '';
+    if (!window.confirm(
+      `${lead}Replace all learning standards and rubric text for ${scope} from the CSVs in the ` +
+      `learning-standards-data bucket?\n\nExisting rows are deleted and re-inserted. This cannot be undone.`
+    )) return;
+
     setStatus('running');
     setOut('');
     try {
@@ -63,6 +99,16 @@ export default function ImportClient() {
             ← Back to Policies
           </a>
         </div>
+
+        {overrides !== null && overrides > 0 && (
+          <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 10,
+                        background: '#FEE2E2', border: '1px solid #991b1b', color: '#7F1D1D',
+                        fontSize: 13, fontWeight: 700 }}>
+            ⚠ {overrides} hand-edited rubric text{overrides === 1 ? '' : 's'} for{' '}
+            {subject === 'all' ? 'these subjects' : subject} will be permanently discarded by this import.
+            Editing done in Policies or Student Hub is not preserved.
+          </div>
+        )}
 
         <div style={{ marginTop: 12, fontSize: 12, opacity: 0.85 }}>
           Reads: <b>ADST.csv</b>, <b>FA.csv</b>, <b>Bible.csv</b> from bucket <b>learning-standards-data</b>.

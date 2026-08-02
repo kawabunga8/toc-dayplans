@@ -270,7 +270,10 @@ export default function PoliciesClient() {
           </a>
         </div>
         <div style={{ marginBottom: 12, fontSize: 12, opacity: 0.75 }}>
-          Standards are owned and versioned in Student Hub. This page is read-only — pick a standard to attach as a focus below.
+          Standards themselves — name, key, subject, versioning — are owned in Student Hub and can only be
+          changed there. The <b>rubric text below is editable</b>, and it is shared: saving here also changes
+          what Student Hub and the Report Card Tool show. Your edit is stored alongside the original, so
+          “Reset to original” always restores it.
         </div>
 
         {returnHref ? (
