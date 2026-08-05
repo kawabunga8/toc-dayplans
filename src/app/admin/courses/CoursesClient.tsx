@@ -13,7 +13,10 @@ type CourseRow = {
   sort_order: number | null;
   block_label: string | null;
   active_quarters: number[] | null;
+  course_id: string | null;
 };
+
+type HubCourse = { id: string; name: string; block: string | null; school_year: string };
 
 type Status = 'loading' | 'idle' | 'error';
 
@@ -34,6 +37,8 @@ export default function CoursesClient() {
   const [error, setError] = useState<string | null>(null);
   const [quarterFilter, setQuarterFilter] = useState<QuarterFilter>('all');
   const [hasAppliedDefaultQuarter, setHasAppliedDefaultQuarter] = useState(false);
+  const [hubCourses, setHubCourses] = useState<HubCourse[]>([]);
+  const [linkingId, setLinkingId] = useState<string | null>(null);
 
   // Default the filter to whichever quarter today falls in. If today isn't in any
   // quarter (summer break, between quarters), leave the default as 'all'.
@@ -53,6 +58,27 @@ export default function CoursesClient() {
       .catch(() => setHasAppliedDefaultQuarter(true));
   }, [hasAppliedDefaultQuarter, schoolYear]);
 
+  async function loadHubCourses() {
+    try {
+      const res = await fetch(`/api/courses?school_year=${encodeURIComponent(schoolYear)}`);
+      if (res.ok) setHubCourses((await res.json()) as HubCourse[]);
+    } catch { /* non-critical */ }
+  }
+
+  async function linkCourse(classId: string, courseId: string | null) {
+    setLinkingId(classId);
+    try {
+      await fetch('/api/admin/classes', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: classId, course_id: courseId }),
+      });
+      setItems((prev) => prev.map((c) => c.id === classId ? { ...c, course_id: courseId } : c));
+    } finally {
+      setLinkingId(null);
+    }
+  }
+
   async function load() {
     setStatus('loading');
     setError(null);
@@ -61,7 +87,7 @@ export default function CoursesClient() {
       const supabase = getSupabaseClient();
       const classQuery = supabase
         .from('classes')
-        .select('id,name,room,sort_order,block_label,active_quarters')
+        .select('id,name,room,sort_order,block_label,active_quarters,course_id')
         .order('sort_order', { ascending: true, nullsFirst: false })
         .order('name', { ascending: true });
       if (schoolYear) classQuery.eq('school_year', schoolYear);
@@ -100,6 +126,7 @@ export default function CoursesClient() {
 
   useEffect(() => {
     void load();
+    void loadHubCourses();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schoolYear]);
 
@@ -168,11 +195,15 @@ export default function CoursesClient() {
                 <th style={styles.th}>Room</th>
                 <th style={styles.th}>Quarters</th>
                 <th style={styles.th}>#Tags</th>
+                <th style={styles.th}>Course Hub link</th>
                 <th style={styles.th}></th>
               </tr>
             </thead>
             <tbody>
-              {filteredItems.map((c, i) => (
+              {filteredItems.map((c, i) => {
+                const linkedCourse = hubCourses.find((hc) => hc.id === c.course_id);
+                const isLinking = linkingId === c.id;
+                return (
                 <tr key={c.id} style={i % 2 === 0 ? styles.trEven : styles.trOdd}>
                   <td style={styles.tdLabel}>{c.block_label ?? '—'}</td>
                   <td style={styles.td}>{c.name}</td>
@@ -185,13 +216,41 @@ export default function CoursesClient() {
                     </div>
                   </td>
                   <td style={styles.td}>{(tagsByClassId[c.id] ?? []).map((t) => `#${t}`).join(' ')}</td>
+                  <td style={styles.td}>
+                    {linkedCourse ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={styles.linkedBadge}>🔗 {linkedCourse.name}</span>
+                        <button
+                          onClick={() => linkCourse(c.id, null)}
+                          disabled={isLinking}
+                          title="Unlink"
+                          style={styles.unlinkBtn}
+                        >✕</button>
+                      </div>
+                    ) : (
+                      <select
+                        value=""
+                        disabled={isLinking || hubCourses.length === 0}
+                        onChange={(e) => { if (e.target.value) linkCourse(c.id, e.target.value); }}
+                        style={styles.linkSelect}
+                      >
+                        <option value="">— link to course —</option>
+                        {hubCourses.map((hc) => (
+                          <option key={hc.id} value={hc.id}>
+                            {hc.block ? `Block ${hc.block} — ` : ''}{hc.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </td>
                   <td style={styles.tdRight}>
                     <Link href={`/admin/courses/${c.id}/toc-template`} style={styles.primaryLink}>
                       TOC Template
                     </Link>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -245,5 +304,8 @@ const styles: Record<string, React.CSSProperties> = {
   quarterPill: { padding: '3px 8px', borderRadius: 6, border: `1px solid ${RCS.deepNavy}`, background: RCS.white, color: RCS.deepNavy, cursor: 'pointer', fontSize: 11, fontWeight: 700 },
   quarterPillActive: { background: RCS.deepNavy, color: RCS.white },
   quarterBadge: { padding: '2px 7px', borderRadius: 6, background: RCS.lightBlue, color: RCS.deepNavy, fontSize: 11, fontWeight: 700 },
+  linkedBadge: { padding: '2px 8px', borderRadius: 6, background: '#d1fae5', color: '#065f46', fontSize: 11, fontWeight: 700 },
+  unlinkBtn: { padding: '1px 6px', borderRadius: 4, border: '1px solid #d1d5db', background: '#fff', color: '#6b7280', cursor: 'pointer', fontSize: 11 },
+  linkSelect: { padding: '3px 6px', borderRadius: 6, border: `1px solid ${RCS.deepNavy}`, background: RCS.white, color: RCS.textDark, fontSize: 11 },
   errorBox: { marginTop: 12, padding: 12, borderRadius: 10, border: '1px solid #991b1b', background: '#FEE2E2', color: '#7F1D1D' },
 };

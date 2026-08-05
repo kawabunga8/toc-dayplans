@@ -8,6 +8,7 @@ export const runtime = 'nodejs';
 type PatchBody = {
   id: string;
   grade_level?: number | null;
+  course_id?: string | null;
 };
 
 async function getAuthedDb() {
@@ -53,7 +54,7 @@ export async function GET() {
 
   const { data, error } = await db
     .from('classes')
-    .select('id,block_label,name,room,sort_order,grade_level')
+    .select('id,block_label,name,room,sort_order,grade_level,course_id')
     .not('block_label', 'is', null)
     .order('sort_order', { ascending: true, nullsFirst: false })
     .order('name', { ascending: true });
@@ -101,8 +102,17 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: 'grade_level must be number|null' }, { status: 400 });
   }
 
+  const courseId = body.course_id;
+  if (!(courseId === null || typeof courseId === 'string' || typeof courseId === 'undefined')) {
+    return NextResponse.json({ error: 'course_id must be string|null' }, { status: 400 });
+  }
+
   const patch: any = {};
   if (typeof grade !== 'undefined') patch.grade_level = grade;
+  if (typeof courseId !== 'undefined') patch.course_id = courseId || null;
+
+  if (Object.keys(patch).length === 0)
+    return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
 
   const { error } = await db.from('classes').update(patch).eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
