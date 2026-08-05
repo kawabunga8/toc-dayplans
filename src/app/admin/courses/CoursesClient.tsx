@@ -115,8 +115,8 @@ export default function CoursesClient() {
 
     try {
       const res = await fetch('/api/admin/classes');
-      if (!res.ok) throw new Error((await res.json())?.error ?? 'Failed to load classes');
       const json = await res.json();
+      if (!res.ok) throw new Error(json?.error ?? 'Failed to load classes');
       // Filter to the selected school year client-side (API returns all years)
       let rows = (json.rows ?? []) as CourseRow[];
       if (schoolYear) {
