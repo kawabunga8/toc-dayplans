@@ -170,7 +170,8 @@ export default function CoursesClient() {
         <a href={`${STUDENT_HUB_URL}/courses`} target="_blank" rel="noopener noreferrer" style={{ color: RCS.midBlue, fontWeight: 800 }}>
           Student Hub →
         </a>{' '}
-        — this page is read-only and links out to each class's TOC template.
+        — those fields are read-only here. The Course Hub links below are editable and decide which
+        courses each class draws its quarters from.
       </p>
 
       <section style={styles.card}>
