@@ -13,7 +13,7 @@ type CourseRow = {
   sort_order: number | null;
   block_label: string | null;
   active_quarters: number[] | null;
-  course_id: string | null;
+  course_ids: string[];
 };
 
 type HubCourse = { id: string; name: string; block: string | null; school_year: string };
@@ -73,15 +73,37 @@ export default function CoursesClient() {
     } catch { /* non-critical */ }
   }
 
-  async function linkCourse(classId: string, courseId: string | null) {
+  async function linkCourse(classId: string, courseId: string) {
     setLinkingId(classId);
     try {
       await fetch('/api/admin/classes', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: classId, course_id: courseId }),
+        body: JSON.stringify({ id: classId, link_course_id: courseId }),
       });
-      setItems((prev) => prev.map((c) => c.id === classId ? { ...c, course_id: courseId } : c));
+      setItems((prev) => prev.map((c) =>
+        c.id === classId && !c.course_ids.includes(courseId)
+          ? { ...c, course_ids: [...c.course_ids, courseId] }
+          : c
+      ));
+    } finally {
+      setLinkingId(null);
+    }
+  }
+
+  async function unlinkCourse(classId: string, courseId: string) {
+    setLinkingId(classId);
+    try {
+      await fetch('/api/admin/classes', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: classId, unlink_course_id: courseId }),
+      });
+      setItems((prev) => prev.map((c) =>
+        c.id === classId
+          ? { ...c, course_ids: c.course_ids.filter((id) => id !== courseId) }
+          : c
+      ));
     } finally {
       setLinkingId(null);
     }
@@ -92,21 +114,26 @@ export default function CoursesClient() {
     setError(null);
 
     try {
-      const supabase = getSupabaseClient();
-      const classQuery = supabase
-        .from('classes')
-        .select('id,name,room,sort_order,block_label,active_quarters,course_id')
-        .order('sort_order', { ascending: true, nullsFirst: false })
-        .order('name', { ascending: true });
-      if (schoolYear) classQuery.eq('school_year', schoolYear);
-      const { data, error } = await classQuery;
-      if (error) throw error;
-
-      const rows = (data ?? []) as CourseRow[];
+      const res = await fetch('/api/admin/classes');
+      if (!res.ok) throw new Error((await res.json())?.error ?? 'Failed to load classes');
+      const json = await res.json();
+      // Filter to the selected school year client-side (API returns all years)
+      let rows = (json.rows ?? []) as CourseRow[];
+      if (schoolYear) {
+        // We need school_year on rows — fetch directly for filtering
+        const supabase = getSupabaseClient();
+        const { data: syData } = await supabase
+          .from('classes')
+          .select('id,school_year')
+          .in('id', rows.map((r) => r.id));
+        const syMap = Object.fromEntries((syData ?? []).map((r: any) => [r.id, r.school_year]));
+        rows = rows.filter((r) => (syMap[r.id] ?? null) === schoolYear || (syMap[r.id] ?? null) === null);
+      }
       setItems(rows);
 
       const classIds = rows.map((r) => r.id);
       if (classIds.length > 0) {
+        const supabase = getSupabaseClient();
         const { data: tplRows, error: tplErr } = await supabase
           .from('class_toc_templates')
           .select('class_id,default_tags')
@@ -209,7 +236,9 @@ export default function CoursesClient() {
             </thead>
             <tbody>
               {filteredItems.map((c, i) => {
-                const linkedCourse = c.course_id ? (hubCourses.find((hc) => hc.id === c.course_id) ?? { id: c.course_id, name: c.course_id.slice(0, 8) + '…', block: null, school_year: schoolYear }) : null;
+                const linkedCourses = c.course_ids
+                  .map((cid) => hubCourses.find((hc) => hc.id === cid) ?? { id: cid, name: cid.slice(0, 8) + '…', block: null, school_year: schoolYear })
+                const unlinkedHubCourses = hubCourses.filter((hc) => !c.course_ids.includes(hc.id));
                 const isLinking = linkingId === c.id;
                 return (
                 <tr key={c.id} style={i % 2 === 0 ? styles.trEven : styles.trOdd}>
@@ -225,31 +254,34 @@ export default function CoursesClient() {
                   </td>
                   <td style={styles.td}>{(tagsByClassId[c.id] ?? []).map((t) => `#${t}`).join(' ')}</td>
                   <td style={styles.td}>
-                    {linkedCourse ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={styles.linkedBadge}>🔗 {linkedCourse.name}</span>
-                        <button
-                          onClick={() => linkCourse(c.id, null)}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+                      {linkedCourses.map((lc) => (
+                        <span key={lc.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <span style={styles.linkedBadge}>🔗 {lc.name}</span>
+                          <button
+                            onClick={() => unlinkCourse(c.id, lc.id)}
+                            disabled={isLinking}
+                            title="Unlink"
+                            style={styles.unlinkBtn}
+                          >✕</button>
+                        </span>
+                      ))}
+                      {unlinkedHubCourses.length > 0 && (
+                        <select
+                          value=""
                           disabled={isLinking}
-                          title="Unlink"
-                          style={styles.unlinkBtn}
-                        >✕</button>
-                      </div>
-                    ) : (
-                      <select
-                        value=""
-                        disabled={isLinking || hubCourses.length === 0}
-                        onChange={(e) => { if (e.target.value) linkCourse(c.id, e.target.value); }}
-                        style={styles.linkSelect}
-                      >
-                        <option value="">— link to course —</option>
-                        {hubCourses.map((hc) => (
-                          <option key={hc.id} value={hc.id}>
-                            {hc.block ? `Block ${hc.block} — ` : ''}{hc.name}
-                          </option>
-                        ))}
-                      </select>
-                    )}
+                          onChange={(e) => { if (e.target.value) linkCourse(c.id, e.target.value); }}
+                          style={styles.linkSelect}
+                        >
+                          <option value="">+ add link</option>
+                          {unlinkedHubCourses.map((hc) => (
+                            <option key={hc.id} value={hc.id}>
+                              {hc.block ? `Block ${hc.block} — ` : ''}{hc.name}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
                   </td>
                   <td style={styles.tdRight}>
                     <Link href={`/admin/courses/${c.id}/toc-template`} style={styles.primaryLink}>

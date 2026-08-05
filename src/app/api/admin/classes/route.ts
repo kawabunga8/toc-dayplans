@@ -8,7 +8,8 @@ export const runtime = 'nodejs';
 type PatchBody = {
   id: string;
   grade_level?: number | null;
-  course_id?: string | null;
+  link_course_id?: string;    // add a course link
+  unlink_course_id?: string;  // remove a course link
 };
 
 async function getAuthedDb() {
@@ -50,35 +51,34 @@ export async function GET() {
   if ('error' in authed) return authed.error;
 
   const { db, usingServiceRole } = authed;
-  console.log('[api/admin/classes] usingServiceRole=', usingServiceRole);
 
   const { data, error } = await db
     .from('classes')
-    .select('id,block_label,name,room,sort_order,grade_level,course_id')
+    .select('id,block_label,name,room,sort_order,grade_level')
     .not('block_label', 'is', null)
     .order('sort_order', { ascending: true, nullsFirst: false })
     .order('name', { ascending: true });
 
   if (error) {
-    console.log('[api/admin/classes] query error', {
-      message: error.message,
-      details: (error as any)?.details,
-      hint: (error as any)?.hint,
-      code: (error as any)?.code,
-    });
     return NextResponse.json(
-      {
-        step: 'select_classes',
-        error: error.message,
-        code: (error as any)?.code,
-        details: (error as any)?.details,
-        hint: (error as any)?.hint,
-        usingServiceRole,
-      },
+      { step: 'select_classes', error: error.message, usingServiceRole },
       { status: 400 }
     );
   }
-  return NextResponse.json({ rows: data ?? [], usingServiceRole });
+
+  // Fetch all course links for these classes
+  const classIds = (data ?? []).map((r: any) => r.id);
+  const { data: linkRows } = classIds.length
+    ? await db.from('class_course_links').select('class_id,course_id').in('class_id', classIds)
+    : { data: [] };
+
+  const courseIdsByClass: Record<string, string[]> = {};
+  for (const row of (linkRows ?? []) as Array<{ class_id: string; course_id: string }>) {
+    (courseIdsByClass[row.class_id] ??= []).push(row.course_id);
+  }
+
+  const rows = (data ?? []).map((r: any) => ({ ...r, course_ids: courseIdsByClass[r.id] ?? [] }));
+  return NextResponse.json({ rows, usingServiceRole });
 }
 
 export async function PATCH(req: Request) {
@@ -97,19 +97,34 @@ export async function PATCH(req: Request) {
   const id = String(body?.id ?? '').trim();
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
 
+  // Handle course link add/remove
+  if (body.link_course_id) {
+    const { error } = await db
+      .from('class_course_links')
+      .insert({ class_id: id, course_id: body.link_course_id });
+    if (error && error.code !== '23505') // ignore duplicate
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json({ ok: true });
+  }
+
+  if (body.unlink_course_id) {
+    const { error } = await db
+      .from('class_course_links')
+      .delete()
+      .eq('class_id', id)
+      .eq('course_id', body.unlink_course_id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json({ ok: true });
+  }
+
+  // Handle grade_level update
   const grade = body.grade_level;
   if (!(grade === null || typeof grade === 'number' || typeof grade === 'undefined')) {
     return NextResponse.json({ error: 'grade_level must be number|null' }, { status: 400 });
   }
 
-  const courseId = body.course_id;
-  if (!(courseId === null || typeof courseId === 'string' || typeof courseId === 'undefined')) {
-    return NextResponse.json({ error: 'course_id must be string|null' }, { status: 400 });
-  }
-
   const patch: any = {};
   if (typeof grade !== 'undefined') patch.grade_level = grade;
-  if (typeof courseId !== 'undefined') patch.course_id = courseId || null;
 
   if (Object.keys(patch).length === 0)
     return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
