@@ -46,18 +46,23 @@ async function getAuthedDb() {
   return { db, usingServiceRole } as const;
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   const authed = await getAuthedDb();
   if ('error' in authed) return authed.error;
 
   const { db, usingServiceRole } = authed;
 
-  const { data, error } = await db
+  const schoolYear = new URL(req.url).searchParams.get('school_year');
+
+  let query = db
     .from('classes')
-    .select('id,block_label,name,room,sort_order,grade_level')
+    .select('id,block_label,name,room,sort_order,grade_level,active_quarters,school_year')
     .not('block_label', 'is', null)
     .order('sort_order', { ascending: true, nullsFirst: false })
     .order('name', { ascending: true });
+  if (schoolYear) query = query.eq('school_year', schoolYear);
+
+  const { data, error } = await query;
 
   if (error) {
     return NextResponse.json(

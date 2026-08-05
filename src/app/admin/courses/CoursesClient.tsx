@@ -82,8 +82,8 @@ export default function CoursesClient() {
         body: JSON.stringify({ id: classId, link_course_id: courseId }),
       });
       setItems((prev) => prev.map((c) =>
-        c.id === classId && !c.course_ids.includes(courseId)
-          ? { ...c, course_ids: [...c.course_ids, courseId] }
+        c.id === classId && !(c.course_ids ?? []).includes(courseId)
+          ? { ...c, course_ids: [...(c.course_ids ?? []), courseId] }
           : c
       ));
     } finally {
@@ -101,7 +101,7 @@ export default function CoursesClient() {
       });
       setItems((prev) => prev.map((c) =>
         c.id === classId
-          ? { ...c, course_ids: c.course_ids.filter((id) => id !== courseId) }
+          ? { ...c, course_ids: (c.course_ids ?? []).filter((id) => id !== courseId) }
           : c
       ));
     } finally {
@@ -114,21 +114,10 @@ export default function CoursesClient() {
     setError(null);
 
     try {
-      const res = await fetch('/api/admin/classes');
+      const res = await fetch(`/api/admin/classes?school_year=${encodeURIComponent(schoolYear ?? '')}`);
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error ?? 'Failed to load classes');
-      // Filter to the selected school year client-side (API returns all years)
-      let rows = (json.rows ?? []) as CourseRow[];
-      if (schoolYear) {
-        // We need school_year on rows — fetch directly for filtering
-        const supabase = getSupabaseClient();
-        const { data: syData } = await supabase
-          .from('classes')
-          .select('id,school_year')
-          .in('id', rows.map((r) => r.id));
-        const syMap = Object.fromEntries((syData ?? []).map((r: any) => [r.id, r.school_year]));
-        rows = rows.filter((r) => (syMap[r.id] ?? null) === schoolYear || (syMap[r.id] ?? null) === null);
-      }
+      const rows = (json.rows ?? []) as CourseRow[];
       setItems(rows);
 
       const classIds = rows.map((r) => r.id);
@@ -168,7 +157,7 @@ export default function CoursesClient() {
   const filteredItems = useMemo(() => {
     if (quarterFilter === 'all') return items;
     return items.filter((c) => {
-      if (c.active_quarters === null) return true; // all year
+      if (!c.active_quarters) return true; // all year
       return c.active_quarters.includes(quarterFilter as number);
     });
   }, [items, quarterFilter]);
@@ -236,9 +225,10 @@ export default function CoursesClient() {
             </thead>
             <tbody>
               {filteredItems.map((c, i) => {
-                const linkedCourses = c.course_ids
+                const courseIds = c.course_ids ?? [];
+                const linkedCourses = courseIds
                   .map((cid) => hubCourses.find((hc) => hc.id === cid) ?? { id: cid, name: cid.slice(0, 8) + '…', block: null, school_year: schoolYear })
-                const unlinkedHubCourses = hubCourses.filter((hc) => !c.course_ids.includes(hc.id));
+                const unlinkedHubCourses = hubCourses.filter((hc) => !courseIds.includes(hc.id));
                 const isLinking = linkingId === c.id;
                 return (
                 <tr key={c.id} style={i % 2 === 0 ? styles.trEven : styles.trOdd}>
@@ -247,7 +237,7 @@ export default function CoursesClient() {
                   <td style={styles.td}>{c.room || '—'}</td>
                   <td style={styles.td}>
                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                      {c.active_quarters === null
+                      {!c.active_quarters
                         ? <span style={styles.quarterBadge}>All year</span>
                         : c.active_quarters.map((q) => <span key={q} style={styles.quarterBadge}>Q{q}</span>)}
                     </div>
