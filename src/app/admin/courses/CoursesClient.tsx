@@ -60,8 +60,16 @@ export default function CoursesClient() {
 
   async function loadHubCourses() {
     try {
-      const res = await fetch(`/api/courses?school_year=${encodeURIComponent(schoolYear)}`);
-      if (res.ok) setHubCourses((await res.json()) as HubCourse[]);
+      const supabase = getSupabaseClient();
+      const q = supabase
+        .from('courses')
+        .select('id,name,block,school_year')
+        .is('superseded_by', null)
+        .order('sort_order', { ascending: true, nullsFirst: false })
+        .order('name', { ascending: true });
+      if (schoolYear) q.eq('school_year', schoolYear);
+      const { data } = await q;
+      if (data) setHubCourses(data as HubCourse[]);
     } catch { /* non-critical */ }
   }
 
@@ -201,7 +209,7 @@ export default function CoursesClient() {
             </thead>
             <tbody>
               {filteredItems.map((c, i) => {
-                const linkedCourse = hubCourses.find((hc) => hc.id === c.course_id);
+                const linkedCourse = c.course_id ? (hubCourses.find((hc) => hc.id === c.course_id) ?? { id: c.course_id, name: c.course_id.slice(0, 8) + '…', block: null, school_year: schoolYear }) : null;
                 const isLinking = linkingId === c.id;
                 return (
                 <tr key={c.id} style={i % 2 === 0 ? styles.trEven : styles.trOdd}>
