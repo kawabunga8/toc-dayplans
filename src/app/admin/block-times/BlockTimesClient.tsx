@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { useDemo } from '@/app/admin/DemoContext';
-import { STUDENT_HUB_URL } from '@/lib/studentHub';
+import { COURSE_HUB_URL } from '@/lib/courseHub';
 
 type TemplateKey = 'mon_thu' | 'fri' | 'rotation' | 'quarters';
 
@@ -398,8 +398,8 @@ export default function BlockTimesClient() {
                 <div style={styles.sectionTitle}>School quarter dates</div>
                 <div style={styles.mutedSmall}>
                   Used to filter which courses appear on a given date. Owned and edited in{' '}
-                  <a href={`${STUDENT_HUB_URL}/quarters`} target="_blank" rel="noopener noreferrer" style={{ color: RCS.midBlue, fontWeight: 800 }}>
-                    Student Hub →
+                  <a href={`${COURSE_HUB_URL}/quarters`} target="_blank" rel="noopener noreferrer" style={{ color: RCS.midBlue, fontWeight: 800 }}>
+                    Course Hub →
                   </a>
                   — this page is read-only.
                 </div>

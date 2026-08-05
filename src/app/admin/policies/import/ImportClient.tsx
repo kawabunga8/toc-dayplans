@@ -106,7 +106,7 @@ export default function ImportClient() {
                         fontSize: 13, fontWeight: 700 }}>
             ⚠ {overrides} hand-edited rubric text{overrides === 1 ? '' : 's'} for{' '}
             {subject === 'all' ? 'these subjects' : subject} will be permanently discarded by this import.
-            Editing done in Policies or Student Hub is not preserved.
+            Editing done in Policies or Course Hub is not preserved.
           </div>
         )}
 

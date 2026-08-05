@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { useDemo } from '@/app/admin/DemoContext';
 import { useSchoolYear } from '@/app/admin/SchoolYearContext';
-import { STUDENT_HUB_URL } from '@/lib/studentHub';
+import { COURSE_HUB_URL } from '@/lib/courseHub';
 
 type Level = 'emerging' | 'developing' | 'proficient' | 'extending';
 
@@ -265,14 +265,14 @@ export default function PoliciesClient() {
       <section style={styles.card}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <div style={styles.sectionHeader}>Learning Standards</div>
-          <a href={`${STUDENT_HUB_URL}/standards`} target="_blank" rel="noopener noreferrer" style={styles.secondaryBtn}>
-            Edit in Student Hub →
+          <a href={`${COURSE_HUB_URL}/standards`} target="_blank" rel="noopener noreferrer" style={styles.secondaryBtn}>
+            Edit in Course Hub →
           </a>
         </div>
         <div style={{ marginBottom: 12, fontSize: 12, opacity: 0.75 }}>
-          Standards themselves — name, key, subject, versioning — are owned in Student Hub and can only be
+          Standards themselves — name, key, subject, versioning — are owned in Course Hub and can only be
           changed there. The <b>rubric text below is editable</b>, and it is shared: saving here also changes
-          what Student Hub and the Report Card Tool show. Your edit is stored alongside the original, so
+          what Course Hub and the Report Card Tool show. Your edit is stored alongside the original, so
           “Reset to original” always restores it.
         </div>
 

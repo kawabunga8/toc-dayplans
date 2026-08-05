@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { useSchoolYear } from '@/app/admin/SchoolYearContext';
-import { STUDENT_HUB_URL } from '@/lib/studentHub';
+import { COURSE_HUB_URL } from '@/lib/courseHub';
 
 type CourseRow = {
   id: string;
@@ -167,8 +167,8 @@ export default function CoursesClient() {
       <h1 style={styles.h1}>Courses / Rooms</h1>
       <p style={styles.muted}>
         Course name/grade/years are now owned by{' '}
-        <a href={`${STUDENT_HUB_URL}/courses`} target="_blank" rel="noopener noreferrer" style={{ color: RCS.midBlue, fontWeight: 800 }}>
-          Student Hub →
+        <a href={`${COURSE_HUB_URL}/courses`} target="_blank" rel="noopener noreferrer" style={{ color: RCS.midBlue, fontWeight: 800 }}>
+          Course Hub →
         </a>{' '}
         — those fields are read-only here. The Course Hub links below are editable and decide which
         courses each class draws its quarters from.

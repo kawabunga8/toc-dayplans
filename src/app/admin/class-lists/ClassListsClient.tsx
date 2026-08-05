@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { useDemo } from '@/app/admin/DemoContext';
 import { useSchoolYear } from '@/app/admin/SchoolYearContext';
-import { STUDENT_HUB_URL } from '@/lib/studentHub';
+import { COURSE_HUB_URL } from '@/lib/courseHub';
 
 type ClassRow = { id: string; name: string; room: string | null; block_label: string | null };
 
@@ -270,11 +270,11 @@ export default function ClassListsClient() {
       <h1 style={styles.h1}>Class lists</h1>
       <p style={styles.muted}>
         Select a course and edit its roster (adds/removes are saved immediately). Course and student records come from{' '}
-        <a href={STUDENT_HUB_URL} target="_blank" rel="noopener noreferrer" style={{ color: RCS.midBlue, fontWeight: 800 }}>
-          Student Hub →
+        <a href={COURSE_HUB_URL} target="_blank" rel="noopener noreferrer" style={{ color: RCS.midBlue, fontWeight: 800 }}>
+          Course Hub →
         </a>
-        {' '}— <a href={`${STUDENT_HUB_URL}/courses`} target="_blank" rel="noopener noreferrer" style={{ color: RCS.midBlue }}>courses</a>{' '}/{' '}
-        <a href={`${STUDENT_HUB_URL}/students`} target="_blank" rel="noopener noreferrer" style={{ color: RCS.midBlue }}>students</a>
+        {' '}— <a href={`${COURSE_HUB_URL}/courses`} target="_blank" rel="noopener noreferrer" style={{ color: RCS.midBlue }}>courses</a>{' '}/{' '}
+        <a href={`${COURSE_HUB_URL}/students`} target="_blank" rel="noopener noreferrer" style={{ color: RCS.midBlue }}>students</a>
       </p>
 
       <section style={styles.card}>
