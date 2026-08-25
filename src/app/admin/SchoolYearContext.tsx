@@ -1,14 +1,7 @@
 'use client';
 
 import { createContext, useContext, useState } from 'react';
-
-function currentSchoolYear(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth() + 1; // 1-based
-  const startYear = month >= 7 ? year : year - 1;
-  return `${startYear}-${String(startYear + 1).slice(2)}`;
-}
+import { schoolYearForDate } from '@/lib/appRules/dates';
 
 type SchoolYearContextValue = {
   schoolYear: string;
@@ -16,12 +9,12 @@ type SchoolYearContextValue = {
 };
 
 const SchoolYearContext = createContext<SchoolYearContextValue>({
-  schoolYear: currentSchoolYear(),
+  schoolYear: schoolYearForDate(),
   setSchoolYear: () => {},
 });
 
 export function SchoolYearProvider({ children }: { children: React.ReactNode }) {
-  const [schoolYear, setSchoolYear] = useState(currentSchoolYear);
+  const [schoolYear, setSchoolYear] = useState(() => schoolYearForDate());
   return (
     <SchoolYearContext.Provider value={{ schoolYear, setSchoolYear }}>
       {children}

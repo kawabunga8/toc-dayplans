@@ -62,6 +62,13 @@ and Band 12. Career Life Education is a course like any other. Only Flex, Lunch
 and Chapel draw from no course at all.
 _Avoid_: class, subject, offering
 
+**School year**:
+A year of school named for the calendar year it starts in, as "2026-27". It
+turns over in July, so an August date already belongs to the year about to
+start. The whole RCS suite uses this rule; where an app disagreed, the app was
+wrong.
+_Avoid_: academic year, year, term
+
 **Friday type**:
 Which of the two Friday rotations a date follows, day1 or day2. Required
 whenever a plan falls on a Friday; rotation is empty without it.

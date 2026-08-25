@@ -51,3 +51,26 @@ export function prevSchoolDayIsoFromIso(yyyyMmDd: string): string {
   const d = parseYyyyMmDdLocal(yyyyMmDd);
   return prevSchoolDayIso(d);
 }
+
+/**
+ * The school year a date falls in, as "2026-27".
+ *
+ * The year turns over in July, so August dates already belong to the year about
+ * to start rather than the one that just ended. This lived in two places with
+ * two different cutovers - the admin used July and the TOC view used September -
+ * so through August the same app answered the same question two ways. It exists
+ * once now; change it here or nowhere.
+ */
+export function schoolYearForDate(d: Date = new Date()): string {
+  const year = d.getFullYear();
+  const month = d.getMonth() + 1; // 1-based
+  const startYear = month >= 7 ? year : year - 1;
+  return `${startYear}-${String(startYear + 1).slice(2)}`;
+}
+
+/** The school year a `YYYY-MM-DD` string falls in. Parsed locally, not as UTC. */
+export function schoolYearForIso(yyyyMmDd: string): string {
+  const d = new Date(`${yyyyMmDd}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return schoolYearForDate();
+  return schoolYearForDate(d);
+}

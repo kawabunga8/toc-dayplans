@@ -2,7 +2,12 @@
 
 import { useMemo, useState, useEffect, useRef } from 'react';
 import RcsBanner from '@/components/RcsBanner';
-import { nextSchoolDayIso, nextSchoolDayIsoFromIso, prevSchoolDayIsoFromIso } from '@/lib/appRules/dates';
+import {
+  nextSchoolDayIso,
+  nextSchoolDayIsoFromIso,
+  prevSchoolDayIsoFromIso,
+  schoolYearForIso,
+} from '@/lib/appRules/dates';
 
 type PublicPlanSummary =
   | {
@@ -427,7 +432,7 @@ export default function TocClient({
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-end' }}>
             <span style={{ padding: '5px 10px', borderRadius: 8, border: `1px solid ${RCS.gold}`, background: RCS.paleGold, color: RCS.deepNavy, fontWeight: 900, fontSize: 13 }}>
-              {currentSchoolYear()}
+              {schoolYearForIso(selectedDate)}
             </span>
             <div style={styles.navBtns}>
               <a href="/" style={styles.secondaryLink}>
@@ -1041,13 +1046,6 @@ const RCS = {
   textDark: '#1A1A1A',
 } as const;
 
-function currentSchoolYear(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth() + 1;
-  const startYear = month >= 9 ? year : year - 1;
-  return `${startYear}-${String(startYear + 1).slice(2)}`;
-}
 
 const styles: Record<string, React.CSSProperties> = {
   shell: { minHeight: '100vh', background: RCS.white, color: RCS.textDark, fontFamily: 'system-ui' },
