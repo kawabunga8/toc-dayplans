@@ -41,6 +41,27 @@ the class timetable rather than written by staff, so it is true whether or not
 a plan has been written, and is shown to TOCs even for a draft.
 _Avoid_: skeleton, structure, schedule (when you mean this specifically)
 
+**TOC template**:
+Standing instructions for a kind of class: the routines, policies and framing a
+TOC needs whichever day they walk in. It belongs to the kind of teaching, not to
+a course and not to a block: two sections of one course share a template, a
+class spanning several grades points at one, and a class with no course at all
+points at one too. A new class is expected to point at an existing template
+rather than start its own.
+_Avoid_: class template, course template, block template, default plan
+
+**Class**:
+A group you teach in one block, in one room. Two classes may be the same course:
+Biblical Perspectives 10 runs in both Block B and Block C.
+_Avoid_: section, course (when you mean the group), block (when you mean this)
+
+**Course**:
+A course as Student Hub defines it, with its name, grade and years. A class
+draws from one or more of them: Band 10-12 is one class drawing Band 10, Band 11
+and Band 12. Career Life Education is a course like any other. Only Flex, Lunch
+and Chapel draw from no course at all.
+_Avoid_: class, subject, offering
+
 **Friday type**:
 Which of the two Friday rotations a date follows, day1 or day2. Required
 whenever a plan falls on a Friday; rotation is empty without it.
