@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { getSupabaseClient } from '@/lib/supabaseClient';
+import { templateForClass } from '@/lib/appRules/templates';
 
 type PlanMode = 'lesson_flow' | 'activity_options';
 
@@ -91,13 +92,11 @@ async function ensureTocBlockPlanExists(dayPlanBlockId: string, classId: string)
   if (existing) return existing as TocBlockPlanRow;
 
   // template (optional)
-  const { data: tpl, error: tplErr } = await supabase
-    .from('class_toc_templates')
-    .select('*')
-    .eq('class_id', classId)
-    .eq('is_active', true)
-    .maybeSingle();
-  if (tplErr) throw tplErr;
+  const tpl = await templateForClass<Record<string, unknown>>(
+    supabase,
+    classId,
+    '*'
+  );
 
   const template = tpl as TemplateRow | null;
 

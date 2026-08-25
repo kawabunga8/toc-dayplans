@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
+import { templateForClass } from '@/lib/appRules/templates';
 
 export const runtime = 'nodejs';
 
@@ -198,15 +199,7 @@ export async function POST(req: Request) {
   // 3) Apply (append) lesson flow override to the toc_block_plan for that block (seed template on create)
   const now = new Date().toISOString();
 
-  const { data: tpl, error: tplErr } = await adminDb
-    .from('class_toc_templates')
-    .select('id,plan_mode')
-    .eq('class_id', cls.id)
-    .eq('is_active', true)
-    .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (tplErr) return NextResponse.json({ error: tplErr.message }, { status: 400 });
+  const tpl = await templateForClass<{ id: string; plan_mode: string }>(adminDb, cls.id, 'id,plan_mode');
 
   const { data: upserted, error: upErr } = await adminDb
     .from('toc_block_plans')

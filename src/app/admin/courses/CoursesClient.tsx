@@ -123,18 +123,37 @@ export default function CoursesClient() {
       const classIds = rows.map((r) => r.id);
       if (classIds.length > 0) {
         const supabase = getSupabaseClient();
-        const { data: tplRows, error: tplErr } = await supabase
-          .from('class_toc_templates')
-          .select('class_id,default_tags')
-          .eq('is_active', true)
-          .in('class_id', classIds);
+        // Classes point at shared templates (ADR-0005), so resolve class ->
+        // template first and fetch each template once. Several classes here will
+        // resolve to the same one: both Bible blocks, all three Computers.
+        const { data: classRows, error: clsErr } = await supabase
+          .from('classes')
+          .select('id,toc_template_id')
+          .in('id', classIds);
+        if (clsErr) throw clsErr;
+
+        const templateIdByClass: Record<string, string> = {};
+        for (const r of (classRows ?? []) as Array<{ id: string; toc_template_id: string | null }>) {
+          if (r.toc_template_id) templateIdByClass[String(r.id)] = r.toc_template_id;
+        }
+
+        const templateIds = Array.from(new Set(Object.values(templateIdByClass)));
+        const { data: tplRows, error: tplErr } = templateIds.length
+          ? await supabase.from('class_toc_templates').select('id,default_tags').in('id', templateIds)
+          : { data: [] as Array<Record<string, unknown>>, error: null };
         if (tplErr) throw tplErr;
 
+        const tagsByTemplate: Record<string, string[]> = {};
+        for (const r of (tplRows ?? []) as Array<Record<string, unknown>>) {
+          tagsByTemplate[String(r.id)] = Array.isArray(r.default_tags)
+            ? (r.default_tags as unknown[]).map((t) => String(t).trim()).filter(Boolean)
+            : [];
+        }
+
         const map: Record<string, string[]> = {};
-        for (const r of (tplRows ?? []) as any[]) {
-          const cid = String(r.class_id);
-          const tags = Array.isArray(r.default_tags) ? (r.default_tags as string[]).map((t) => String(t).trim()).filter(Boolean) : [];
-          map[cid] = tags;
+        for (const cid of classIds) {
+          const tid = templateIdByClass[String(cid)];
+          map[String(cid)] = tid ? tagsByTemplate[tid] ?? [] : [];
         }
         setTagsByClassId(map);
       } else {

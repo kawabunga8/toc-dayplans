@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabaseClient';
-import { ensureDefaultTemplateForClass } from '@/lib/appRules/templates';
+import { ensureDefaultTemplateForClass, templateForClass } from '@/lib/appRules/templates';
 import { useDemo } from '@/app/admin/DemoContext';
 import type { TocSnippetRow } from '@/lib/tocSnippetTypes';
 
@@ -272,15 +272,11 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
       if (planErr) throw planErr;
 
       if (!plan) {
-        const { data: tpl, error: tplErr } = await supabase
-          .from('class_toc_templates')
-          .select('id,plan_mode,note_to_toc')
-          .eq('class_id', classId)
-          .eq('is_active', true)
-          .order('updated_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        if (tplErr) throw tplErr;
+        const tpl = await templateForClass<Record<string, unknown>>(
+          supabase,
+          classId,
+          'id,plan_mode,note_to_toc'
+        );
 
         const inferredMode: PlanMode = (tpl?.plan_mode as any) ?? 'lesson_flow';
 
@@ -310,15 +306,11 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
       // 2) Ensure we point at the latest active template for this class.
       // If a newer template exists, we should use it as the source immediately
       // (day overrides are stored separately and remain intact).
-      const { data: latestTpl, error: latestErr } = await supabase
-        .from('class_toc_templates')
-        .select('id,plan_mode,note_to_toc')
-        .eq('class_id', classId)
-        .eq('is_active', true)
-        .order('updated_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (latestErr) throw latestErr;
+      const latestTpl = await templateForClass<{ id: string; plan_mode: string; note_to_toc: string }>(
+        supabase,
+        classId,
+        'id,plan_mode,note_to_toc'
+      );
 
       if (latestTpl?.id && latestTpl.id !== plan.template_id) {
         await supabase.from('toc_block_plans').update({ template_id: latestTpl.id }).eq('id', plan.id);
@@ -525,15 +517,8 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
     // Always prefer the latest active template for this class (in case it changed since plan creation).
     let effectiveTplId = tplId ?? plan.template_id ?? null;
     try {
-      const { data: latestTpl, error: latestErr } = await supabase
-        .from('class_toc_templates')
-        .select('id')
-        .eq('class_id', classId)
-        .eq('is_active', true)
-        .order('updated_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (!latestErr && latestTpl?.id) effectiveTplId = latestTpl.id;
+      const latestTpl = await templateForClass<{ id: string }>(supabase, classId, 'id');
+      if (latestTpl?.id) effectiveTplId = latestTpl.id;
     } catch {
       // ignore
     }

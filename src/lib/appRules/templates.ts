@@ -192,15 +192,54 @@ export function inferTemplateDefaults(blockLabel: string | null) {
   };
 }
 
-export async function ensureDefaultTemplateForClass(supabase: ReturnType<typeof getSupabaseClient>, classId: string) {
-  // If a template exists (even inactive), prefer it.
-  const { data: anyTpl, error: anyErr } = await supabase
-    .from('class_toc_templates')
-    .select('*')
-    .eq('class_id', classId)
-    .order('updated_at', { ascending: false })
-    .limit(1)
+/**
+ * A class points at a TOC template rather than owning one, because templates are
+ * shared: two sections of a course use the same template, and so do the several
+ * grades taught together in one block (ADR-0005).
+ *
+ * Everything that needs a class's template goes through here. Looking it up by
+ * class_id is what let Block B and Block C drift apart, and class_id carries only
+ * a non-unique index, so those lookups could return two rows and throw.
+ */
+export async function templateIdForClass(
+  supabase: ReturnType<typeof getSupabaseClient>,
+  classId: string
+): Promise<string | null> {
+  if (!classId) return null;
+  const { data, error } = await supabase
+    .from('classes')
+    .select('toc_template_id')
+    .eq('id', classId)
     .maybeSingle();
+  if (error) throw error;
+  return ((data as { toc_template_id?: string | null } | null)?.toc_template_id ?? null) || null;
+}
+
+/** The template a class points at, selecting only the columns asked for. */
+export async function templateForClass<T = Record<string, unknown>>(
+  supabase: ReturnType<typeof getSupabaseClient>,
+  classId: string,
+  columns = '*'
+): Promise<T | null> {
+  const templateId = await templateIdForClass(supabase, classId);
+  if (!templateId) return null;
+  const { data, error } = await supabase
+    .from('class_toc_templates')
+    .select(columns)
+    .eq('id', templateId)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as T | null) ?? null;
+}
+
+export async function ensureDefaultTemplateForClass(supabase: ReturnType<typeof getSupabaseClient>, classId: string) {
+  // Follow the pointer first. A shared template may belong to another class
+  // entirely, so this must not fall back to searching by class_id: that is what
+  // creates a second template for a class that already has one.
+  const existingId = await templateIdForClass(supabase, classId);
+  const { data: anyTpl, error: anyErr } = existingId
+    ? await supabase.from('class_toc_templates').select('*').eq('id', existingId).maybeSingle()
+    : { data: null, error: null };
   if (anyErr) throw anyErr;
   if (anyTpl) {
     // Ensure it's active
@@ -239,6 +278,16 @@ export async function ensureDefaultTemplateForClass(supabase: ReturnType<typeof 
   if (tplErr) throw tplErr;
 
   const templateId = (tpl as any).id as string;
+
+  // The class now points at what was just created. Without this the class has a
+  // template it cannot find, and the next call creates another one.
+  {
+    const { error } = await supabase
+      .from('classes')
+      .update({ toc_template_id: templateId })
+      .eq('id', classId);
+    if (error) throw error;
+  }
 
   // Children
   if (d.openingRoutine.length) {

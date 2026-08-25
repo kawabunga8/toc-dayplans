@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { useDemo } from '@/app/admin/DemoContext';
-import { inferTemplateDefaults } from '@/lib/appRules/templates';
+import { inferTemplateDefaults, templateForClass } from '@/lib/appRules/templates';
 
 type PlanMode = 'lesson_flow' | 'activity_options';
 
@@ -165,13 +165,11 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
         setKlass(classData as ClassRow);
 
         // 2) active template for class
-        const { data: tpl, error: tplErr } = await supabase
-          .from('class_toc_templates')
-          .select('*')
-          .eq('class_id', effectiveClassId)
-          .eq('is_active', true)
-          .maybeSingle();
-        if (tplErr) throw tplErr;
+        const tpl = await templateForClass<Record<string, unknown>>(
+          supabase,
+          effectiveClassId,
+          '*'
+        );
 
         if (cancelled) return;
 
@@ -485,6 +483,15 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
         if (error) throw error;
         templateId = (data as any).id;
         setTemplate(data as TemplateRow);
+
+        // Point the class at what was just created. A class finds its template
+        // through this pointer now (ADR-0005), so without it the template exists
+        // but nothing can reach it.
+        const { error: pointErr } = await supabase
+          .from('classes')
+          .update({ toc_template_id: templateId })
+          .eq('id', effectiveClassId);
+        if (pointErr) throw pointErr;
       }
 
       // For simplicity + provenance later, wipe and reinsert child rows.

@@ -3,6 +3,7 @@ import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
 import crypto from 'node:crypto';
 import { DateTime } from 'luxon';
+import { templateForClass } from '@/lib/appRules/templates';
 
 export const runtime = 'nodejs';
 
@@ -64,15 +65,7 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
       const classId = String(b.class_id);
 
       // Latest active template for this class (if any)
-      const { data: tpl, error: tplErr } = await supabase
-        .from('class_toc_templates')
-        .select('id,plan_mode')
-        .eq('class_id', classId)
-        .eq('is_active', true)
-        .order('updated_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (tplErr) return NextResponse.json({ error: tplErr.message }, { status: 400 });
+      const tpl = await templateForClass<{ id: string; plan_mode: string }>(supabase, classId, 'id,plan_mode');
 
       // Upsert toc_block_plans for this day_plan_block
       const { data: tbp, error: upErr } = await supabase

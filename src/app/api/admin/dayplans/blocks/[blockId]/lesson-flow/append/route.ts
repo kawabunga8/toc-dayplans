@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
+import { templateForClass } from '@/lib/appRules/templates';
 
 export const runtime = 'nodejs';
 
@@ -74,15 +75,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ blockId: strin
   const now = new Date().toISOString();
 
   const classId = String((blk as any).class_id);
-  const { data: tpl, error: tplErr } = await adminDb
-    .from('class_toc_templates')
-    .select('id,plan_mode')
-    .eq('class_id', classId)
-    .eq('is_active', true)
-    .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (tplErr) return NextResponse.json({ error: tplErr.message }, { status: 400 });
+  const tpl = await templateForClass<{ id: string; plan_mode: string }>(adminDb, classId, 'id,plan_mode');
 
   const { data: upserted, error: upErr } = await adminDb
     .from('toc_block_plans')

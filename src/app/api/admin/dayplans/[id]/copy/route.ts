@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
+import { templateForClass } from '@/lib/appRules/templates';
 
 export const runtime = 'nodejs';
 
@@ -227,15 +228,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       .maybeSingle();
     const tgtClassId = (tgtBlock as any)?.class_id ?? (srcBlock as any).class_id;
 
-    // Get active template for target class (for template_id)
-    const { data: tpl } = await adminDb
-      .from('class_toc_templates')
-      .select('id')
-      .eq('class_id', tgtClassId)
-      .eq('is_active', true)
-      .order('updated_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    // The template the target class points at (for template_id)
+    const tpl = await templateForClass<{ id: string }>(adminDb, tgtClassId, 'id');
 
     const now = new Date().toISOString();
     const { error: upsertErr } = await adminDb

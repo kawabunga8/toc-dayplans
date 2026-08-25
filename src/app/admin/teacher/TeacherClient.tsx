@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { TEACHER_ROLES, buildSection1FromFields, STANDING_GUARDRAILS } from '@/lib/teacherSuperprompt/superprompt';
+import { templateForClass } from '@/lib/appRules/templates';
 
 type RoleId = 1 | 2 | 3 | 4 | 5 | 6;
 
@@ -328,19 +329,14 @@ export default function TeacherClient() {
       try {
         if (selectedClass?.id) {
           const supabase = getSupabaseClient();
-          const { data, error } = await supabase
-            .from('class_toc_templates')
-            .select('default_tags')
-            .eq('class_id', selectedClass.id)
-            .eq('is_active', true)
-            .order('updated_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-          if (!error) {
-            templateTags = Array.isArray((data as any)?.default_tags)
-              ? ((data as any).default_tags as any[]).map((t) => String(t).trim()).filter(Boolean)
-              : [];
-          }
+          const data = await templateForClass<{ default_tags: unknown }>(
+            supabase,
+            selectedClass.id,
+            'default_tags'
+          );
+          templateTags = Array.isArray(data?.default_tags)
+            ? (data.default_tags as unknown[]).map((t) => String(t).trim()).filter(Boolean)
+            : [];
         }
       } catch {
         // ignore
