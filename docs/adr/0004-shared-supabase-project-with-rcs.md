@@ -26,9 +26,32 @@ and `CLAUDE.md` currently tells you to do exactly that after deploying. Two
 separate reasons:
 
 It declares `create table if not exists students`, `classes` and `enrolments`.
-Those are Student Hub's tables. On the live database the guard makes them no-ops,
-which is the only reason this has not caused damage, but the file reads as though
-this app owns data it merely borrows.
+On the live database the guard makes them no-ops, which is the only reason this
+has not caused damage.
+
+Ownership is muddier than "Student Hub owns it", and worth stating exactly, by
+which app actually writes each table:
+
+| Table | Written by |
+| --- | --- |
+| `students` | Student Hub, this app, the Report Card Tool |
+| `courses` | Student Hub, the Report Card Tool |
+| `enrolments` | Student Hub, this app, the Report Card Tool |
+| `learning_standards` | Student Hub, this app, the Report Card Tool |
+| `school_quarters` | Student Hub, this app |
+| `classes` | **this app only** - Student Hub merely reads it |
+| `student_marks`, `student_notes` | Student Hub |
+
+The intended rule is that data flows from Student Hub and everything else reads.
+Five of the eight shared tables have more than one writer, so the rule is a goal
+rather than a description. `classes` is the inversion: Student Hub's own
+documentation claims to manage it, and it is the one table Student Hub never
+writes.
+
+`classes` is also scheduled to disappear. CourseBoard's `ARCHITECTURE.md` retires
+it in favour of `courses` plus a teaching group, which is the fix for this app
+listing every class from every year: a class has no school year, so the TOC week
+view shows blocks that no longer exist.
 
 It also holds the superseded Rule A body of `get_public_plans_for_week`, so
 running it would overwrite the publish-gated function that ADR-0001 requires and
