@@ -39,6 +39,7 @@ type AdvancedPayload = {
 
 type TemplateRow = {
   id: string;
+  name: string | null;
   class_id: string;
   is_active: boolean;
   teacher_name: string;
@@ -89,6 +90,9 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
 
   const [klass, setKlass] = useState<ClassRow | null>(null);
   const [template, setTemplate] = useState<TemplateRow | null>(null);
+  // Every class pointing at this template, not just the one we arrived from.
+  // Editing here changes the plan a TOC reads in all of them.
+  const [sharedWith, setSharedWith] = useState<ClassRow[]>([]);
 
   // top-level fields (these mirror template, but are editable even when template is null)
   const [teacherName, setTeacherName] = useState('');
@@ -133,11 +137,19 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
       .map((x) => x.trim())
       .filter(Boolean);
 
+  // Name the template, not the class we arrived from. A template is shared, so
+  // "Block B — TOC Template" would claim an ownership that does not exist and
+  // hide the fact that saving also rewrites Block C.
   const title = useMemo(() => {
+    const name = template?.name?.trim();
+    if (name) return `${name} — TOC Template`;
     if (!klass) return 'TOC Template';
     const block = klass.block_label ? `Block ${klass.block_label} — ` : '';
     return `${block}${klass.name} — TOC Template`;
-  }, [klass]);
+  }, [template, klass]);
+
+  const classLabel = (c: ClassRow) =>
+    c.block_label ? `Block ${c.block_label} (${c.name})` : c.name;
 
   useEffect(() => {
     let cancelled = false;
@@ -176,6 +188,7 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
         if (!tpl) {
           // blank create form (with sensible defaults)
           setTemplate(null);
+          setSharedWith([]);
 
           // 1) Default teacher name (new templates only)
           setTeacherName('Mr. Shingo Kawamura');
@@ -261,6 +274,16 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
 
         const tplRow = tpl as TemplateRow;
         setTemplate(tplRow);
+
+        // Who else uses this. Shown before anything is edited, because saving
+        // here rewrites what a TOC reads in every one of them.
+        const { data: sharing, error: sharingErr } = await supabase
+          .from('classes')
+          .select('id,name,room,block_label')
+          .eq('toc_template_id', tplRow.id)
+          .order('block_label', { ascending: true });
+        if (sharingErr) throw sharingErr;
+        if (!cancelled) setSharedWith((sharing ?? []) as ClassRow[]);
 
         setTeacherName(tplRow.teacher_name ?? '');
         setTaName(tplRow.ta_name ?? '');
@@ -653,6 +676,19 @@ export default function TocTemplateClient({ classId }: { classId?: string }) {
               </span>
             </div>
           )}
+
+          {sharedWith.length > 1 ? (
+            <div style={styles.sharedNotice}>
+              <div style={{ fontWeight: 900, color: RCS.deepNavy }}>
+                Shared by {sharedWith.length} classes
+              </div>
+              <div style={{ marginTop: 4, fontSize: 13 }}>
+                Saving changes what a TOC reads in {sharedWith.map(classLabel).join(', ')}.
+              </div>
+            </div>
+          ) : sharedWith.length === 1 ? (
+            <div style={styles.mutedSmall}>Used only by {classLabel(sharedWith[0])}.</div>
+          ) : null}
         </div>
 
         <Link href="/admin/courses" style={styles.secondaryLink}>
@@ -1335,6 +1371,14 @@ const styles: Record<string, React.CSSProperties> = {
   },
   h1: { margin: 0, color: RCS.deepNavy },
   subhead: { marginTop: 6, opacity: 0.9 },
+  sharedNotice: {
+    marginTop: 10,
+    padding: '10px 12px',
+    border: `1px solid ${RCS.gold}`,
+    borderRadius: 8,
+    background: RCS.paleGold,
+    maxWidth: 720,
+  } as React.CSSProperties,
   mutedSmall: { opacity: 0.85, fontSize: 12, marginTop: 6 },
   card: {
     border: `1px solid ${RCS.deepNavy}`,

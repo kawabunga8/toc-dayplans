@@ -33,6 +33,10 @@ export default function CoursesClient() {
   const { schoolYear } = useSchoolYear();
   const [items, setItems] = useState<CourseRow[]>([]);
   const [tagsByClassId, setTagsByClassId] = useState<Record<string, string[]>>({});
+  // Which template each class points at. Several classes share one, so the name
+  // is shown here: it is the only place the sharing is visible before you open
+  // the template and start editing it.
+  const [templateNameByClassId, setTemplateNameByClassId] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<Status>('loading');
   const [error, setError] = useState<string | null>(null);
   const [quarterFilter, setQuarterFilter] = useState<QuarterFilter>('all');
@@ -139,25 +143,32 @@ export default function CoursesClient() {
 
         const templateIds = Array.from(new Set(Object.values(templateIdByClass)));
         const { data: tplRows, error: tplErr } = templateIds.length
-          ? await supabase.from('class_toc_templates').select('id,default_tags').in('id', templateIds)
+          ? await supabase.from('class_toc_templates').select('id,name,default_tags').in('id', templateIds)
           : { data: [] as Array<Record<string, unknown>>, error: null };
         if (tplErr) throw tplErr;
 
         const tagsByTemplate: Record<string, string[]> = {};
+        const nameByTemplate: Record<string, string> = {};
         for (const r of (tplRows ?? []) as Array<Record<string, unknown>>) {
           tagsByTemplate[String(r.id)] = Array.isArray(r.default_tags)
             ? (r.default_tags as unknown[]).map((t) => String(t).trim()).filter(Boolean)
             : [];
+          const nm = typeof r.name === 'string' ? r.name.trim() : '';
+          if (nm) nameByTemplate[String(r.id)] = nm;
         }
 
         const map: Record<string, string[]> = {};
+        const names: Record<string, string> = {};
         for (const cid of classIds) {
           const tid = templateIdByClass[String(cid)];
           map[String(cid)] = tid ? tagsByTemplate[tid] ?? [] : [];
+          if (tid && nameByTemplate[tid]) names[String(cid)] = nameByTemplate[tid];
         }
         setTagsByClassId(map);
+        setTemplateNameByClassId(names);
       } else {
         setTagsByClassId({});
+        setTemplateNameByClassId({});
       }
 
       setStatus('idle');
@@ -297,6 +308,11 @@ export default function CoursesClient() {
                     <Link href={`/admin/courses/${c.id}/toc-template`} style={styles.primaryLink}>
                       TOC Template
                     </Link>
+                    {templateNameByClassId[c.id] ? (
+                      <div style={{ fontSize: 11, opacity: 0.7, marginTop: 4 }}>
+                        {templateNameByClassId[c.id]}
+                      </div>
+                    ) : null}
                   </td>
                 </tr>
                 );
