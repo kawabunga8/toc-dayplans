@@ -50,8 +50,18 @@ the template tree is self-contained and only `class_toc_templates.class_id`
 moves. The table names still say `class_`, which is now inaccurate; renaming
 them was judged more disruptive than the inaccuracy.
 
+The Band template is Block B's. `inferTemplateDefaults()` mapped block letters to
+kinds of teaching, and its mapping had gone stale: it believed block B was music,
+so it generated a complete band template - warm-up routine, rehearsal note, music
+activity options - into Biblical Perspectives 10. Block D, the actual Band class,
+matched no branch and received the generic default. The two are therefore
+swapped: Block D takes the band content, and Blocks B and C share Block C's
+Bible template, which is correct precisely because it fell through to the
+generic default. Nothing is rewritten by hand; the content was already right,
+only attached to the wrong room.
+
 Merging existing templates destroys content: three separate Computers templates
-become one, and one of the two Bible templates is discarded. That is a content
+become one, and Block D's generic template is discarded. That is a content
 decision, made once, and it needs a database backup first - in a project shared
 with the Report Card Tool (ADR-0004).
 

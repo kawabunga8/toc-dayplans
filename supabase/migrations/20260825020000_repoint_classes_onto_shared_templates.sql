@@ -14,8 +14,22 @@
 do $$
 declare
   bible_tid uuid;
+  band_tid uuid;
   computers_tid uuid;
 begin
+  -- Block B's template is captured BEFORE anything repoints Block B, because it
+  -- becomes the Band template. inferTemplateDefaults() mapped block 'B' to music
+  -- and generated a full band template into a Bible class: warm-up routine,
+  -- rehearsal note and music activity options. The content is good, it is simply
+  -- attached to the wrong room. Block D - the actual Band class - matched no
+  -- branch and got the generic default instead, so the two are swapped rather
+  -- than one being written and the other discarded.
+  select c.toc_template_id into band_tid
+  from classes c
+  where upper(c.block_label) = 'B' and c.toc_template_id is not null
+  order by c.sort_order nulls last, c.id
+  limit 1;
+
   -- Bible: blocks B and C are two sections of Biblical Perspectives 10. C's
   -- template is the good one; B's was generated as music by the old
   -- inferTemplateDefaults() block-letter mapping and tells a TOC to keep a
@@ -31,6 +45,14 @@ begin
     where upper(block_label) in ('B', 'C');
     update class_toc_templates set name = 'Bible', updated_at = now()
     where id = bible_tid;
+  end if;
+
+  -- Band: Block D takes over the template that was generated for Block B.
+  if band_tid is not null and band_tid is distinct from bible_tid then
+    update classes set toc_template_id = band_tid
+    where upper(block_label) = 'D';
+    update class_toc_templates set name = 'Band', updated_at = now()
+    where id = band_tid;
   end if;
 
   -- Computers: Computer Programming 11/12 in block A, and both Computer
@@ -56,7 +78,6 @@ update class_toc_templates t
 set name = v.template_name, updated_at = now()
 from classes c
 join (values
-  ('D',      'Band'),
   ('F',      'Worship Leadership'),
   ('CLE',    'Career Life Education'),
   ('FLEX',   'Flex'),
@@ -64,3 +85,12 @@ join (values
   ('LUNCH',  'Lunch')
 ) as v(block, template_name) on upper(c.block_label) = v.block
 where c.toc_template_id = t.id;
+
+-- Safety net: if Block B had no template to donate, Block D keeps its own and
+-- still needs naming.
+update class_toc_templates t
+set name = 'Band', updated_at = now()
+from classes c
+where c.toc_template_id = t.id
+  and upper(c.block_label) = 'D'
+  and (t.name is null or t.name <> 'Band');
