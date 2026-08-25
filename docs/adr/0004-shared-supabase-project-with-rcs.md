@@ -15,9 +15,11 @@ tables it consumes but does not own.
 A second schema, `rcs`, is used by the Report Card Tool, which reaches it
 explicitly with `supabase.schema('rcs')`. This app never leaves `public`.
 
-The authoritative cross-app map is `ARCHITECTURE.md` in the CourseBoard repo,
-which tracks the shared model and the known problems in it. Prefer it over
-anything inferred from this repo alone; where the two disagree, it wins.
+The authoritative cross-app map is `ARCHITECTURE.md` in the Course Hub repo,
+which tracks the shared model and the known problems in it. It lives there
+because Course Hub owns the data; it was previously in CourseBoard, which reads
+the database and never writes to it. Prefer it over anything inferred from this
+repo alone; where the two disagree, it wins.
 
 ## Consequences
 
@@ -48,7 +50,7 @@ rather than a description. `classes` is the inversion: Student Hub's own
 documentation claims to manage it, and it is the one table Student Hub never
 writes.
 
-`classes` is also scheduled to disappear. CourseBoard's `ARCHITECTURE.md` retires
+`classes` is also scheduled to disappear. Course Hub's `ARCHITECTURE.md` retires
 it in favour of `courses` plus a teaching group, which is the fix for this app
 listing every class from every year: a class has no school year, so the TOC week
 view shows blocks that no longer exist.
