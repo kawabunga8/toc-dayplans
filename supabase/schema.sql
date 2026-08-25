@@ -2654,7 +2654,9 @@ revoke all on function get_public_classes() from public;
 grant execute on function get_public_classes() to anon;
 
 -- Week calendar payload: published plans for Mon–Fri of the given week_start (Monday)
-create or replace function get_public_plans_for_week(week_start date)
+-- Publishing gates whether a TOC may read a plan (ADR-0001). Schema-qualified
+-- so this can never be created into `rcs` by a stray search_path (ADR-0004).
+create or replace function public.get_public_plans_for_week(week_start date)
 returns jsonb
 language plpgsql
 security definer
@@ -2678,19 +2680,21 @@ begin
       'slot', p.slot,
       'title', p.title,
       'notes', p.notes,
-      'share_expires_at', p.share_expires_at
+      'share_expires_at', p.share_expires_at,
+      'published_at', p.published_at
     ) order by p.plan_date asc, p.slot asc), '[]'::jsonb)
   into plans
   from day_plans p
-  where p.trashed_at is null
+  where p.visibility = 'link'
+    and p.trashed_at is null
     and p.plan_date between ws and we;
 
   return plans;
 end;
 $$;
 
-revoke all on function get_public_plans_for_week(date) from public;
-grant execute on function get_public_plans_for_week(date) to anon;
+revoke all on function public.get_public_plans_for_week(date) from public;
+grant execute on function public.get_public_plans_for_week(date) to anon;
 
 -- learning_standards
 drop policy if exists "learning_standards_staff_all" on learning_standards;

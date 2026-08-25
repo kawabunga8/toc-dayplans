@@ -4,15 +4,31 @@ import { useMemo, useState, useEffect, useRef } from 'react';
 import RcsBanner from '@/components/RcsBanner';
 import { nextSchoolDayIso, nextSchoolDayIsoFromIso, prevSchoolDayIsoFromIso } from '@/lib/appRules/dates';
 
-type PublicPlanSummary = {
-  id: string;
-  plan_date: string; // YYYY-MM-DD
-  slot: string;
-  title: string;
-  // notes may be absent in older deployments / older RPC results; we hydrate on-demand.
-  notes?: string | null;
-  share_expires_at: string | null;
-};
+type PublicPlanSummary =
+  | {
+      state: 'published';
+      id: string;
+      plan_date: string; // YYYY-MM-DD
+      slot: string;
+      title: string;
+      // May be absent in older deployments / older RPC results; hydrated on demand.
+      notes?: string | null;
+      share_expires_at: string | null;
+      published_at?: string | null;
+    }
+  | {
+      // A draft is existence and nothing else. It has no id because there is
+      // nothing a TOC may open, and no content because that is staff's until
+      // they publish. See ADR-0003.
+      state: 'draft';
+      id: null;
+      plan_date: string;
+      slot: string;
+      title: string;
+      notes?: null;
+      share_expires_at: null;
+      published_at?: null;
+    };
 
 type PublicClass = {
   id: string;
@@ -55,6 +71,27 @@ type PublicPlanDetail = {
     attendance_note?: string;
   };
 };
+
+// Rendered client-side only (suppressHydrationWarning at the call site): the
+// server and the reader are not necessarily in the same timezone, and the
+// reader's is the one that matters.
+function formatPublishTime(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const h = d.getHours();
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${days[d.getDay()]} ${h12}:${String(d.getMinutes()).padStart(2, '0')}${h < 12 ? 'am' : 'pm'}`;
+}
+
+// "No plan" means nothing exists and there is nothing to wait for. It must stay
+// distinguishable from a day whose plans are still coming.
+function summariseDay(published: number, coming: number) {
+  const parts: string[] = [];
+  if (published > 0) parts.push(`${published} plan${published === 1 ? '' : 's'}`);
+  if (coming > 0) parts.push(`${coming} coming`);
+  return parts.length > 0 ? parts.join(' \u00b7 ') : 'No plan';
+}
 
 export default function TocClient({
   weekStart,
@@ -181,7 +218,8 @@ export default function TocClient({
     return m;
   }, [plans]);
 
-  const publishedPlansBySlot = useMemo(() => {
+  // Holds published plans and drafts alike: the caller decides what each may show.
+  const plansBySlot = useMemo(() => {
     const m = new Map<string, PublicPlanSummary>();
     for (const p of plansByDate.get(selectedDate) ?? []) {
       m.set(String(p.slot).toUpperCase(), p);
@@ -217,7 +255,9 @@ export default function TocClient({
 
   // Auto-hydrate notes for all published plans on the selected date (so Notes column is useful at a glance).
   useEffect(() => {
-    const ids = (plansByDate.get(selectedDate) ?? []).map((p) => p.id).filter(Boolean);
+    const ids = (plansByDate.get(selectedDate) ?? [])
+      .map((p) => p.id)
+      .filter((id): id is string => !!id);
     const missing = ids.filter((id) => typeof notesByPlanId[id] === 'undefined');
     if (missing.length === 0) return;
 
@@ -499,7 +539,10 @@ export default function TocClient({
 
             <section style={styles.weekGrid}>
               {days.map((d) => {
-                const has = (plansByDate.get(d.date)?.length ?? 0) > 0;
+                const forDay = plansByDate.get(d.date) ?? [];
+                const publishedCount = forDay.filter((p) => p.state === 'published').length;
+                const comingCount = forDay.length - publishedCount;
+                const has = forDay.length > 0;
                 const isToday = d.date === today;
                 return (
                   <button
@@ -519,7 +562,7 @@ export default function TocClient({
                       </div>
                     </div>
                     <div style={{ opacity: 0.85 }}>{d.date}</div>
-                    <div style={{ marginTop: 8, fontSize: 12, opacity: 0.9 }}>{has ? `${plansByDate.get(d.date)!.length} plan(s)` : 'No plan'}</div>
+                    <div style={{ marginTop: 8, fontSize: 12, opacity: 0.9 }}>{summariseDay(publishedCount, comingCount)}</div>
                   </button>
                 );
               })}
@@ -560,11 +603,14 @@ export default function TocClient({
                   <tbody>
                     {classesForSelectedDate.map((c, i) => {
                       const slot = (c.block_label ?? '').toUpperCase();
-                      const plan = publishedPlansBySlot.get(slot);
-                      const isOpen = openPlanId === plan?.id;
-                      const clickable = !!plan;
+                      const plan = plansBySlot.get(slot);
+                      const published = plan?.state === 'published' ? plan : null;
+                      const isOpen = !!published && openPlanId === published.id;
 
-                      const noteText = plan?.notes ?? (plan?.id ? notesByPlanId[plan.id] : null);
+                      // A draft carries no notes, and must not borrow any.
+                      const noteText = published
+                        ? published.notes ?? notesByPlanId[published.id] ?? null
+                        : null;
 
                       return (
                         <tr key={c.id} style={i % 2 === 0 ? styles.trEven : styles.trOdd}>
@@ -590,13 +636,13 @@ export default function TocClient({
                             )}
                           </td>
                           <td style={{ ...styles.tdRight, width: 260 }}>
-                            {clickable ? (
+                            {published ? (
                               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap', position: 'relative' }}>
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    setOpenPlanId(plan!.id);
-                                    void ensureNotes(plan!.id);
+                                    setOpenPlanId(published.id);
+                                    void ensureNotes(published.id);
                                   }}
                                   style={isOpen ? styles.primaryBtnActive : styles.primaryBtn}
                                 >
@@ -606,30 +652,30 @@ export default function TocClient({
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    setShareOpenPlanId((cur) => (cur === plan!.id ? null : plan!.id));
+                                    setShareOpenPlanId((cur) => (cur === published.id ? null : published.id));
                                   }}
                                   style={styles.secondaryBtn}
                                 >
                                   Share
                                 </button>
 
-                                {shareOpenPlanId === plan!.id ? (
+                                {shareOpenPlanId === published.id ? (
                                   <div style={styles.sharePopover} onClick={(e) => e.stopPropagation()}>
                                     <div style={styles.shareRow}>
-                                      <div style={styles.shareUrl}>{planShareUrl(plan!.id)}</div>
+                                      <div style={styles.shareUrl}>{planShareUrl(published.id)}</div>
                                       <button
                                         type="button"
                                         onClick={async () => {
-                                          const url = planShareUrl(plan!.id);
+                                          const url = planShareUrl(published.id);
                                           const ok = await copyToClipboard(url);
                                           if (ok) {
-                                            setShareCopiedPlanId(plan!.id);
-                                            setTimeout(() => setShareCopiedPlanId((x) => (x === plan!.id ? null : x)), 1200);
+                                            setShareCopiedPlanId(published.id);
+                                            setTimeout(() => setShareCopiedPlanId((x) => (x === published.id ? null : x)), 1200);
                                           }
                                         }}
                                         style={styles.copyBtn}
                                       >
-                                        {shareCopiedPlanId === plan!.id ? 'Copied' : 'Copy'}
+                                        {shareCopiedPlanId === published.id ? 'Copied' : 'Copy'}
                                       </button>
                                     </div>
                                   </div>
@@ -637,7 +683,7 @@ export default function TocClient({
 
                                 <button
                                   type="button"
-                                  onClick={() => window.open(`/p/${plan!.id}?print=1`, '_blank', 'noopener,noreferrer')}
+                                  onClick={() => window.open(`/p/${published.id}?print=1`, '_blank', 'noopener,noreferrer')}
                                   style={styles.secondaryBtn}
                                 >
                                   Print
@@ -645,13 +691,29 @@ export default function TocClient({
 
                                 <button
                                   type="button"
-                                  onClick={() => window.open(`/toc/shape?id=${plan!.id}`, '_blank', 'noopener,noreferrer,width=1280,height=800')}
+                                  onClick={() => window.open(`/toc/shape?id=${published.id}`, '_blank', 'noopener,noreferrer,width=1280,height=800')}
                                   style={styles.shapeBtn}
                                   title="Open student-facing Shape of the Day for projector"
                                 >
                                   Shape of Day
                                 </button>
+
+                                {published.published_at ? (
+                                  <div
+                                    suppressHydrationWarning
+                                    style={{ flexBasis: '100%', textAlign: 'right', fontSize: 11, opacity: 0.7, marginTop: 2 }}
+                                  >
+                                    Published {formatPublishTime(published.published_at)}
+                                  </div>
+                                ) : null}
                               </div>
+                            ) : plan ? (
+                              <span
+                                style={{ color: RCS.deepNavy, fontWeight: 800 }}
+                                title="Staff are preparing a plan for this block. It may be published later, so check back."
+                              >
+                                Plan coming
+                              </span>
                             ) : (
                               <span style={{ opacity: 0.6, fontWeight: 700 }}>No plan</span>
                             )}
