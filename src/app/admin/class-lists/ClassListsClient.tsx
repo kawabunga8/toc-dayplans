@@ -245,7 +245,7 @@ export default function ClassListsClient() {
 
     try {
       const supabase = getSupabaseClient();
-      const { error } = await supabase.from('enrollments').insert({ course_id: selectedClassId, student_id: student.id, school_year: schoolYear || null });
+      const { error } = await supabase.from('enrollments').insert({ course_id: selectedClassId, student_id: student.id, school_year: schoolYear });
       if (error) throw error;
 
       setRoster((prev) => {
