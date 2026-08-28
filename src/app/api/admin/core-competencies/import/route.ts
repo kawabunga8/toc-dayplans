@@ -63,6 +63,9 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
   const mode = String(body?.mode ?? 'replace');
   if (mode !== 'replace') return NextResponse.json({ error: 'Only mode=replace is supported' }, { status: 400 });
+  // Wiping all three tables in one click had no way to see what would change
+  // first. Defaults to a preview; a write has to be asked for explicitly.
+  const dryRun = body?.dryRun !== false;
 
   const { filename, text } = await fetchFirstAvailableCsv();
   const rows = parseCsv(text);
@@ -95,6 +98,26 @@ export async function POST(req: Request) {
 
   if (errors.length) {
     return NextResponse.json({ error: 'CSV validation failed', filename, details: errors.slice(0, 50) }, { status: 400 });
+  }
+
+  const previewDomains = Array.from(new Set(inRows.map((r) => r.domain)));
+  const previewSubs = new Set(inRows.map((r) => `${r.domain}::${r.sub}`)).size;
+
+  if (dryRun) {
+    const [{ count: existingDomains }, { count: existingSubs }, { count: existingFacets }] = await Promise.all([
+      supabase.from('core_competency_domains').select('id', { count: 'exact', head: true }),
+      supabase.from('core_competency_subcompetencies').select('id', { count: 'exact', head: true }),
+      supabase.from('core_competency_facets').select('id', { count: 'exact', head: true }),
+    ]);
+    return NextResponse.json({
+      dryRun: true,
+      filename,
+      current: { domains: existingDomains ?? 0, subcompetencies: existingSubs ?? 0, facets: existingFacets ?? 0 },
+      replacement: { domains: previewDomains.length, subcompetencies: previewSubs, facets: inRows.length },
+      warning:
+        'Applying this deletes the current taxonomy and every id in it, then rebuilds it from the CSV. ' +
+        'Nothing else references these ids by foreign key, so nothing dangles — but there is no undo.',
+    });
   }
 
   // Replace: wipe existing taxonomy
@@ -201,19 +224,26 @@ export async function POST(req: Request) {
     subIdByKey.set(`${domId}::${name}`, String((r as any).id));
   }
 
-  // Insert facets
+  // Insert facets. sort_order was previously omitted here even though the client
+  // orders by it — every import silently re-sorted facets alphabetically instead
+  // of preserving the CSV's order. Numbered per sub-competency, in CSV row order.
+  const facetOrderBySub = new Map<string, number>();
   const facetRows = inRows
     .map((r) => {
       const domId = domIdByName.get(r.domain);
       const subId = domId ? subIdByKey.get(`${domId}::${r.sub}`) : null;
+      if (!subId) return null;
+      const next = (facetOrderBySub.get(subId) ?? 0) + 1;
+      facetOrderBySub.set(subId, next);
       return {
         subcompetency_id: subId,
         name: r.facet,
+        sort_order: next,
         example_context: r.example_context ?? [],
         updated_at: new Date().toISOString(),
       };
     })
-    .filter((r) => !!r.subcompetency_id);
+    .filter((r): r is NonNullable<typeof r> => !!r);
 
   const { error: facErr } = await supabase.from('core_competency_facets').insert(facetRows);
   if (facErr)
@@ -222,7 +252,7 @@ export async function POST(req: Request) {
       { status: 400 }
     );
 
-    return NextResponse.json({ ok: true, filename, counts: { domains: domains.length, subcompetencies: subsKeyed.length, facets: facetRows.length } });
+    return NextResponse.json({ ok: true, dryRun: false, filename, counts: { domains: domains.length, subcompetencies: subsKeyed.length, facets: facetRows.length } });
   } catch (e: any) {
     return NextResponse.json(
       {

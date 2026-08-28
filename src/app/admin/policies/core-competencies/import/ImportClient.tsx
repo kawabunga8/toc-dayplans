@@ -3,65 +3,129 @@
 import { useState } from 'react';
 import { useDemo } from '@/app/admin/DemoContext';
 
-type Status = 'idle' | 'running' | 'done' | 'error';
+type Status = 'idle' | 'running' | 'error';
+
+type Preview = {
+  dryRun: true;
+  filename: string;
+  current: { domains: number; subcompetencies: number; facets: number };
+  replacement: { domains: number; subcompetencies: number; facets: number };
+  warning: string;
+};
+
+type Applied = {
+  ok: true;
+  dryRun: false;
+  filename: string;
+  counts: { domains: number; subcompetencies: number; facets: number };
+};
 
 export default function ImportClient() {
   const { isDemo } = useDemo();
   const [status, setStatus] = useState<Status>('idle');
-  const [out, setOut] = useState<string>('');
+  const [preview, setPreview] = useState<Preview | null>(null);
+  const [applied, setApplied] = useState<Applied | null>(null);
+  const [error, setError] = useState<string>('');
 
-  async function run() {
+  async function call(dryRun: boolean) {
     setStatus('running');
-    setOut('');
+    setError('');
     try {
       const res = await fetch('/api/admin/core-competencies/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'replace' }),
+        body: JSON.stringify({ mode: 'replace', dryRun }),
       });
-
-      let bodyText = '';
-      let j: any = null;
-      try {
-        bodyText = await res.text();
-        j = bodyText ? JSON.parse(bodyText) : null;
-      } catch {
-        // non-JSON response (e.g. Next.js error page)
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError([body?.error, ...(body?.details ?? [])].filter(Boolean).join('\n') || `${res.status} ${res.statusText}`);
+        setStatus('idle');
+        return;
       }
-
-      if (j) setOut(JSON.stringify(j, null, 2));
-      else setOut(bodyText || `${res.status} ${res.statusText}`);
-
-      if (!res.ok) throw new Error(j?.error ?? j?.message ?? 'Import failed');
-      setStatus('done');
+      if (dryRun) {
+        setPreview(body as Preview);
+      } else {
+        setApplied(body as Applied);
+        setPreview(null);
+      }
+      setStatus('idle');
     } catch (e: any) {
-      setOut((prev) => prev || String(e?.message ?? e));
-      setStatus('error');
+      setError(String(e?.message ?? e));
+      setStatus('idle');
     }
   }
 
   return (
     <main style={styles.page}>
       <h1 style={styles.h1}>Core Competencies Import</h1>
-      <p style={styles.muted}>Replace (wipe all) core competency taxonomy from CSV in core-competencies-data bucket.</p>
+      <p style={styles.muted}>
+        Replaces the whole taxonomy — domains, sub-competencies, and facets — from the CSV in the
+        core-competencies-data bucket. Preview shows what would change before anything is written.
+      </p>
 
       <section style={styles.card}>
         <div style={styles.sectionHeader}>Import from CSV (Replace)</div>
 
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-          <button onClick={run} style={styles.primaryBtn} disabled={isDemo || status === 'running'}>
-            {status === 'running' ? 'Importing…' : 'Run import'}
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+          <button onClick={() => call(true)} style={styles.primaryBtn} disabled={isDemo || status === 'running'}>
+            {status === 'running' ? 'Working…' : 'Preview changes'}
           </button>
+          {preview ? (
+            <button onClick={() => call(false)} style={styles.dangerBtn} disabled={isDemo || status === 'running'}>
+              Apply — wipe and replace
+            </button>
+          ) : null}
           <a href="/admin/policies/core-competencies" style={styles.secondaryBtn}>
             ← Back
           </a>
         </div>
 
         <div style={{ marginTop: 12, fontSize: 12, opacity: 0.85 }}>
-          Bucket: <b>core-competencies-data</b>. CSV columns required: <b>Core Competency</b>, <b>Sub-Competency</b>, <b>Facet Name</b>.
+          Bucket: <b>core-competencies-data</b>. CSV columns required: <b>Core Competency</b>, <b>Sub-Competency</b>,{' '}
+          <b>Facet Name</b>.
         </div>
 
-        {out ? <pre style={styles.pre}>{out}</pre> : null}
+        {error ? <pre style={styles.errorPre}>{error}</pre> : null}
+
+        {preview ? (
+          <div style={styles.pre}>
+            <div style={{ fontWeight: 900, marginBottom: 6 }}>Preview — nothing written yet.</div>
+            <div>File: {preview.filename}</div>
+            <table style={{ marginTop: 8, borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  <th style={styles.th}></th>
+                  <th style={styles.th}>Current</th>
+                  <th style={styles.th}>After replace</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td style={styles.td}>Domains</td>
+                  <td style={styles.td}>{preview.current.domains}</td>
+                  <td style={styles.td}>{preview.replacement.domains}</td>
+                </tr>
+                <tr>
+                  <td style={styles.td}>Sub-competencies</td>
+                  <td style={styles.td}>{preview.current.subcompetencies}</td>
+                  <td style={styles.td}>{preview.replacement.subcompetencies}</td>
+                </tr>
+                <tr>
+                  <td style={styles.td}>Facets</td>
+                  <td style={styles.td}>{preview.current.facets}</td>
+                  <td style={styles.td}>{preview.replacement.facets}</td>
+                </tr>
+              </tbody>
+            </table>
+            <div style={{ marginTop: 10, fontSize: 12, opacity: 0.85 }}>{preview.warning}</div>
+          </div>
+        ) : null}
+
+        {applied ? (
+          <pre style={styles.pre}>
+            {`Applied — ${applied.filename}\nDomains: ${applied.counts.domains}\nSub-competencies: ${applied.counts.subcompetencies}\nFacets: ${applied.counts.facets}`}
+          </pre>
+        ) : null}
       </section>
     </main>
   );
@@ -90,6 +154,10 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: 12,
   },
   primaryBtn: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.gold}`, background: RCS.deepNavy, color: RCS.white, cursor: 'pointer', fontWeight: 900 },
+  dangerBtn: { padding: '10px 12px', borderRadius: 10, border: '1px solid #991b1b', background: '#DC2626', color: RCS.white, cursor: 'pointer', fontWeight: 900 },
   secondaryBtn: { padding: '10px 12px', borderRadius: 10, border: `1px solid ${RCS.gold}`, background: 'transparent', color: RCS.deepNavy, cursor: 'pointer', fontWeight: 900, textDecoration: 'none', display: 'inline-block' },
   pre: { marginTop: 12, padding: 12, borderRadius: 10, background: RCS.paleGold, border: `1px solid ${RCS.gold}`, overflowX: 'auto', whiteSpace: 'pre-wrap' },
+  errorPre: { marginTop: 12, padding: 12, borderRadius: 10, background: '#FEE2E2', border: '1px solid #991b1b', color: '#7F1D1D', overflowX: 'auto', whiteSpace: 'pre-wrap' },
+  th: { textAlign: 'left', padding: '4px 10px 4px 0', fontSize: 12, opacity: 0.8 },
+  td: { padding: '2px 10px 2px 0', fontSize: 13 },
 };
