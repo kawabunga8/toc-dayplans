@@ -180,77 +180,13 @@ export default function PoliciesClient() {
     return (r?.edited_text ?? r?.original_text ?? '').toString();
   }
 
-  function setDisplayedText(lvl: Level, next: string) {
-    setRubrics((prev) => {
-      const cur = prev[lvl];
-      if (!cur) return prev;
-      return { ...prev, [lvl]: { ...cur, edited_text: next } };
-    });
-  }
-
-  async function saveEdits() {
-    if (!selectedStandardId) return;
-
-    setStatus('saving');
-    setError(null);
-
-    try {
-      const supabase = getSupabaseClient();
-      for (const { level } of LEVELS) {
-        const row = rubrics[level];
-        if (!row) continue;
-        const edited = (row.edited_text ?? '').toString();
-        const patch = {
-          edited_text: edited.trim() && edited !== row.original_text ? edited : null,
-          updated_at: new Date().toISOString(),
-        };
-        const { error } = await supabase.from('learning_standard_rubrics').update(patch).eq('id', row.id);
-        if (error) throw error;
-      }
-
-      await loadRubrics(selectedStandardId, selectedGrade);
-      setStatus('idle');
-    } catch (e: any) {
-      setStatus('error');
-      setError(e?.message ?? 'Failed to save');
-    }
-  }
-
-  async function resetToOriginal() {
-    if (!selectedStandardId) return;
-    const ok = window.confirm('Reset all 4 levels for this grade to the original text?');
-    if (!ok) return;
-
-    setStatus('saving');
-    setError(null);
-
-    try {
-      const supabase = getSupabaseClient();
-      const ids = LEVELS.map(({ level }) => rubrics[level]?.id).filter(Boolean) as string[];
-      if (ids.length > 0) {
-        const { error } = await supabase
-          .from('learning_standard_rubrics')
-          .update({ edited_text: null, updated_at: new Date().toISOString() })
-          .in('id', ids);
-        if (error) throw error;
-      }
-
-      await loadRubrics(selectedStandardId, selectedGrade);
-      setStatus('idle');
-    } catch (e: any) {
-      setStatus('error');
-      setError(e?.message ?? 'Failed to reset');
-    }
-  }
+  // saveEdits / resetToOriginal removed: rubric text is edited in Course Hub only.
 
   return (
     <main style={styles.page}>
       <h1 style={styles.h1}>Policies</h1>
-      <p style={styles.muted}>Learning standards lookup (Subject → Standard → Grade). Editable overrides with Reset to original.</p>
+      <p style={styles.muted}>Learning standards lookup (Subject → Standard → Grade). Read-only — edit in Course Hub.</p>
       <div style={{ marginTop: -8, marginBottom: 14, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <a href="/admin/policies/import" style={styles.secondaryBtn}>
-          Import Learning Standards CSV…
-        </a>
         <a href="/admin/policies/core-competencies" style={styles.secondaryBtn}>
           Core Competencies…
         </a>
@@ -270,10 +206,10 @@ export default function PoliciesClient() {
           </a>
         </div>
         <div style={{ marginBottom: 12, fontSize: 12, opacity: 0.75 }}>
-          Standards themselves — name, key, subject, versioning — are owned in Course Hub and can only be
-          changed there. The <b>rubric text below is editable</b>, and it is shared: saving here also changes
-          what Course Hub and the Report Card Tool show. Your edit is stored alongside the original, so
-          “Reset to original” always restores it.
+          Learning standards are owned in Course Hub — name, key, subject, versioning, and the rubric text
+          below. This page is a <b>read-only lookup</b>. Editing here would have written to the same rows
+          Course Hub and the Report Card Tool read, from a second place with its own rules, so the controls
+          now live in one place: use <b>Edit in Course Hub →</b>.
         </div>
 
         {returnHref ? (
@@ -325,14 +261,6 @@ export default function PoliciesClient() {
                 </select>
               </label>
 
-              <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
-                <button onClick={saveEdits} style={styles.primaryBtn} disabled={isDemo || status !== 'idle' || !selectedStandardId}>
-                  {status === 'saving' ? 'Saving…' : 'Save'}
-                </button>
-                <button onClick={resetToOriginal} style={styles.secondaryBtn} disabled={isDemo || status !== 'idle' || !selectedStandardId}>
-                  Reset to original
-                </button>
-              </div>
             </div>
 
             {selectedStandard ? (
@@ -376,10 +304,9 @@ export default function PoliciesClient() {
                   {rubrics[level] ? (
                     <textarea
                       value={displayedText(level)}
-                      onChange={(e) => setDisplayedText(level, e.target.value)}
+                      readOnly
                       rows={7}
                       style={styles.textarea}
-                      disabled={isDemo || status !== 'idle'}
                     />
                   ) : (
                     <div style={{ opacity: 0.75 }}>—</div>
