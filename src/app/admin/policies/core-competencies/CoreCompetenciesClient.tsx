@@ -156,11 +156,11 @@ export default function CoreCompetenciesClient() {
   return (
     <main style={styles.page}>
       <h1 style={styles.h1}>Core Competencies</h1>
-      <p style={styles.muted}>Domain → Sub-competency → Facet. Import is replace-only (wipe all).</p>
+      <p style={styles.muted}>Domain → Sub-competency → Facet.</p>
 
       <div style={{ marginTop: -8, marginBottom: 14, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
         <a href="/admin/policies/core-competencies/import" style={styles.secondaryBtn}>
-          Import CSV (replace)…
+          Import CSV…
         </a>
         <a href="/admin/policies" style={styles.secondaryBtn}>
           ← To Learning Standards
