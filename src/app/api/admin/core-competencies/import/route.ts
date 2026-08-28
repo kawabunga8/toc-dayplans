@@ -72,7 +72,7 @@ export async function POST(req: Request) {
 
   const errors: string[] = [];
 
-  type InRow = { domain: string; sub: string; facet: string; example_context: string[] };
+  type InRow = { domain: string; sub: string; facet: string; example_context: string[]; description: string | null };
   const inRows: InRow[] = [];
 
   const parseExampleContext = (raw: string): string[] => {
@@ -88,12 +88,17 @@ export async function POST(req: Request) {
     const sub = String((r['Sub-Competency'] ?? r.sub_competency ?? r.subCompetency ?? '')).trim();
     const facet = String((r['Facet Name'] ?? r.facet_name ?? r.facetName ?? '')).trim();
     const example_context = parseExampleContext(String((r['Example Context'] ?? r.example_context ?? r.exampleContext ?? '')).trim());
+    // Optional: absent in the CSV today. When present, this is the only place
+    // a facet's descriptive text comes from — the app has never had any other
+    // source for it, which is exactly what left the browse page titles-only.
+    const descriptionRaw = String((r['Description'] ?? r.description ?? r['Profile'] ?? r.profile ?? '')).trim();
+    const description = descriptionRaw || null;
 
     if (!domain) errors.push(`row ${i + 2}: missing Core Competency`);
     if (!sub) errors.push(`row ${i + 2}: missing Sub-Competency`);
     if (!facet) errors.push(`row ${i + 2}: missing Facet Name`);
 
-    if (domain && sub && facet) inRows.push({ domain, sub, facet, example_context });
+    if (domain && sub && facet) inRows.push({ domain, sub, facet, example_context, description });
   }
 
   if (errors.length) {
@@ -102,18 +107,35 @@ export async function POST(req: Request) {
 
   const previewDomains = Array.from(new Set(inRows.map((r) => r.domain)));
   const previewSubs = new Set(inRows.map((r) => `${r.domain}::${r.sub}`)).size;
+  const withDescription = inRows.filter((r) => r.description).length;
 
   if (dryRun) {
-    const [{ count: existingDomains }, { count: existingSubs }, { count: existingFacets }] = await Promise.all([
+    const [
+      { count: existingDomains },
+      { count: existingSubs },
+      { count: existingFacets },
+      { count: existingWithDescription },
+    ] = await Promise.all([
       supabase.from('core_competency_domains').select('id', { count: 'exact', head: true }),
       supabase.from('core_competency_subcompetencies').select('id', { count: 'exact', head: true }),
       supabase.from('core_competency_facets').select('id', { count: 'exact', head: true }),
+      supabase.from('core_competency_facets').select('id', { count: 'exact', head: true }).not('description', 'is', null),
     ]);
     return NextResponse.json({
       dryRun: true,
       filename,
-      current: { domains: existingDomains ?? 0, subcompetencies: existingSubs ?? 0, facets: existingFacets ?? 0 },
-      replacement: { domains: previewDomains.length, subcompetencies: previewSubs, facets: inRows.length },
+      current: {
+        domains: existingDomains ?? 0,
+        subcompetencies: existingSubs ?? 0,
+        facets: existingFacets ?? 0,
+        facetsWithDescription: existingWithDescription ?? 0,
+      },
+      replacement: {
+        domains: previewDomains.length,
+        subcompetencies: previewSubs,
+        facets: inRows.length,
+        facetsWithDescription: withDescription,
+      },
       warning:
         'Applying this deletes the current taxonomy and every id in it, then rebuilds it from the CSV. ' +
         'Nothing else references these ids by foreign key, so nothing dangles — but there is no undo.',
@@ -240,6 +262,7 @@ export async function POST(req: Request) {
         name: r.facet,
         sort_order: next,
         example_context: r.example_context ?? [],
+        description: r.description,
         updated_at: new Date().toISOString(),
       };
     })

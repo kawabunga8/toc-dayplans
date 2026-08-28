@@ -5,11 +5,12 @@ import { useDemo } from '@/app/admin/DemoContext';
 
 type Status = 'idle' | 'running' | 'error';
 
+type Counts = { domains: number; subcompetencies: number; facets: number; facetsWithDescription: number };
 type Preview = {
   dryRun: true;
   filename: string;
-  current: { domains: number; subcompetencies: number; facets: number };
-  replacement: { domains: number; subcompetencies: number; facets: number };
+  current: Counts;
+  replacement: Counts;
   warning: string;
 };
 
@@ -115,8 +116,19 @@ export default function ImportClient() {
                   <td style={styles.td}>{preview.current.facets}</td>
                   <td style={styles.td}>{preview.replacement.facets}</td>
                 </tr>
+                <tr>
+                  <td style={styles.td}>— with a description</td>
+                  <td style={styles.td}>{preview.current.facetsWithDescription}</td>
+                  <td style={styles.td}>{preview.replacement.facetsWithDescription}</td>
+                </tr>
               </tbody>
             </table>
+            {preview.replacement.facetsWithDescription === 0 ? (
+              <div style={{ marginTop: 10, fontSize: 12, color: '#a05a00' }}>
+                {preview.filename} has no Description column (or it's empty for every row) — facets will show a
+                title only, same as now. Add a Description column to the CSV to fix that.
+              </div>
+            ) : null}
             <div style={{ marginTop: 10, fontSize: 12, opacity: 0.85 }}>{preview.warning}</div>
           </div>
         ) : null}

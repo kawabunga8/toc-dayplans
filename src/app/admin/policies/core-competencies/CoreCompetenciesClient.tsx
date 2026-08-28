@@ -11,7 +11,7 @@ type DomainRow = { id: string; name: string; sort_order: number | null };
 
 type SubRow = { id: string; domain_id: string; name: string; sort_order: number | null };
 
-type FacetRow = { id: string; subcompetency_id: string; name: string; sort_order: number | null; example_context?: string[] | null };
+type FacetRow = { id: string; subcompetency_id: string; name: string; sort_order: number | null; example_context?: string[] | null; description?: string | null };
 
 export default function CoreCompetenciesClient() {
   const { isDemo } = useDemo();
@@ -106,10 +106,10 @@ export default function CoreCompetenciesClient() {
     try {
       const supabase = getSupabaseClient();
 
-      // Back-compat: older DBs may not have example_context yet.
+      // Back-compat: older DBs may not have example_context or description yet.
       const full = await supabase
         .from('core_competency_facets')
-        .select('id,subcompetency_id,name,sort_order,example_context')
+        .select('id,subcompetency_id,name,sort_order,example_context,description')
         .eq('subcompetency_id', subId)
         .order('sort_order', { ascending: true, nullsFirst: false })
         .order('name', { ascending: true });
@@ -141,6 +141,7 @@ export default function CoreCompetenciesClient() {
           name: r.name,
           sort_order: r.sort_order ?? null,
           example_context: Array.isArray(r.example_context) ? r.example_context : null,
+          description: typeof r.description === 'string' && r.description.trim() ? r.description : null,
         }))
       );
       setStatus('idle');
@@ -239,6 +240,13 @@ export default function CoreCompetenciesClient() {
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 800 }}>{f.name}</div>
                     {canPick ? <div style={{ fontSize: 12, opacity: 0.8 }}>{label}</div> : null}
+                    {f.description ? (
+                      <div style={{ marginTop: 4, fontSize: 13, opacity: 0.9, lineHeight: 1.4 }}>{f.description}</div>
+                    ) : (
+                      <div style={{ marginTop: 4, fontSize: 12, opacity: 0.6, fontStyle: 'italic' }}>
+                        No description on file yet.
+                      </div>
+                    )}
                     {tags.length ? (
                       <div style={{ marginTop: 4, fontSize: 12, opacity: 0.9 }}>
                         {tags.map((t) => `#${t}`).join(' ')}
