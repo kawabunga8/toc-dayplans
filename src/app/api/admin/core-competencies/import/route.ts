@@ -72,7 +72,8 @@ export async function POST(req: Request) {
 
   const errors: string[] = [];
 
-  type InRow = { domain: string; sub: string; facet: string; example_context: string[]; description: string | null };
+  type ProfileCell = { level: number; text: string };
+  type InRow = { domain: string; sub: string; facet: string; example_context: string[]; profiles: ProfileCell[] };
   const inRows: InRow[] = [];
 
   const parseExampleContext = (raw: string): string[] => {
@@ -88,17 +89,23 @@ export async function POST(req: Request) {
     const sub = String((r['Sub-Competency'] ?? r.sub_competency ?? r.subCompetency ?? '')).trim();
     const facet = String((r['Facet Name'] ?? r.facet_name ?? r.facetName ?? '')).trim();
     const example_context = parseExampleContext(String((r['Example Context'] ?? r.example_context ?? r.exampleContext ?? '')).trim());
-    // Optional: absent in the CSV today. When present, this is the only place
-    // a facet's descriptive text comes from — the app has never had any other
-    // source for it, which is exactly what left the browse page titles-only.
-    const descriptionRaw = String((r['Description'] ?? r.description ?? r['Profile'] ?? r.profile ?? '')).trim();
-    const description = descriptionRaw || null;
+    // Optional, absent from the CSV today. BC's framework (curriculum.gov.bc.ca/
+    // competencies) gives each facet six progressive PROFILE levels, not one
+    // description — so a "Profile 1".."Profile 6" column per row, same shape as
+    // the rest of this CSV (one row per facet).
+    const profiles: ProfileCell[] = [];
+    for (let level = 1; level <= 6; level++) {
+      const raw = String(
+        (r as any)[`Profile ${level}`] ?? (r as any)[`profile_${level}`] ?? (r as any)[`Profile${level}`] ?? ''
+      ).trim();
+      if (raw) profiles.push({ level, text: raw });
+    }
 
     if (!domain) errors.push(`row ${i + 2}: missing Core Competency`);
     if (!sub) errors.push(`row ${i + 2}: missing Sub-Competency`);
     if (!facet) errors.push(`row ${i + 2}: missing Facet Name`);
 
-    if (domain && sub && facet) inRows.push({ domain, sub, facet, example_context, description });
+    if (domain && sub && facet) inRows.push({ domain, sub, facet, example_context, profiles });
   }
 
   if (errors.length) {
@@ -107,19 +114,20 @@ export async function POST(req: Request) {
 
   const previewDomains = Array.from(new Set(inRows.map((r) => r.domain)));
   const previewSubs = new Set(inRows.map((r) => `${r.domain}::${r.sub}`)).size;
-  const withDescription = inRows.filter((r) => r.description).length;
+  const previewProfileCells = inRows.reduce((n, r) => n + r.profiles.length, 0);
+  const previewFacetsWithProfiles = inRows.filter((r) => r.profiles.length > 0).length;
 
   if (dryRun) {
     const [
       { count: existingDomains },
       { count: existingSubs },
       { count: existingFacets },
-      { count: existingWithDescription },
+      { count: existingProfileCells },
     ] = await Promise.all([
       supabase.from('core_competency_domains').select('id', { count: 'exact', head: true }),
       supabase.from('core_competency_subcompetencies').select('id', { count: 'exact', head: true }),
       supabase.from('core_competency_facets').select('id', { count: 'exact', head: true }),
-      supabase.from('core_competency_facets').select('id', { count: 'exact', head: true }).not('description', 'is', null),
+      supabase.from('core_competency_facet_profiles').select('id', { count: 'exact', head: true }),
     ]);
     return NextResponse.json({
       dryRun: true,
@@ -128,17 +136,19 @@ export async function POST(req: Request) {
         domains: existingDomains ?? 0,
         subcompetencies: existingSubs ?? 0,
         facets: existingFacets ?? 0,
-        facetsWithDescription: existingWithDescription ?? 0,
+        profileCells: existingProfileCells ?? 0,
       },
       replacement: {
         domains: previewDomains.length,
         subcompetencies: previewSubs,
         facets: inRows.length,
-        facetsWithDescription: withDescription,
+        profileCells: previewProfileCells,
+        facetsWithProfiles: previewFacetsWithProfiles,
       },
       warning:
-        'Applying this deletes the current taxonomy and every id in it, then rebuilds it from the CSV. ' +
-        'Nothing else references these ids by foreign key, so nothing dangles — but there is no undo.',
+        'Applying this deletes the current taxonomy and every id in it (including all profile text), then ' +
+        'rebuilds it from the CSV. Nothing else references these ids by foreign key, so nothing dangles — ' +
+        'but there is no undo.',
     });
   }
 
@@ -262,20 +272,51 @@ export async function POST(req: Request) {
         name: r.facet,
         sort_order: next,
         example_context: r.example_context ?? [],
-        description: r.description,
         updated_at: new Date().toISOString(),
+        // carried through only to key profile rows below; not a column
+        __sourceProfiles: r.profiles,
       };
     })
     .filter((r): r is NonNullable<typeof r> => !!r);
 
-  const { error: facErr } = await supabase.from('core_competency_facets').insert(facetRows);
+  const { data: insertedFacets, error: facErr } = await supabase
+    .from('core_competency_facets')
+    .insert(facetRows.map(({ __sourceProfiles, ...rest }) => rest))
+    .select('id,subcompetency_id,name');
   if (facErr)
     return NextResponse.json(
       { error: facErr.message, step: 'insert_facets', filename, code: facErr.code, details: facErr.details, hint: (facErr as any).hint ?? null },
       { status: 400 }
     );
 
-    return NextResponse.json({ ok: true, dryRun: false, filename, counts: { domains: domains.length, subcompetencies: subsKeyed.length, facets: facetRows.length } });
+  // Facets get fresh ids on every replace, so profile rows link by the same
+  // (subcompetency, name) key used above rather than any id the CSV knew about.
+  const facetIdByKey = new Map<string, string>();
+  for (const f of insertedFacets ?? []) {
+    facetIdByKey.set(`${(f as any).subcompetency_id}::${(f as any).name}`, (f as any).id);
+  }
+
+  const profileRows = facetRows.flatMap((f) => {
+    const facetId = facetIdByKey.get(`${f.subcompetency_id}::${f.name}`);
+    if (!facetId) return [];
+    return f.__sourceProfiles.map((p) => ({ facet_id: facetId, level: p.level, text: p.text }));
+  });
+
+  if (profileRows.length) {
+    const { error: profErr } = await supabase.from('core_competency_facet_profiles').insert(profileRows);
+    if (profErr)
+      return NextResponse.json(
+        { error: profErr.message, step: 'insert_profiles', filename, code: profErr.code, details: profErr.details, hint: (profErr as any).hint ?? null },
+        { status: 400 }
+      );
+  }
+
+    return NextResponse.json({
+      ok: true,
+      dryRun: false,
+      filename,
+      counts: { domains: domains.length, subcompetencies: subsKeyed.length, facets: facetRows.length, profileCells: profileRows.length },
+    });
   } catch (e: any) {
     return NextResponse.json(
       {

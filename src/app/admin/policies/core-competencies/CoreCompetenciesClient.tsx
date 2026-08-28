@@ -11,7 +11,8 @@ type DomainRow = { id: string; name: string; sort_order: number | null };
 
 type SubRow = { id: string; domain_id: string; name: string; sort_order: number | null };
 
-type FacetRow = { id: string; subcompetency_id: string; name: string; sort_order: number | null; example_context?: string[] | null; description?: string | null };
+type ProfileRow = { level: number; text: string };
+type FacetRow = { id: string; subcompetency_id: string; name: string; sort_order: number | null; example_context?: string[] | null; profiles: ProfileRow[] };
 
 export default function CoreCompetenciesClient() {
   const { isDemo } = useDemo();
@@ -106,10 +107,10 @@ export default function CoreCompetenciesClient() {
     try {
       const supabase = getSupabaseClient();
 
-      // Back-compat: older DBs may not have example_context or description yet.
+      // Back-compat: older DBs may not have example_context yet.
       const full = await supabase
         .from('core_competency_facets')
-        .select('id,subcompetency_id,name,sort_order,example_context,description')
+        .select('id,subcompetency_id,name,sort_order,example_context')
         .eq('subcompetency_id', subId)
         .order('sort_order', { ascending: true, nullsFirst: false })
         .order('name', { ascending: true });
@@ -134,6 +135,25 @@ export default function CoreCompetenciesClient() {
       }
 
       const rows = data ?? [];
+      const facetIds = rows.map((r) => r.id);
+      const profilesByFacet = new Map<string, ProfileRow[]>();
+      if (facetIds.length) {
+        const { data: profileRows, error: profileErr } = await supabase
+          .from('core_competency_facet_profiles')
+          .select('facet_id,level,text')
+          .in('facet_id', facetIds)
+          .order('level', { ascending: true });
+        // Table may not exist yet on an older DB; degrade to "no profiles" rather
+        // than failing the whole page.
+        if (!profileErr) {
+          for (const p of profileRows ?? []) {
+            const list = profilesByFacet.get((p as any).facet_id) ?? [];
+            list.push({ level: (p as any).level, text: (p as any).text });
+            profilesByFacet.set((p as any).facet_id, list);
+          }
+        }
+      }
+
       setFacets(
         rows.map((r) => ({
           id: r.id,
@@ -141,7 +161,7 @@ export default function CoreCompetenciesClient() {
           name: r.name,
           sort_order: r.sort_order ?? null,
           example_context: Array.isArray(r.example_context) ? r.example_context : null,
-          description: typeof r.description === 'string' && r.description.trim() ? r.description : null,
+          profiles: profilesByFacet.get(r.id) ?? [],
         }))
       );
       setStatus('idle');
@@ -240,11 +260,17 @@ export default function CoreCompetenciesClient() {
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 800 }}>{f.name}</div>
                     {canPick ? <div style={{ fontSize: 12, opacity: 0.8 }}>{label}</div> : null}
-                    {f.description ? (
-                      <div style={{ marginTop: 4, fontSize: 13, opacity: 0.9, lineHeight: 1.4 }}>{f.description}</div>
+                    {f.profiles.length ? (
+                      <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
+                        {f.profiles.map((p) => (
+                          <div key={p.level} style={{ fontSize: 13, lineHeight: 1.4 }}>
+                            <span style={{ fontWeight: 700, opacity: 0.75 }}>Profile {p.level}:</span> {p.text}
+                          </div>
+                        ))}
+                      </div>
                     ) : (
                       <div style={{ marginTop: 4, fontSize: 12, opacity: 0.6, fontStyle: 'italic' }}>
-                        No description on file yet.
+                        No profile text on file yet.
                       </div>
                     )}
                     {tags.length ? (

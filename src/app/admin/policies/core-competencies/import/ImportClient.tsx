@@ -5,12 +5,13 @@ import { useDemo } from '@/app/admin/DemoContext';
 
 type Status = 'idle' | 'running' | 'error';
 
-type Counts = { domains: number; subcompetencies: number; facets: number; facetsWithDescription: number };
+type CurrentCounts = { domains: number; subcompetencies: number; facets: number; profileCells: number };
+type ReplacementCounts = CurrentCounts & { facetsWithProfiles: number };
 type Preview = {
   dryRun: true;
   filename: string;
-  current: Counts;
-  replacement: Counts;
+  current: CurrentCounts;
+  replacement: ReplacementCounts;
   warning: string;
 };
 
@@ -117,16 +118,21 @@ export default function ImportClient() {
                   <td style={styles.td}>{preview.replacement.facets}</td>
                 </tr>
                 <tr>
-                  <td style={styles.td}>— with a description</td>
-                  <td style={styles.td}>{preview.current.facetsWithDescription}</td>
-                  <td style={styles.td}>{preview.replacement.facetsWithDescription}</td>
+                  <td style={styles.td}>Profile levels (of up to 6 × facets)</td>
+                  <td style={styles.td}>{preview.current.profileCells}</td>
+                  <td style={styles.td}>{preview.replacement.profileCells}</td>
                 </tr>
               </tbody>
             </table>
-            {preview.replacement.facetsWithDescription === 0 ? (
+            {preview.replacement.profileCells === 0 ? (
               <div style={{ marginTop: 10, fontSize: 12, color: '#a05a00' }}>
-                {preview.filename} has no Description column (or it's empty for every row) — facets will show a
-                title only, same as now. Add a Description column to the CSV to fix that.
+                {preview.filename} has no Profile 1…Profile 6 columns (or they're empty) — facets will show a
+                title only, same as now. Add those columns to the CSV to bring in BC's profile text.
+              </div>
+            ) : preview.replacement.facetsWithProfiles < preview.replacement.facets ? (
+              <div style={{ marginTop: 10, fontSize: 12, color: '#a05a00' }}>
+                {preview.replacement.facets - preview.replacement.facetsWithProfiles} of{' '}
+                {preview.replacement.facets} facets have no profile text in this CSV.
               </div>
             ) : null}
             <div style={{ marginTop: 10, fontSize: 12, opacity: 0.85 }}>{preview.warning}</div>
