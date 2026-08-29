@@ -6,7 +6,7 @@ import { useDemo } from '@/app/admin/DemoContext';
 type Status = 'idle' | 'running' | 'error';
 
 type CurrentCounts = { domains: number; subcompetencies: number; facets: number; profileCells: number };
-type ReplacementCounts = CurrentCounts & { facetsWithProfiles: number };
+type ReplacementCounts = CurrentCounts & { subsWithProfiles: number };
 type Preview = {
   dryRun: true;
   filename: string;
@@ -61,8 +61,9 @@ export default function ImportClient() {
     <main style={styles.page}>
       <h1 style={styles.h1}>Core Competencies Import</h1>
       <p style={styles.muted}>
-        Replaces the whole taxonomy — domains, sub-competencies, and facets — from the CSV in the
-        core-competencies-data bucket. Preview shows what would change before anything is written.
+        Replaces the whole taxonomy — domains, sub-competencies, facets, and each sub-competency's profile
+        text — from the CSV in the core-competencies-data bucket. Preview shows what would change before
+        anything is written.
       </p>
 
       <section style={styles.card}>
@@ -118,7 +119,7 @@ export default function ImportClient() {
                   <td style={styles.td}>{preview.replacement.facets}</td>
                 </tr>
                 <tr>
-                  <td style={styles.td}>Profile levels (of up to 6 × facets)</td>
+                  <td style={styles.td}>Profile levels (of up to 6 × sub-competencies)</td>
                   <td style={styles.td}>{preview.current.profileCells}</td>
                   <td style={styles.td}>{preview.replacement.profileCells}</td>
                 </tr>
@@ -126,13 +127,14 @@ export default function ImportClient() {
             </table>
             {preview.replacement.profileCells === 0 ? (
               <div style={{ marginTop: 10, fontSize: 12, color: '#a05a00' }}>
-                {preview.filename} has no Profile 1…Profile 6 columns (or they're empty) — facets will show a
-                title only, same as now. Add those columns to the CSV to bring in BC's profile text.
+                {preview.filename} has no Profile 1…Profile 6 columns (or they're empty) — sub-competencies will
+                show no profile text, same as now. Add those columns, on at least one facet row per
+                sub-competency, to bring in BC's profile text.
               </div>
-            ) : preview.replacement.facetsWithProfiles < preview.replacement.facets ? (
+            ) : preview.replacement.subsWithProfiles < preview.replacement.subcompetencies ? (
               <div style={{ marginTop: 10, fontSize: 12, color: '#a05a00' }}>
-                {preview.replacement.facets - preview.replacement.facetsWithProfiles} of{' '}
-                {preview.replacement.facets} facets have no profile text in this CSV.
+                {preview.replacement.subcompetencies - preview.replacement.subsWithProfiles} of{' '}
+                {preview.replacement.subcompetencies} sub-competencies have no profile text in this CSV.
               </div>
             ) : null}
             <div style={{ marginTop: 10, fontSize: 12, opacity: 0.85 }}>{preview.warning}</div>

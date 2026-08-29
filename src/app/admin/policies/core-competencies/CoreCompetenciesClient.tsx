@@ -12,7 +12,7 @@ type DomainRow = { id: string; name: string; sort_order: number | null };
 type SubRow = { id: string; domain_id: string; name: string; sort_order: number | null };
 
 type ProfileRow = { level: number; text: string };
-type FacetRow = { id: string; subcompetency_id: string; name: string; sort_order: number | null; example_context?: string[] | null; profiles: ProfileRow[] };
+type FacetRow = { id: string; subcompetency_id: string; name: string; sort_order: number | null; example_context?: string[] | null };
 
 export default function CoreCompetenciesClient() {
   const { isDemo } = useDemo();
@@ -33,6 +33,7 @@ export default function CoreCompetenciesClient() {
   const [selectedSubId, setSelectedSubId] = useState<string>('');
 
   const [facets, setFacets] = useState<FacetRow[]>([]);
+  const [subProfiles, setSubProfiles] = useState<ProfileRow[]>([]);
 
   const [picked, setPicked] = useState<string[]>([]);
 
@@ -50,9 +51,11 @@ export default function CoreCompetenciesClient() {
   useEffect(() => {
     if (!selectedSubId) {
       setFacets([]);
+      setSubProfiles([]);
       return;
     }
     void loadFacets(selectedSubId);
+    void loadSubProfiles(selectedSubId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSubId]);
 
@@ -135,25 +138,6 @@ export default function CoreCompetenciesClient() {
       }
 
       const rows = data ?? [];
-      const facetIds = rows.map((r) => r.id);
-      const profilesByFacet = new Map<string, ProfileRow[]>();
-      if (facetIds.length) {
-        const { data: profileRows, error: profileErr } = await supabase
-          .from('core_competency_facet_profiles')
-          .select('facet_id,level,text')
-          .in('facet_id', facetIds)
-          .order('level', { ascending: true });
-        // Table may not exist yet on an older DB; degrade to "no profiles" rather
-        // than failing the whole page.
-        if (!profileErr) {
-          for (const p of profileRows ?? []) {
-            const list = profilesByFacet.get((p as any).facet_id) ?? [];
-            list.push({ level: (p as any).level, text: (p as any).text });
-            profilesByFacet.set((p as any).facet_id, list);
-          }
-        }
-      }
-
       setFacets(
         rows.map((r) => ({
           id: r.id,
@@ -161,7 +145,6 @@ export default function CoreCompetenciesClient() {
           name: r.name,
           sort_order: r.sort_order ?? null,
           example_context: Array.isArray(r.example_context) ? r.example_context : null,
-          profiles: profilesByFacet.get(r.id) ?? [],
         }))
       );
       setStatus('idle');
@@ -171,13 +154,28 @@ export default function CoreCompetenciesClient() {
     }
   }
 
+  // Profiles belong to the sub-competency itself (BC's structure diagram shows
+  // Facets and Profiles as siblings under Sub-Competency, not facet -> profile),
+  // so this is independent of loadFacets.
+  async function loadSubProfiles(subId: string) {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('core_competency_subcompetency_profiles')
+      .select('level,text')
+      .eq('subcompetency_id', subId)
+      .order('level', { ascending: true });
+    // Table may not exist yet on an older DB; degrade to "no profile text"
+    // rather than failing the whole page.
+    setSubProfiles(error ? [] : ((data ?? []) as ProfileRow[]));
+  }
+
   const selectedDomain = domains.find((d) => d.id === selectedDomainId) ?? null;
   const selectedSub = subs.find((s) => s.id === selectedSubId) ?? null;
 
   return (
     <main style={styles.page}>
       <h1 style={styles.h1}>Core Competencies</h1>
-      <p style={styles.muted}>Domain → Sub-competency → Facet.</p>
+      <p style={styles.muted}>Domain → Sub-competency → Facet, with each sub-competency's 6 profile levels.</p>
 
       <div style={{ marginTop: -8, marginBottom: 14, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
         <a href="/admin/policies/core-competencies/import" style={styles.secondaryBtn}>
@@ -245,7 +243,18 @@ export default function CoreCompetenciesClient() {
             <div style={{ fontWeight: 900, color: RCS.deepNavy }}>
               {selectedDomain.name} — {selectedSub.name}
             </div>
-            <div style={{ fontSize: 12, opacity: 0.85 }}>{facets.length} facets</div>
+            <div style={{ fontSize: 12, opacity: 0.85, marginBottom: subProfiles.length ? 8 : 0 }}>{facets.length} facets</div>
+            {subProfiles.length ? (
+              <div style={{ display: 'grid', gap: 5 }}>
+                {subProfiles.map((p) => (
+                  <div key={p.level} style={{ fontSize: 13, lineHeight: 1.4 }}>
+                    <span style={{ fontWeight: 700, opacity: 0.75 }}>Profile {p.level}:</span> {p.text}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: 12, opacity: 0.6, fontStyle: 'italic' }}>No profile text on file yet.</div>
+            )}
           </div>
         ) : null}
 
@@ -260,19 +269,6 @@ export default function CoreCompetenciesClient() {
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 800 }}>{f.name}</div>
                     {canPick ? <div style={{ fontSize: 12, opacity: 0.8 }}>{label}</div> : null}
-                    {f.profiles.length ? (
-                      <div style={{ marginTop: 6, display: 'grid', gap: 4 }}>
-                        {f.profiles.map((p) => (
-                          <div key={p.level} style={{ fontSize: 13, lineHeight: 1.4 }}>
-                            <span style={{ fontWeight: 700, opacity: 0.75 }}>Profile {p.level}:</span> {p.text}
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div style={{ marginTop: 4, fontSize: 12, opacity: 0.6, fontStyle: 'italic' }}>
-                        No profile text on file yet.
-                      </div>
-                    )}
                     {tags.length ? (
                       <div style={{ marginTop: 4, fontSize: 12, opacity: 0.9 }}>
                         {tags.map((t) => `#${t}`).join(' ')}

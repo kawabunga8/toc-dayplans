@@ -89,10 +89,12 @@ export async function POST(req: Request) {
     const sub = String((r['Sub-Competency'] ?? r.sub_competency ?? r.subCompetency ?? '')).trim();
     const facet = String((r['Facet Name'] ?? r.facet_name ?? r.facetName ?? '')).trim();
     const example_context = parseExampleContext(String((r['Example Context'] ?? r.example_context ?? r.exampleContext ?? '')).trim());
-    // Optional, absent from the CSV today. BC's framework (curriculum.gov.bc.ca/
-    // competencies) gives each facet six progressive PROFILE levels, not one
-    // description — so a "Profile 1".."Profile 6" column per row, same shape as
-    // the rest of this CSV (one row per facet).
+    // Optional, absent from the CSV today. BC's own structure diagram
+    // (curriculum.gov.bc.ca/competencies) shows Profiles and Facets as siblings
+    // under Sub-Competency, not facet -> profile: "each sub-competency has six
+    // profiles." A "Profile 1".."Profile 6" column here is read per row same as
+    // the rest of this facet-granular CSV, then deduped up to the sub-competency
+    // below — every facet row belonging to one sub shares the same six profiles.
     const profiles: ProfileCell[] = [];
     for (let level = 1; level <= 6; level++) {
       const raw = String(
@@ -113,9 +115,21 @@ export async function POST(req: Request) {
   }
 
   const previewDomains = Array.from(new Set(inRows.map((r) => r.domain)));
-  const previewSubs = new Set(inRows.map((r) => `${r.domain}::${r.sub}`)).size;
-  const previewProfileCells = inRows.reduce((n, r) => n + r.profiles.length, 0);
-  const previewFacetsWithProfiles = inRows.filter((r) => r.profiles.length > 0).length;
+  const subKeys = Array.from(new Set(inRows.map((r) => `${r.domain}::${r.sub}`)));
+
+  // Profile columns are read per facet row but belong to the shared sub-
+  // competency: first non-empty value per (sub, level) wins, so filling the
+  // columns once per sub (on its first facet row) or repeating them on every
+  // row both work.
+  const profilesBySub = new Map<string, Map<number, string>>();
+  for (const r of inRows) {
+    const key = `${r.domain}::${r.sub}`;
+    const levels = profilesBySub.get(key) ?? new Map<number, string>();
+    for (const p of r.profiles) if (!levels.has(p.level)) levels.set(p.level, p.text);
+    profilesBySub.set(key, levels);
+  }
+  const previewProfileCells = Array.from(profilesBySub.values()).reduce((n, m) => n + m.size, 0);
+  const previewSubsWithProfiles = Array.from(profilesBySub.values()).filter((m) => m.size > 0).length;
 
   if (dryRun) {
     const [
@@ -127,7 +141,7 @@ export async function POST(req: Request) {
       supabase.from('core_competency_domains').select('id', { count: 'exact', head: true }),
       supabase.from('core_competency_subcompetencies').select('id', { count: 'exact', head: true }),
       supabase.from('core_competency_facets').select('id', { count: 'exact', head: true }),
-      supabase.from('core_competency_facet_profiles').select('id', { count: 'exact', head: true }),
+      supabase.from('core_competency_subcompetency_profiles').select('id', { count: 'exact', head: true }),
     ]);
     return NextResponse.json({
       dryRun: true,
@@ -140,10 +154,10 @@ export async function POST(req: Request) {
       },
       replacement: {
         domains: previewDomains.length,
-        subcompetencies: previewSubs,
+        subcompetencies: subKeys.length,
         facets: inRows.length,
         profileCells: previewProfileCells,
-        facetsWithProfiles: previewFacetsWithProfiles,
+        subsWithProfiles: previewSubsWithProfiles,
       },
       warning:
         'Applying this deletes the current taxonomy and every id in it (including all profile text), then ' +
@@ -256,6 +270,25 @@ export async function POST(req: Request) {
     subIdByKey.set(`${domId}::${name}`, String((r as any).id));
   }
 
+  // Profiles belong to the sub-competency itself, so they can be inserted as
+  // soon as sub ids exist — no need to wait on facets.
+  const profileInsertRows = subsKeyed.flatMap((x) => {
+    const domId = domIdByName.get(x.domain);
+    const subId = domId ? subIdByKey.get(`${domId}::${x.sub}`) : null;
+    if (!subId) return [];
+    const levels = profilesBySub.get(`${x.domain}::${x.sub}`) ?? new Map<number, string>();
+    return Array.from(levels.entries()).map(([level, text]) => ({ subcompetency_id: subId, level, text }));
+  });
+
+  if (profileInsertRows.length) {
+    const { error: profErr } = await supabase.from('core_competency_subcompetency_profiles').insert(profileInsertRows);
+    if (profErr)
+      return NextResponse.json(
+        { error: profErr.message, step: 'insert_profiles', filename, code: profErr.code, details: profErr.details, hint: (profErr as any).hint ?? null },
+        { status: 400 }
+      );
+  }
+
   // Insert facets. sort_order was previously omitted here even though the client
   // orders by it — every import silently re-sorted facets alphabetically instead
   // of preserving the CSV's order. Numbered per sub-competency, in CSV row order.
@@ -273,49 +306,27 @@ export async function POST(req: Request) {
         sort_order: next,
         example_context: r.example_context ?? [],
         updated_at: new Date().toISOString(),
-        // carried through only to key profile rows below; not a column
-        __sourceProfiles: r.profiles,
       };
     })
     .filter((r): r is NonNullable<typeof r> => !!r);
 
-  const { data: insertedFacets, error: facErr } = await supabase
-    .from('core_competency_facets')
-    .insert(facetRows.map(({ __sourceProfiles, ...rest }) => rest))
-    .select('id,subcompetency_id,name');
+  const { error: facErr } = await supabase.from('core_competency_facets').insert(facetRows);
   if (facErr)
     return NextResponse.json(
       { error: facErr.message, step: 'insert_facets', filename, code: facErr.code, details: facErr.details, hint: (facErr as any).hint ?? null },
       { status: 400 }
     );
 
-  // Facets get fresh ids on every replace, so profile rows link by the same
-  // (subcompetency, name) key used above rather than any id the CSV knew about.
-  const facetIdByKey = new Map<string, string>();
-  for (const f of insertedFacets ?? []) {
-    facetIdByKey.set(`${(f as any).subcompetency_id}::${(f as any).name}`, (f as any).id);
-  }
-
-  const profileRows = facetRows.flatMap((f) => {
-    const facetId = facetIdByKey.get(`${f.subcompetency_id}::${f.name}`);
-    if (!facetId) return [];
-    return f.__sourceProfiles.map((p) => ({ facet_id: facetId, level: p.level, text: p.text }));
-  });
-
-  if (profileRows.length) {
-    const { error: profErr } = await supabase.from('core_competency_facet_profiles').insert(profileRows);
-    if (profErr)
-      return NextResponse.json(
-        { error: profErr.message, step: 'insert_profiles', filename, code: profErr.code, details: profErr.details, hint: (profErr as any).hint ?? null },
-        { status: 400 }
-      );
-  }
-
     return NextResponse.json({
       ok: true,
       dryRun: false,
       filename,
-      counts: { domains: domains.length, subcompetencies: subsKeyed.length, facets: facetRows.length, profileCells: profileRows.length },
+      counts: {
+        domains: domains.length,
+        subcompetencies: subsKeyed.length,
+        facets: facetRows.length,
+        profileCells: profileInsertRows.length,
+      },
     });
   } catch (e: any) {
     return NextResponse.json(
