@@ -8,12 +8,12 @@ them.
 
 ### People
 
-**Student Hub**:
+**Course Hub**:
 The app that owns student, class and enrolment records for the whole RCS suite.
-This app reads that data and never writes it. Its repository and its own docs
-call it Course Hub, and it deploys to rcs-course-hub.vercel.app, but Student Hub
-is what it calls itself on screen and what we call it out loud.
-_Avoid_: Course Hub, course-hub, RCS-Hub, the hub, the main database
+This app reads that data and never writes it. It deploys to
+rcs-course-hub.vercel.app and calls itself Course Hub on screen and in its own
+docs — the whole suite now uses that name.
+_Avoid_: Student Hub, RCS-Hub, the hub, the main database
 
 **TOC**:
 A Teacher On Call: the substitute who reads a plan and teaches from it.
@@ -56,7 +56,7 @@ Biblical Perspectives 10 runs in both Block B and Block C.
 _Avoid_: section, course (when you mean the group), block (when you mean this)
 
 **Course**:
-A course as Student Hub defines it, with its name, grade and years. A class
+A course as Course Hub defines it, with its name, grade and years. A class
 draws from one or more of them: Band 10-12 is one class drawing Band 10, Band 11
 and Band 12. Career Life Education is a course like any other. Only Flex, Lunch
 and Chapel draw from no course at all.

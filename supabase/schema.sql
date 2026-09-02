@@ -128,12 +128,12 @@ create index if not exists classes_block_label_idx on classes(block_label);
 -- POLICIES: LEARNING STANDARDS (structured)
 -- ----------------------
 -- OWNERSHIP MOVED: learning_standards / learning_standard_rubrics are now owned and
--- versioned by student-hub (see student-hub/supabase/shared-schema.sql +
+-- versioned by course-hub (see course-hub/supabase/shared-schema.sql +
 -- migrations/20260627000000_version_learning_standards.sql). This app is a read-only
 -- consumer — use the current_learning_standards(p_school_year) RPC instead of querying
 -- these tables directly, so version/supersession logic isn't duplicated here.
 -- The `create table if not exists` below remains only so a fresh local/dev DB has the
--- tables; do not add columns or constraints here — make changes in student-hub instead.
+-- tables; do not add columns or constraints here — make changes in course-hub instead.
 create table if not exists learning_standards (
   id uuid primary key default gen_random_uuid(),
   subject text not null,

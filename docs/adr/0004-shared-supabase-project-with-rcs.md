@@ -5,7 +5,7 @@ status: accepted
 # This app shares one Supabase project with the rest of the RCS suite
 
 TOC Dayplans is one of several personal teaching apps for a single teacher at
-RCS, and they all share one Supabase project. Student Hub is the system of
+RCS, and they all share one Supabase project. Course Hub is the system of
 record: it owns students, courses, enrolments and quarters, and the other apps
 read that data rather than keeping their own. This app contributes the dayplan
 domain (`day_plans`, `day_plan_blocks`, `toc_block_plans`, the `class_*`
@@ -31,23 +31,23 @@ It declares `create table if not exists students`, `classes` and `enrolments`.
 On the live database the guard makes them no-ops, which is the only reason this
 has not caused damage.
 
-Ownership is muddier than "Student Hub owns it", and worth stating exactly, by
+Ownership is muddier than "Course Hub owns it", and worth stating exactly, by
 which app actually writes each table:
 
 | Table | Written by |
 | --- | --- |
-| `students` | Student Hub, this app, the Report Card Tool |
-| `courses` | Student Hub, the Report Card Tool |
-| `enrolments` | Student Hub, this app, the Report Card Tool |
-| `learning_standards` | Student Hub, this app, the Report Card Tool |
-| `school_quarters` | Student Hub, this app |
-| `classes` | **this app only** - Student Hub merely reads it |
-| `student_marks`, `student_notes` | Student Hub |
+| `students` | Course Hub, this app, the Report Card Tool |
+| `courses` | Course Hub, the Report Card Tool |
+| `enrolments` | Course Hub, this app, the Report Card Tool |
+| `learning_standards` | Course Hub, this app, the Report Card Tool |
+| `school_quarters` | Course Hub, this app |
+| `classes` | **this app only** - Course Hub merely reads it |
+| `student_marks`, `student_notes` | Course Hub |
 
-The intended rule is that data flows from Student Hub and everything else reads.
+The intended rule is that data flows from Course Hub and everything else reads.
 Five of the eight shared tables have more than one writer, so the rule is a goal
-rather than a description. `classes` is the inversion: Student Hub's own
-documentation claims to manage it, and it is the one table Student Hub never
+rather than a description. `classes` is the inversion: Course Hub's own
+documentation claims to manage it, and it is the one table Course Hub never
 writes.
 
 `classes` is also scheduled to disappear. Course Hub's `ARCHITECTURE.md` retires
