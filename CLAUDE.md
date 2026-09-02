@@ -59,7 +59,8 @@ Many features require explicit `friday_type` (day1/day2) when the date is a Frid
 The teacher lesson flow generator:
 1. Selects a date + block, builds Section 1 context, selects an educator role
 2. Calls `POST /api/ai/suggest` → returns JSON phases
-3. Applies via `/api/admin/dayplans/blocks/[blockId]/lesson-flow/append`
+3. Staff must check "I have reviewed this AI-generated content..." in the Preview panel before Apply is enabled (`TeacherClient.tsx`'s `reviewed` state) — required because `/p` renders live data, so Apply on an already-published plan makes the content visible to TOCs immediately, with no separate re-publish step
+4. Applies via `/api/admin/dayplans/blocks/[blockId]/lesson-flow/append`
 
 Important:
 - AI suggest endpoints must force JSON-only output

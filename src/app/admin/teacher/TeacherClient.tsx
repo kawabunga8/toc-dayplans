@@ -59,6 +59,7 @@ export default function TeacherClient() {
   const [err, setErr] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const [phases, setPhases] = useState<Phase[] | null>(null);
+  const [reviewed, setReviewed] = useState(false);
   const [applyLoading, setApplyLoading] = useState(false);
   const [applyErr, setApplyErr] = useState<string | null>(null);
 
@@ -70,6 +71,7 @@ export default function TeacherClient() {
     setOkMsg(null);
     setApplyErr(null);
     setPhases(null);
+    setReviewed(false);
     try {
       const res = await fetch('/api/ai/suggest', {
         method: 'POST',
@@ -170,6 +172,7 @@ export default function TeacherClient() {
     setOkMsg(null);
     setApplyErr(null);
     setPhases(null);
+    setReviewed(false);
   }, [selectedBlockKey]);
 
   useEffect(() => {
@@ -665,7 +668,7 @@ export default function TeacherClient() {
           {phases && selectedBlock ? (
             <button
               type="button"
-              disabled={applyLoading}
+              disabled={applyLoading || !reviewed}
               onClick={async () => {
                 setApplyLoading(true);
                 setApplyErr(null);
@@ -696,6 +699,7 @@ export default function TeacherClient() {
                     throw new Error(String(msg));
                   }
 
+                  setReviewed(false);
                   setOkMsg(`Applied: appended ${j?.appended ?? '?'} phase(s) to ${selectedBlock.plan_date} block ${selectedBlock.slot}. Redirecting…`);
                   window.location.href = `/admin/dayplans/${encodeURIComponent(String(j?.plan_id ?? ''))}`;
                 } catch (e: any) {
@@ -724,7 +728,10 @@ export default function TeacherClient() {
 
         {phases ? (
           <div style={{ marginTop: 12, border: `1px solid ${RCS.gold}`, borderRadius: 12, padding: 12, background: '#fffdf2' }}>
-            <div style={{ fontWeight: 900, marginBottom: 8 }}>Preview</div>
+            <div style={{ fontWeight: 900, marginBottom: 4 }}>Preview</div>
+            <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.75, marginBottom: 8 }}>
+              ⚡ AI-generated draft — please review carefully before adding it to the plan.
+            </div>
             <div style={{ display: 'grid', gap: 8 }}>
               {phases.map((p, idx) => (
                 <div key={idx} style={{ borderTop: idx ? '1px solid rgba(0,0,0,0.08)' : 'none', paddingTop: idx ? 8 : 0 }}>
@@ -734,6 +741,15 @@ export default function TeacherClient() {
                 </div>
               ))}
             </div>
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(0,0,0,0.08)', fontSize: 13, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={reviewed}
+                onChange={(e) => setReviewed(e.target.checked)}
+                style={{ marginTop: 2 }}
+              />
+              <span>I have reviewed this AI-generated content and confirm it's accurate and appropriate for this class before adding it to the plan.</span>
+            </label>
           </div>
         ) : null}
       </section>
