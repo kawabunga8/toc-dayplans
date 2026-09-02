@@ -81,35 +81,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  // Allow per-request brain override via body field, falling back to env var.
-  let bodyForBrain: any = null;
-  try { bodyForBrain = await req.clone().json(); } catch { /* ignore */ }
-  const requestedBrain = bodyForBrain?.brain;
-  const providerKey = (
-    (requestedBrain && requestedBrain in providers) ? requestedBrain : (process.env.AI_BRAIN || 'anthropic')
-  ) as keyof typeof providers;
-  const provider = (providers as any)[providerKey];
-  if (!provider) {
-    return NextResponse.json({ error: `Invalid AI_BRAIN (${String(providerKey)})` }, { status: 500 });
-  }
-
-  // Wrap provider.generate with automatic fallback to Anthropic if the primary
-  // provider is rate-limited and Anthropic is available as an alternative.
-  const originalGenerate = provider.generate.bind(provider);
-  const isRateLimitMsg = (msg: string) =>
-    msg.includes('rate limit') || msg.includes('Rate limit') || msg.includes('Rate limited') || msg.includes('429') || msg.includes('resource_exhausted');
-  provider.generate = async (prompt: string, context?: any) => {
-    try {
-      return await originalGenerate(prompt, context);
-    } catch (e: any) {
-      const msg = String(e?.message ?? e ?? '');
-      if (isRateLimitMsg(msg) && providerKey !== 'anthropic' && providers.anthropic) {
-        console.warn(`[ai/suggest] ${providerKey} rate-limited, falling back to anthropic`);
-        return await providers.anthropic.generate(prompt, context);
-      }
-      throw e;
-    }
-  };
+  // Claude is the only RCS-approved AI provider for this feature.
+  const provider = providers.anthropic;
 
   let body: SuggestReq;
   try {

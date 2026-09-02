@@ -25,7 +25,7 @@ No test suite is configured.
 - **Published payload snapshot**: When staff publish a plan, a canonical JSON snapshot (`published_payload`) is stored in `day_plans`. The schema contract is documented in `docs/architecture/effective-plan-contract.md`. This snapshot merges class templates with per-block overrides.
 - **AppRules library** (`src/lib/appRules/`): All domain-specific business logic lives here — school day calculations, Friday Day 1/Day 2 rotation, special block types (Flex, Lunch, Chapel, CLE), navigation URL builders, and template merging.
 - **Supabase RPC functions**: Complex queries use Supabase RPCs (e.g., `get_public_plans_for_week`, `is_staff()`). RLS policies are defined in `supabase/schema.sql`.
-- **AI lesson flow**: Gemini and Anthropic providers are in `src/lib/ai/providers/`. The API route `/api/admin/dayplans/blocks/[blockId]/lesson-flow/append` generates and appends AI lesson flows to a block. Prompt templates are in `src/lib/teacherSuperprompt/`.
+- **AI lesson flow**: Claude (Anthropic) is the only provider — see `src/lib/ai/providers/`; the RCS-approved AI tool for this feature, matching rcs-report-card-tool's decision. The API route `/api/admin/dayplans/blocks/[blockId]/lesson-flow/append` generates and appends AI lesson flows to a block. Prompt templates are in `src/lib/teacherSuperprompt/`.
 - **No global state**: Admin UI uses `'use client'` components with local React state + API route calls. No Redux/Zustand.
 
 ### Core data model
@@ -64,8 +64,7 @@ The teacher lesson flow generator:
 Important:
 - AI suggest endpoints must force JSON-only output
 - When applying to Friday blocks, include `friday_type`
-- Default provider is Anthropic (`AI_BRAIN=anthropic`); set `AI_BRAIN=gemini` to use Gemini
-- On rate limit, the suggest route automatically falls back to Anthropic
+- Claude (Anthropic) is the only provider — the RCS-approved AI tool for this feature
 
 ### Where things usually break
 
@@ -86,10 +85,8 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=   # needed for server-side admin API routes
 
-# AI (at least one required for AI features)
+# AI (required for AI features)
 ANTHROPIC_API_KEY=
-GEMINI_API_KEY=
-AI_BRAIN=anthropic            # or: gemini
 ```
 
 ### Deploy notes
