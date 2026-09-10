@@ -2626,32 +2626,63 @@ grant execute on function get_public_day_plan_by_id(uuid) to anon;
 
 -- Public classes (block labels + names) for TOC display.
 -- SECURITY DEFINER so anon callers can access without opening table RLS.
-create or replace function get_public_classes()
+create or replace function get_public_classes(plan_date date default null)
 returns jsonb
 language plpgsql
 security definer
 set search_path = public
 as $$
 declare
+  d date := coalesce(plan_date, (now() at time zone 'America/Vancouver')::date);
+  q int;
+  sy text;
   out jsonb;
 begin
-  select coalesce(jsonb_agg(jsonb_build_object(
-      'id', c.id,
-      'block_label', c.block_label,
-      'name', c.name,
-      'room', c.room,
-      'sort_order', c.sort_order
-    ) order by c.sort_order asc nulls last, c.name asc), '[]'::jsonb)
-  into out
-  from classes c
-  where c.block_label is not null;
+  -- Which course sits in a block is quarter- and year-dependent: block H is
+  -- ICT 9 in Q1, ICT 9 again in Q2, then Band 9 for Q3/Q4, and classes carries a
+  -- row per school year. Returning every row and letting the caller pick meant
+  -- Array.find() chose by (sort_order, name), which surfaced last year's course.
+  select sq.id into q
+  from school_quarters sq
+  where d between sq.start_date and sq.end_date
+  order by sq.id
+  limit 1;
 
-  return out;
+  sy := case
+    when extract(month from d) >= 7
+      then to_char(d, 'YYYY') || '-' || to_char(d + interval '1 year', 'YY')
+    else to_char(d - interval '1 year', 'YYYY') || '-' || to_char(d, 'YY')
+  end;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+      'id', t.id,
+      'block_label', t.block_label,
+      'name', t.name,
+      'room', t.room,
+      'sort_order', t.sort_order
+    ) order by t.sort_order asc nulls last, t.name asc), '[]'::jsonb)
+  into out
+  from (
+    -- One row per block. A null school_year is perennial (CHAPEL, FLEX, LUNCH
+    -- have only such a row) and is kept as a fallback, but never outranks a row
+    -- for the current year.
+    select distinct on (c.block_label) c.id, c.block_label, c.name, c.room, c.sort_order
+    from classes c
+    where c.block_label is not null
+      and (c.school_year is null or c.school_year = sy)
+      and (q is null or c.active_quarters is null or q = any(c.active_quarters))
+    order by c.block_label,
+             (c.school_year = sy) desc nulls last,
+             c.sort_order asc nulls last,
+             c.name asc
+  ) t;
+
+  return coalesce(out, '[]'::jsonb);
 end;
 $$;
 
-revoke all on function get_public_classes() from public;
-grant execute on function get_public_classes() to anon;
+revoke all on function get_public_classes(date) from public;
+grant execute on function get_public_classes(date) to anon;
 
 -- Week calendar payload: published plans for Mon–Fri of the given week_start (Monday)
 -- Publishing gates whether a TOC may read a plan (ADR-0001). Schema-qualified

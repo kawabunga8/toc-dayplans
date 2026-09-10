@@ -294,6 +294,10 @@ export default function TocClient({
 
   const [rotationBlocks, setRotationBlocks] = useState<string[]>([]);
   const [blockTimesBySlot, setBlockTimesBySlot] = useState<Record<string, { start: string; end: string }>>({});
+  // Seeded from the server render so the first paint has no gap; refetched below
+  // whenever the date changes, since which course sits in a block is
+  // quarter-dependent (H is ICT 9 in Q1/Q2, Band 9 in Q3/Q4).
+  const [classesForDate, setClassesForDate] = useState<PublicClass[]>(classes);
 
   useEffect(() => {
     let cancelled = false;
@@ -324,6 +328,15 @@ export default function TocClient({
       } catch {
         if (!cancelled) setBlockTimesBySlot({});
       }
+
+      try {
+        const res = await fetch(`/api/public/classes?date=${encodeURIComponent(selectedDate)}`);
+        const j = await res.json();
+        if (!res.ok) throw new Error(j?.error ?? 'Failed');
+        if (!cancelled) setClassesForDate((j?.classes ?? []) as PublicClass[]);
+      } catch {
+        // Keep whatever is already showing rather than blanking the table.
+      }
     })();
     return () => {
       cancelled = true;
@@ -337,7 +350,7 @@ export default function TocClient({
 
     // Build rows in the exact rotation order.
     return wanted.map((label) => {
-      const match = classes.find((c) => String(c.block_label ?? '').toUpperCase() === label);
+      const match = classesForDate.find((c) => String(c.block_label ?? '').toUpperCase() === label);
       if (match) return match;
       // synthetic row for things like CLE/Lunch if they aren't in classes table
       return {
@@ -348,7 +361,7 @@ export default function TocClient({
         sort_order: null,
       } as PublicClass;
     });
-  }, [classes, rotationBlocks]);
+  }, [classesForDate, rotationBlocks]);
 
   const days = useMemo(() => buildWeekDays(weekStart), [weekStart]);
 
