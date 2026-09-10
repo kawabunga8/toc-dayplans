@@ -18,9 +18,9 @@
 -- parameter creates an overload rather than replacing it, and a no-argument call
 -- would keep resolving to the old one.
 
-drop function if exists get_public_classes();
+drop function if exists public.get_public_classes();
 
-create or replace function get_public_classes(plan_date date default null)
+create or replace function public.get_public_classes(plan_date date default null)
 returns jsonb
 language plpgsql
 security definer
@@ -35,7 +35,7 @@ begin
   -- Quarter containing the date. Null outside the school year (summer), which
   -- disables quarter filtering rather than returning nothing for G and H.
   select sq.id into q
-  from school_quarters sq
+  from public.school_quarters sq
   where d between sq.start_date and sq.end_date
   order by sq.id
   limit 1;
@@ -61,7 +61,7 @@ begin
     -- the ordering below only ever chooses between an exact-year row (true) and
     -- a perennial one (null) -- exact wins.
     select distinct on (c.block_label) c.id, c.block_label, c.name, c.room, c.sort_order
-    from classes c
+    from public.classes c
     where c.block_label is not null
       and (c.school_year is null or c.school_year = sy)
       and (q is null or c.active_quarters is null or q = any(c.active_quarters))
@@ -75,5 +75,5 @@ begin
 end;
 $$;
 
-revoke all on function get_public_classes(date) from public;
-grant execute on function get_public_classes(date) to anon;
+revoke all on function public.get_public_classes(date) from public;
+grant execute on function public.get_public_classes(date) to anon;

@@ -2626,7 +2626,7 @@ grant execute on function get_public_day_plan_by_id(uuid) to anon;
 
 -- Public classes (block labels + names) for TOC display.
 -- SECURITY DEFINER so anon callers can access without opening table RLS.
-create or replace function get_public_classes(plan_date date default null)
+create or replace function public.get_public_classes(plan_date date default null)
 returns jsonb
 language plpgsql
 security definer
@@ -2653,7 +2653,7 @@ begin
   into q
   from (
     select s.*, row_number() over (order by s.start_date) as ordinal
-    from school_quarters s
+    from public.school_quarters s
   ) sq
   where d between sq.start_date and sq.end_date
   order by sq.start_date
@@ -2678,7 +2678,7 @@ begin
     -- have only such a row) and is kept as a fallback, but never outranks a row
     -- for the current year.
     select distinct on (c.block_label) c.id, c.block_label, c.name, c.room, c.sort_order
-    from classes c
+    from public.classes c
     where c.block_label is not null
       and (c.school_year is null or c.school_year = sy)
       and (q is null or c.active_quarters is null or q = any(c.active_quarters))
@@ -2692,8 +2692,8 @@ begin
 end;
 $$;
 
-revoke all on function get_public_classes(date) from public;
-grant execute on function get_public_classes(date) to anon;
+revoke all on function public.get_public_classes(date) from public;
+grant execute on function public.get_public_classes(date) to anon;
 
 -- Week calendar payload: published plans for Mon–Fri of the given week_start (Monday)
 -- Publishing gates whether a TOC may read a plan (ADR-0001). Schema-qualified
