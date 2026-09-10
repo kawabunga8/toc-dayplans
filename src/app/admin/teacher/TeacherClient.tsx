@@ -131,7 +131,12 @@ export default function TeacherClient() {
       const slot = String(slotRaw || '').trim().toUpperCase();
       if (!slot) continue;
 
-      const cls = classesRows.find((c: any) => String(c?.block_label ?? '').toUpperCase() === slot) ?? null;
+      const candidates = classesRows.filter((c: any) => String(c?.block_label ?? '').toUpperCase() === slot);
+      const cls =
+        candidates.find((c: any) => c?.school_year === schoolYear) ??
+        candidates.find((c: any) => !c?.school_year) ??
+        candidates[0] ??
+        null;
       const classText = String(cls?.name ?? `Block ${slot}`).trim();
       const roomText = String(cls?.room ?? '').trim();
 
@@ -152,7 +157,7 @@ export default function TeacherClient() {
     }
 
     return out;
-  }, [weekDate, rotationSlots, classesRows]);
+  }, [weekDate, rotationSlots, classesRows, schoolYear]);
 
   const selectedBlock = useMemo(() => blockOptions.find((o) => o.key === selectedBlockKey) ?? null, [blockOptions, selectedBlockKey]);
 

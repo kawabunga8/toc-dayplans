@@ -37,7 +37,7 @@ export async function GET(req: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
   let rows = (data ?? []) as Array<{ subject: string; sort_order: number | null; standard_title: string }>;
-  if (subject) rows = rows.filter((r) => r.subject === subject);
+  if (subject) rows = rows.filter((r) => r.subject.toUpperCase() === subject.toUpperCase());
   rows = rows.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.standard_title.localeCompare(b.standard_title));
 
   return NextResponse.json({ rows });
