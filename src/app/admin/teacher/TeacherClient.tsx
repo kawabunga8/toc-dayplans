@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { TEACHER_ROLES, buildSection1FromFields, STANDING_GUARDRAILS } from '@/lib/teacherSuperprompt/superprompt';
 import { templateForClass } from '@/lib/appRules/templates';
+import { useSchoolYear } from '@/app/admin/SchoolYearContext';
 
 type RoleId = 1 | 2 | 3 | 4 | 5 | 6;
 
@@ -20,6 +21,7 @@ const RCS = {
 } as const;
 
 export default function TeacherClient() {
+  const { schoolYear } = useSchoolYear();
   const [roleId, setRoleId] = useState<RoleId>(1);
 
   const [weekDate, setWeekDate] = useState(() => {
@@ -247,8 +249,9 @@ export default function TeacherClient() {
     try {
       // If exactly one subject tag is present, ask the API to filter (less data).
       const qs = new URLSearchParams();
+      qs.set('school_year', schoolYear);
       if (subjects && subjects.length === 1) qs.set('subject', subjects[0]!);
-      const url = `/api/admin/learning-standards${qs.toString() ? `?${qs.toString()}` : ''}`;
+      const url = `/api/admin/learning-standards?${qs.toString()}`;
       const res = await fetch(url);
       const j = await res.json();
       if (!res.ok) return;
@@ -288,7 +291,7 @@ export default function TeacherClient() {
     return () => {
       window.removeEventListener('focus', onFocus);
     };
-  }, [subjectTags]);
+  }, [subjectTags, schoolYear]);
 
   const selectedClass = useMemo(() => {
     if (!selectedBlock?.class_id) return null;
