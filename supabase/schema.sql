@@ -2642,10 +2642,21 @@ begin
   -- ICT 9 in Q1, ICT 9 again in Q2, then Band 9 for Q3/Q4, and classes carries a
   -- row per school year. Returning every row and letting the caller pick meant
   -- Array.find() chose by (sort_order, name), which surfaced last year's course.
-  select sq.id into q
-  from school_quarters sq
+  -- The quarter NUMBER, from the label ('Q1' -> 1). Not school_quarters.id:
+  -- Course Hub owns that table and its ids are not 1-4 (Q1 is 101), so matching
+  -- them against classes.active_quarters silently drops every quarter-scoped
+  -- block. Falls back to position by start_date if a label is ever blank.
+  select coalesce(
+           nullif(regexp_replace(sq.label, '\D', '', 'g'), '')::int,
+           sq.ordinal
+         )
+  into q
+  from (
+    select s.*, row_number() over (order by s.start_date) as ordinal
+    from school_quarters s
+  ) sq
   where d between sq.start_date and sq.end_date
-  order by sq.id
+  order by sq.start_date
   limit 1;
 
   sy := case
