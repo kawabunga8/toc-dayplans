@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 // supabase client calls are done via server routes on this page (to avoid RLS issues)
 import { useDemo } from '@/app/admin/DemoContext';
+import { useSchoolYear } from '@/app/admin/SchoolYearContext';
 import { asFridayType, buildDayplanDetailHref, isYyyyMmDd } from '@/lib/appRules/navigation';
 import { nextSchoolDayIso, nextSchoolDayIsoFromIso, prevSchoolDayIsoFromIso } from '@/lib/appRules/dates';
 
@@ -14,12 +15,14 @@ type ClassRow = {
   room: string | null;
   sort_order: number | null;
   active_quarters: number[] | null;
+  school_year: string | null;
 };
 
 type QuarterRow = { id: number; label: string; start_date: string; end_date: string };
 
 export default function DayPlansClient() {
   const { isDemo } = useDemo();
+  const { schoolYear } = useSchoolYear();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -155,7 +158,7 @@ export default function DayPlansClient() {
   }, [quarters, selectedDate]);
 
   const classByBlock = useMemo(() => {
-    const m = new Map<string, ClassRow>();
+    const candidatesByBlock = new Map<string, ClassRow[]>();
     for (const c of classes) {
       const bl = String(c.block_label ?? '').trim();
       if (!bl) continue;
@@ -164,10 +167,27 @@ export default function DayPlansClient() {
       if (c.active_quarters != null && currentQuarterId !== null) {
         if (!c.active_quarters.includes(currentQuarterId)) continue;
       }
-      m.set(bl.toUpperCase(), c);
+      const key = bl.toUpperCase();
+      const list = candidatesByBlock.get(key);
+      if (list) list.push(c);
+      else candidatesByBlock.set(key, [c]);
+    }
+
+    // A block_label can have duplicate class rows across school years (and a
+    // year-less generic row). Prefer the row for the currently selected school
+    // year, then a year-less row, then whatever's left — rather than silently
+    // letting the last row in array order win.
+    const m = new Map<string, ClassRow>();
+    for (const [key, candidates] of candidatesByBlock) {
+      const chosen =
+        candidates.find((c) => c.school_year === schoolYear) ??
+        candidates.find((c) => !c.school_year) ??
+        candidates[candidates.length - 1] ??
+        null;
+      if (chosen) m.set(key, chosen);
     }
     return m;
-  }, [classes, currentQuarterId]);
+  }, [classes, currentQuarterId, schoolYear]);
 
   async function openOrCreatePlanForSlot(slotRaw: string, classRow?: ClassRow | null) {
     const clickTs = new Date().toISOString();
