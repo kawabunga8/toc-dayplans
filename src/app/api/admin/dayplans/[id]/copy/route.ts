@@ -3,6 +3,7 @@ import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 import { templateForClass } from '@/lib/appRules/templates';
+import { schoolYearForIso } from '@/lib/appRules/dates';
 
 export const runtime = 'nodejs';
 
@@ -191,14 +192,21 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       const startTime = t?.start_time ?? mapping.fallbackStart;
       const endTime = t?.end_time ?? mapping.fallbackEnd;
 
-      // Lookup class by block_label
+      // Lookup class by block_label. A block_label can have duplicate rows across
+      // school years (plus a year-less generic row) — prefer the row for the
+      // target date's school year rather than an arbitrary match.
       const { data: classRows } = await adminDb
         .from('classes')
-        .select('id,name,room,block_label')
-        .ilike('block_label', targetSlot)
-        .limit(1);
+        .select('id,name,room,block_label,school_year')
+        .ilike('block_label', targetSlot);
 
-      const cls = (classRows as any[])?.[0] ?? null;
+      const targetSchoolYear = schoolYearForIso(targetDate);
+      const classCandidates = (classRows as any[]) ?? [];
+      const cls =
+        classCandidates.find((c) => c.school_year === targetSchoolYear) ??
+        classCandidates.find((c) => !c.school_year) ??
+        classCandidates[0] ??
+        null;
 
       const { data: newBlock, error: newBlockErr } = await adminDb
         .from('day_plan_blocks')

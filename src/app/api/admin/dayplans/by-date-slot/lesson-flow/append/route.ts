@@ -3,6 +3,7 @@ import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 import { templateForClass } from '@/lib/appRules/templates';
+import { schoolYearForIso } from '@/lib/appRules/dates';
 
 export const runtime = 'nodejs';
 
@@ -137,11 +138,24 @@ export async function POST(req: Request) {
 
   // 2) Ensure primary day_plan_block exists for this plan+slot, based on classes + block times
   const clsQuery = class_id_hint
-    ? adminDb.from('classes').select('id,name,room,block_label').eq('id', class_id_hint).limit(1)
-    : adminDb.from('classes').select('id,name,room,block_label').eq('block_label', slot).limit(1);
+    ? adminDb.from('classes').select('id,name,room,block_label,school_year').eq('id', class_id_hint).limit(1)
+    : adminDb.from('classes').select('id,name,room,block_label,school_year').eq('block_label', slot);
   const { data: clsRows, error: clsErr } = await clsQuery;
   if (clsErr) return NextResponse.json({ error: clsErr.message }, { status: 400 });
-  const cls = (clsRows as any[])?.[0] ?? null;
+  // A block_label can have duplicate rows across school years (plus a year-less
+  // generic row) — prefer the row for this plan date's school year.
+  const clsCandidates = (clsRows as any[]) ?? [];
+  const cls = class_id_hint
+    ? clsCandidates[0] ?? null
+    : (() => {
+        const planSchoolYear = schoolYearForIso(plan_date);
+        return (
+          clsCandidates.find((c) => c.school_year === planSchoolYear) ??
+          clsCandidates.find((c) => !c.school_year) ??
+          clsCandidates[0] ??
+          null
+        );
+      })();
   if (!cls?.id) return NextResponse.json({ error: `No class found for ${class_id_hint ? `id=${class_id_hint}` : `block_label=${slot}`} (Courses/Rooms)` }, { status: 400 });
 
   // Find existing block row
