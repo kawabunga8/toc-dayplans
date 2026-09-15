@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabaseClient';
 import { TEACHER_ROLES, buildSection1FromFields, STANDING_GUARDRAILS } from '@/lib/teacherSuperprompt/superprompt';
 import { templateForClass } from '@/lib/appRules/templates';
@@ -39,9 +39,12 @@ export default function TeacherClient() {
 
   const [rotationSlots, setRotationSlots] = useState<string[] | null>(null);
   const [rotationLoading, setRotationLoading] = useState(false);
+  const [quarters, setQuarters] = useState<Array<{ id: number; label: string; start_date: string; end_date: string }>>([]);
 
   const [subject, setSubject] = useState('');
   const [grades, setGrades] = useState<number[]>([]);
+  // Block key whose grades were already auto-filled, so clearing every checkbox doesn't refill them.
+  const gradesAutoFilledFor = useRef<string | null>(null);
   const [classSize, setClassSize] = useState('');
   const [unitStage, setUnitStage] = useState('');
   const [classesRows, setClassesRows] = useState<any[]>([]);
@@ -113,8 +116,26 @@ export default function TeacherClient() {
     }
   };
 
+  const isFriday = /^\d{4}-\d{2}-\d{2}$/.test(weekDate) && new Date(`${weekDate}T00:00:00`).getDay() === 5;
+
+  // Quarter the selected date falls in (same rule as DayPlansClient): outside every quarter,
+  // fall back to the most recently ended one so quarter-specific classes still resolve.
+  const currentQuarterId = useMemo(() => {
+    if (!quarters.length || !weekDate) return null;
+    // Quarter number comes from the label; row ids are per school year, not 1-4.
+    const num = (q: (typeof quarters)[number]) => {
+      const n = parseInt(String(q.label ?? '').replace(/[^0-9]/g, ''), 10);
+      return Number.isNaN(n) ? q.id : n;
+    };
+    for (const q of quarters) {
+      if (weekDate >= q.start_date && weekDate <= q.end_date) return num(q);
+    }
+    const past = quarters.filter((q) => q.end_date < weekDate).sort((a, b) => b.end_date.localeCompare(a.end_date));
+    return past[0] ? num(past[0]) : null;
+  }, [quarters, weekDate]);
+
   const blockOptions = useMemo(() => {
-    const out: Array<{ key: string; label: string; plan_date: string; slot: string; class_name: string; room: string; plan_id: string; block_id: string; class_id: string | null }> = [];
+    const out:Array<{ key: string; label: string; plan_date: string; slot: string; class_name: string; room: string; plan_id: string; block_id: string; class_id: string | null }> = [];
 
     const selectedDate = String(weekDate || '').trim();
 
@@ -131,7 +152,12 @@ export default function TeacherClient() {
       const slot = String(slotRaw || '').trim().toUpperCase();
       if (!slot) continue;
 
-      const candidates = classesRows.filter((c: any) => String(c?.block_label ?? '').toUpperCase() === slot);
+      // A block can hold different classes per quarter (e.g. Computer Studies 10 Q1/Q2 vs Q3/Q4).
+      const candidates = classesRows.filter(
+        (c: any) =>
+          String(c?.block_label ?? '').toUpperCase() === slot &&
+          !(Array.isArray(c?.active_quarters) && currentQuarterId !== null && !c.active_quarters.includes(currentQuarterId))
+      );
       const cls =
         candidates.find((c: any) => c?.school_year === schoolYear) ??
         candidates.find((c: any) => !c?.school_year) ??
@@ -157,7 +183,24 @@ export default function TeacherClient() {
     }
 
     return out;
-  }, [weekDate, rotationSlots, classesRows, schoolYear]);
+  }, [weekDate, rotationSlots, classesRows, schoolYear, currentQuarterId]);
+
+  useEffect(() => {
+    // Fetch quarter dates for the school year (optional; without them no quarter filtering happens).
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/admin/school-quarters?school_year=${encodeURIComponent(schoolYear)}`);
+        const j = await res.json();
+        if (res.ok && !cancelled) setQuarters(Array.isArray(j) ? j : []);
+      } catch {
+        // ignore
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [schoolYear]);
 
   const selectedBlock = useMemo(() => blockOptions.find((o) => o.key === selectedBlockKey) ?? null, [blockOptions, selectedBlockKey]);
 
@@ -167,6 +210,7 @@ export default function TeacherClient() {
     setSubject('');
     setSubjectTags([]);
     setGrades([]);
+    gradesAutoFilledFor.current = null;
     setClassSize('');
     setDiversity('');
     setStandards('');
@@ -317,6 +361,18 @@ export default function TeacherClient() {
     return { subjects: Array.from(new Set(subjects)), grades: Array.from(new Set(grades)).sort((a, b) => a - b) };
   };
 
+  // Grades written into a class name, e.g. "Computer Studies 10" → [10], "Computer Programming 11/12" → [11, 12],
+  // "Band 10-12" → [10, 11, 12].
+  const gradesFromName = (name: string) => {
+    const nums: number[] = [];
+    for (const m of String(name || '').matchAll(/(?<!\d)(9|1[0-2])(?:\s*[-–]\s*(9|1[0-2]))?(?!\d)/g)) {
+      const from = Number(m[1]);
+      const to = m[2] ? Number(m[2]) : from;
+      for (let g = Math.min(from, to); g <= Math.max(from, to); g++) nums.push(g);
+    }
+    return Array.from(new Set(nums)).sort((a, b) => a - b);
+  };
+
   useEffect(() => {
     // When a block is selected, auto-fill some context fields.
     // Tags should come from the active TOC template (same source as /courses "#Tags" column).
@@ -362,18 +418,21 @@ export default function TeacherClient() {
 
       if (!cancelled) setSubjectTags(subjTags);
 
-      // 4) Auto-fill grade only if user hasn't picked grades yet.
-      if (grades.length === 0) {
-        // Prefer DB grade_level if present.
-        const g = (selectedClass as any)?.grade_level;
-        if ((typeof g === 'number' || typeof g === 'string') && String(g).trim()) {
-          const n = Number(g);
-          if (Number.isFinite(n)) {
-            if (!cancelled) setGrades([n]);
-          }
-        } else if (gradeTags.length) {
-          if (!cancelled) setGrades(gradeTags);
-        }
+      // 4) Auto-fill grade once per block, and only if the user hasn't picked grades yet.
+      // Priority: DB grade_level → grade in the class name → template tags.
+      // Template tags come last because a template can be shared with a class of a different grade.
+      // grades.length can be stale from the previous block for one run; the effect re-runs once the reset lands.
+      if (cancelled || grades.length > 0 || gradesAutoFilledFor.current === selectedBlock.key) return;
+      gradesAutoFilledFor.current = selectedBlock.key;
+      const rawGrade = (selectedClass as any)?.grade_level;
+      const dbGrade = rawGrade != null && String(rawGrade).trim() ? Number(rawGrade) : NaN;
+      const nameGrades = gradesFromName(selectedBlock.class_name);
+      if (Number.isFinite(dbGrade)) {
+        setGrades([dbGrade]);
+      } else if (nameGrades.length) {
+        setGrades(nameGrades);
+      } else if (gradeTags.length) {
+        setGrades(gradeTags);
       }
     })();
 
@@ -429,8 +488,11 @@ export default function TeacherClient() {
               type="date"
               value={weekDate}
               onChange={(e) => {
-                setWeekDate(e.target.value);
+                const next = e.target.value;
+                setWeekDate(next);
                 setSelectedBlockKey('');
+                // Friday Day 1/Day 2 only applies to Fridays; drop it so it can't skew another day's rotation.
+                if (!(/^\d{4}-\d{2}-\d{2}$/.test(next) && new Date(`${next}T00:00:00`).getDay() === 5)) setFridayTypeOverride('');
               }}
               style={styles.input}
             />
@@ -438,7 +500,13 @@ export default function TeacherClient() {
 
           <label style={{ display: 'grid', gap: 6 }}>
             <div style={{ fontSize: 12, fontWeight: 900, opacity: 0.8 }}>Friday Type (only for Fridays)</div>
-            <select value={fridayTypeOverride} onChange={(e) => { setFridayTypeOverride(e.target.value as any); setSelectedBlockKey(''); }} style={styles.input}>
+            <select
+              value={fridayTypeOverride}
+              onChange={(e) => { setFridayTypeOverride(e.target.value as any); setSelectedBlockKey(''); }}
+              disabled={!isFriday}
+              title={isFriday ? undefined : 'Only used when the date is a Friday'}
+              style={{ ...styles.input, ...(isFriday ? null : { opacity: 0.5, cursor: 'not-allowed' }) }}
+            >
               <option value="">—</option>
               <option value="day1">Friday Day 1</option>
               <option value="day2">Friday Day 2</option>
@@ -495,12 +563,12 @@ export default function TeacherClient() {
                         setGrades(next);
 
                         // Persist to class record only if exactly one grade is selected.
-                        if (selectedClass?.id) {
-                          const patchGrade = next.length === 1 ? next[0] : null;
+                        // Never clear it: a multi-grade pick for one prompt shouldn't wipe the class's real grade.
+                        if (selectedClass?.id && next.length === 1) {
                           await fetch('/api/admin/classes', {
                             method: 'PATCH',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ id: selectedClass.id, grade_level: patchGrade }),
+                            body: JSON.stringify({ id: selectedClass.id, grade_level: next[0] }),
                           }).catch(() => null);
                         }
                       }}
@@ -509,7 +577,7 @@ export default function TeacherClient() {
                   </label>
                 );
               })}
-              {grades.length ? <span style={{ fontSize: 12, opacity: 0.7 }}>Selected: {grades.join('/')}</span> : <span style={{ fontSize: 12, opacity: 0.7 }}>—</span>}
+              <span style={{ fontSize: 12, opacity: 0.7 }}>{gradeText || '—'}</span>
             </div>
           </label>
           <Field label="Class size" value={classSize} setValue={setClassSize} placeholder="e.g., 28" />
@@ -521,8 +589,10 @@ export default function TeacherClient() {
                 type="button"
                 onClick={() => window.location.href = '/admin/policies?return=/admin/teacher'}
                 style={{
-                  padding: '6px 10px',
-                  borderRadius: 10,
+                  // Compact so this header row matches the plain label height and the select lines up with its row.
+                  padding: '0 8px',
+                  lineHeight: '16px',
+                  borderRadius: 8,
                   border: `1px solid ${RCS.deepNavy}`,
                   background: 'transparent',
                   color: RCS.deepNavy,
@@ -775,7 +845,8 @@ function Field(props: { label: string; value: string; setValue: (v: string) => v
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  input: { width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10, border: '1px solid rgba(0,0,0,0.2)', fontSize: 14, minWidth: 0 },
+  // Fixed height so text, date, and select controls (which size differently by default) line up in a row.
+  input: { width: '100%', height: 40, boxSizing: 'border-box', padding: '0 12px', borderRadius: 10, border: '1px solid rgba(0,0,0,0.2)', fontSize: 14, minWidth: 0, background: '#fff' },
   textarea: { width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10, border: '1px solid rgba(0,0,0,0.2)', fontSize: 14, fontFamily: 'inherit', minWidth: 0 },
   primaryBtn: {
     padding: '10px 12px',
