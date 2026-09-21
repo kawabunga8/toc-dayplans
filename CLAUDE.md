@@ -65,7 +65,7 @@ The teacher lesson flow generator:
 Important:
 - AI suggest endpoints must force JSON-only output
 - When applying to Friday blocks, include `friday_type`
-- Claude (Anthropic) is the only provider — the RCS-approved AI tool for this feature
+- Claude (Anthropic) is the only provider here, and that's correct as long as it stays that way: the "Learner diversity"/"Differentiation strategy (UDL / IEP)" fields (`TeacherClient.tsx`, `TocTemplateClient.tsx`, `superprompt.ts`) are aggregate class-composition context the teacher types in (e.g. "2 students with IEPs, mixed prior knowledge"), never individual student names or IEP note content — that's why this feature doesn't need the local-AI path rcs-report-card-tool uses for actual per-student data. If a future feature here ever sends individual student records/notes to an AI provider, it must switch to a local model instead, per the standing RCS AI data-sensitivity rule (Claude only for non-student-data features).
 
 ### Where things usually break
 
