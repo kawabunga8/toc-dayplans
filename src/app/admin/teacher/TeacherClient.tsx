@@ -424,8 +424,16 @@ export default function TeacherClient() {
       // grades.length can be stale from the previous block for one run; the effect re-runs once the reset lands.
       if (cancelled || grades.length > 0 || gradesAutoFilledFor.current === selectedBlock.key) return;
       gradesAutoFilledFor.current = selectedBlock.key;
+      // Real grades are always 9-12. Checking only "is a finite number" let a stray
+      // 0 in grade_level (never written by this page, but plausible from an old
+      // script or a manual edit) win over the name/tag fallback: 0 is a non-empty
+      // string ("0"), so the old check treated it as set, then Number.isFinite(0)
+      // is true, so it "successfully" filled grades with [0] -- which has no
+      // matching checkbox, so nothing visibly selects, and the grades.length > 0
+      // guard above then blocks the correct fallback from ever running.
       const rawGrade = (selectedClass as any)?.grade_level;
-      const dbGrade = rawGrade != null && String(rawGrade).trim() ? Number(rawGrade) : NaN;
+      const parsedGrade = rawGrade != null ? Number(rawGrade) : NaN;
+      const dbGrade = Number.isFinite(parsedGrade) && parsedGrade >= 9 && parsedGrade <= 12 ? parsedGrade : NaN;
       const nameGrades = gradesFromName(selectedBlock.class_name);
       if (Number.isFinite(dbGrade)) {
         setGrades([dbGrade]);
