@@ -16,6 +16,28 @@ No test suite is configured.
 
 **TOC Dayplans** is a Next.js 16 (App Router) + TypeScript app for Richmond Christian School. Staff create and publish daily lesson plans for substitute teachers (TOCs). There are two distinct user surfaces:
 
+### Infrastructure note (2026-09-23) — the deliberate exception
+
+Unlike course-hub/rcs-report-card-tool/group-maker/KawaHoot (which moved to
+a self-hosted local Postgres stack and had their Vercel deployments paused
++ git-disconnected — see `local-stack/STATUS.md`), **this app deliberately
+stays on the original managed cloud Supabase project, still git-connected,
+still deployed live**, because substitute teachers need to reach a
+published plan remotely, on their own device, at any time — a requirement
+none of the other four apps have.
+
+Its Vercel project has `ssoProtection: { deploymentType:
+"all_except_custom_domains" }` — every deployment URL requires a Vercel
+login *except* its one canonical public subdomain, `toc-dayplans.vercel.app`
+(the org-suffixed alias, the git-branch alias, and every per-deployment
+build URL are all gated). Verified live 2026-09-23: that one public URL,
+and the public API routes it calls (`/api/public/classes`,
+`/api/public/rotation`, `/api/public/plan`), carry no student data — the
+`classes` endpoint returns only course metadata, and all currently-
+published plans were scanned clean of student names in both rendered
+content and raw JSON. See the public attendance-roster removal
+(`8ea9079`) below for the feature change that made this true.
+
 - **Admin** (`/admin/*`): Authenticated staff create/edit/publish dayplans with schedule blocks and TOC instructions
 - **Public** (`/toc`, `/p/[id]`): TOCs browse published plans by week and print them
 
