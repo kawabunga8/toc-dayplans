@@ -468,7 +468,7 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
     });
   }
 
-  async function publish() {
+  async function publish(opts?: { confirm?: boolean }) {
     setStatus('publishing');
     setError(null);
 
@@ -485,9 +485,31 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
         await requestTocPublishForBlock(bid);
       }
 
-      const res = await fetch(`/api/admin/dayplans/${id}/publish`, { method: 'POST' });
+      const res = await fetch(`/api/admin/dayplans/${id}/publish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirm: opts?.confirm === true }),
+      });
       const j = await res.json();
       if (!res.ok) throw new Error(j?.error ?? 'Failed to publish');
+
+      if (j?.warning) {
+        setStatus('idle');
+        const matches = Array.isArray(j.matches) ? j.matches : [];
+        const lines = matches
+          .slice(0, 8)
+          .map((m: any) => `• Block ${m.block_label ?? '?'} (${m.field}): "${m.name}" — "${m.snippet}"`)
+          .join('\n');
+        const more = matches.length > 8 ? `\n…and ${matches.length - 8} more` : '';
+        const proceed = window.confirm(
+          `This day plan mentions a student's name in text that will become visible on the public, unauthenticated day-plan page:\n\n${lines}${more}\n\nPublish anyway?`
+        );
+        if (proceed) {
+          await publish({ confirm: true });
+        }
+        return;
+      }
+
       await load();
       setStatus('idle');
     } catch (e: any) {
@@ -1402,7 +1424,7 @@ export default function DayPlanDetailClient({ id }: { id: string }) {
                     </button>
                   </>
                 ) : (
-                  <button onClick={publish} disabled={status !== 'idle'} style={styles.primaryBtn}>
+                  <button onClick={() => publish()} disabled={status !== 'idle'} style={styles.primaryBtn}>
                     {status === 'publishing' ? 'Publishing…' : 'Publish'}
                   </button>
                 )

@@ -4,11 +4,20 @@ import { createServerClient } from '@supabase/ssr';
 import crypto from 'node:crypto';
 import { DateTime } from 'luxon';
 import { templateForClass } from '@/lib/appRules/templates';
+import { detectStudentNamesInToc } from '@/lib/detectStudentNames';
 
 export const runtime = 'nodejs';
 
-export async function POST(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
+
+  let body: any = {};
+  try {
+    body = await req.json();
+  } catch {
+    // No body (or invalid JSON) is fine — treated as an unconfirmed publish.
+  }
+  const confirmed = body?.confirm === true;
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -92,6 +101,24 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
   const { data: resolved, error: resErr } = await supabase.rpc('resolve_day_plan_payload', { plan_id: id });
   if (resErr || !resolved) {
     return NextResponse.json({ error: resErr?.message ?? 'Failed to resolve day plan' }, { status: 400 });
+  }
+
+  // Before publishing, warn if any staff-typed free text (Note to TOC, lesson
+  // flow, etc.) mentions an enrolled student by name — that text is about to
+  // become visible on the public, unauthenticated day-plan page.
+  if (!confirmed) {
+    const blocks = Array.isArray((resolved as any)?.blocks) ? (resolved as any).blocks : [];
+    const allMatches: Array<{ block_label: string | null; field: string; name: string; snippet: string }> = [];
+    for (const b of blocks) {
+      const students = Array.isArray(b?.students) ? b.students : [];
+      if (!students.length) continue;
+      for (const m of detectStudentNamesInToc(b?.toc ?? null, students)) {
+        allMatches.push({ block_label: b?.block_label ?? null, ...m });
+      }
+    }
+    if (allMatches.length > 0) {
+      return NextResponse.json({ warning: true, matches: allMatches });
+    }
   }
 
   // No automatic expiry (links only die when explicitly revoked).
