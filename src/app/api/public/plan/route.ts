@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { redactStudentsInPlan } from '@/lib/redactPublicStudents';
 
 export const runtime = 'nodejs';
 
@@ -36,7 +37,7 @@ export async function GET(req: Request) {
   }
 
   return NextResponse.json(
-    { plan: data },
+    { plan: redactStudentsInPlan(data) },
     {
       headers: {
         'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',

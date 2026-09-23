@@ -2,8 +2,6 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 
-type Student = { id: string; first_name: string; last_name: string };
-
 type Block = {
   id: string;
   start_time: string;
@@ -13,7 +11,6 @@ type Block = {
   details: string | null;
   class_id: string | null;
   block_label?: string | null;
-  students?: Student[];
 };
 
 type TocOpeningStep = { step_text: string };
@@ -188,11 +185,6 @@ export default function PublicPlanClient({ plan, layout }: { plan: PublicPlan; l
     return init;
   });
 
-  // Attendance state is client-side only (no persistence yet).
-  const [attendanceOpen, setAttendanceOpen] = useState<Record<string, boolean>>({});
-  const [attendance, setAttendance] = useState<Record<string, Record<string, boolean>>>({});
-  const [printAttendanceForBlockId, setPrintAttendanceForBlockId] = useState<string | null>(null);
-
   const selectedCount = useMemo(() => allIds.filter((id) => selected[id]).length, [allIds, selected]);
 
   // If the filtered set changes (rare), ensure selection map includes keys.
@@ -218,34 +210,6 @@ export default function PublicPlanClient({ plan, layout }: { plan: PublicPlan; l
     });
   }
 
-  function toggleAttendance(blockId: string) {
-    setAttendanceOpen((prev) => ({ ...prev, [blockId]: !prev[blockId] }));
-  }
-
-  function ensureAttendanceDefaults(block: Block) {
-    if (!block.students?.length) return;
-    setAttendance((prev) => {
-      if (prev[block.id]) return prev;
-      const map: Record<string, boolean> = {};
-      for (const s of block.students ?? []) map[s.id] = true;
-      return { ...prev, [block.id]: map };
-    });
-  }
-
-  function setStudentPresent(blockId: string, studentId: string, present: boolean) {
-    setAttendance((prev) => {
-      const cur = prev[blockId] ?? {};
-      return { ...prev, [blockId]: { ...cur, [studentId]: present } };
-    });
-  }
-
-  async function downloadAttendanceDocx(planId: string, blockId: string) {
-    const url = `/api/docx/attendance?planId=${encodeURIComponent(planId)}&blockId=${encodeURIComponent(blockId)}`;
-    window.open(url, '_blank');
-  }
-
-  const printMode: 'blocks' | 'attendance' = printAttendanceForBlockId ? 'attendance' : 'blocks';
-
   return (
     <div
       className="no-print backdrop"
@@ -256,7 +220,7 @@ export default function PublicPlanClient({ plan, layout }: { plan: PublicPlan; l
     >
       <main
         style={styles.page}
-        data-print-mode={printMode}
+        data-print-mode="blocks"
         onClick={(e) => {
           e.stopPropagation();
         }}
@@ -323,15 +287,11 @@ export default function PublicPlanClient({ plan, layout }: { plan: PublicPlan; l
           {blocksToShow.map((b) => {
             const isOn = !!selected[b.id];
             const label = blockLabelFromClassName(b.class_name);
-            const showAttendance = !!b.class_id;
-            const open = !!attendanceOpen[b.id];
-            const isPrintingAttendance = printAttendanceForBlockId === b.id;
 
             return (
               <section
                 key={b.id}
                 data-selected={isOn ? 'true' : 'false'}
-                data-print-attendance={isPrintingAttendance ? 'true' : 'false'}
                 style={styles.blockCard}
               >
                 <div style={styles.blockHeader}>
@@ -345,18 +305,6 @@ export default function PublicPlanClient({ plan, layout }: { plan: PublicPlan; l
                   </div>
 
                   <div className="no-print" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                    {showAttendance && (
-                      <button
-                        onClick={() => {
-                          ensureAttendanceDefaults(b);
-                          toggleAttendance(b.id);
-                        }}
-                        style={styles.secondaryBtn}
-                      >
-                        {open ? 'Hide attendance' : 'Attendance list'}
-                      </button>
-                    )}
-
                     <label style={styles.checkboxLabel}>
                       <input type="checkbox" checked={isOn} onChange={() => toggle(b.id)} />
                       <span>Print</span>
@@ -674,69 +622,6 @@ export default function PublicPlanClient({ plan, layout }: { plan: PublicPlan; l
                   </div>
                 )}
 
-                {showAttendance && open && (
-                  <div className="attendanceWrap" style={styles.attendanceWrap}>
-                    <div style={styles.attendanceHeader}>
-                      <div style={{ fontWeight: 900, color: RCS.navy }}>Attendance Sheet</div>
-                      <button className="no-print" onClick={() => downloadAttendanceDocx(plan.id, b.id)} style={styles.primaryBtn}>
-                        Download Attendance (.docx)
-                      </button>
-                    </div>
-
-                    {plan.toc?.attendance_note?.trim() ? (
-                      <div className="print-only" style={{ ...(styles.printOnly as any), marginBottom: 10, fontSize: 12 }}>
-                        {plan.toc.attendance_note}
-                      </div>
-                    ) : null}
-
-                    {/* Screen attendance checklist (interactive) */}
-                    <div className="no-print" style={{ display: 'grid', gap: 6 }}>
-                      {(b.students ?? []).map((s) => {
-                        const present = attendance[b.id]?.[s.id] ?? true;
-                        return (
-                          <label key={s.id} style={styles.studentRow}>
-                            <input type="checkbox" checked={present} onChange={(e) => setStudentPresent(b.id, s.id, e.target.checked)} />
-                            <span style={{ fontWeight: 800 }}>{s.last_name},</span>
-                            <span>{s.first_name}</span>
-                          </label>
-                        );
-                      })}
-                    </div>
-
-                    {/* Print attendance table (RCS-style) */}
-                    <div className="print-only" style={styles.printOnly}>
-                      <table style={styles.printTable as any}>
-                        <thead>
-                          <tr>
-                            <th style={styles.printTh as any}>#</th>
-                            <th style={styles.printTh as any}>Student Name</th>
-                            <th style={styles.printTh as any}>Present</th>
-                            <th style={styles.printTh as any}>Absent</th>
-                            <th style={styles.printTh as any}>Late</th>
-                            <th style={styles.printTh as any}>Notes</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(b.students ?? []).map((s, idx) => (
-                            <tr key={s.id}>
-                              <td style={styles.printTd as any}>{idx + 1}</td>
-                              <td style={styles.printTd as any}>
-                                <b>{s.last_name},</b> {s.first_name}
-                              </td>
-                              <td style={styles.printTd as any}></td>
-                              <td style={styles.printTd as any}></td>
-                              <td style={styles.printTd as any}></td>
-                              <td style={styles.printTd as any}></td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                      <div style={{ marginTop: 12, fontSize: 12 }}>
-                        <b>TOC Signature:</b> ______________________________
-                      </div>
-                    </div>
-                  </div>
-                )}
               </section>
             );
           })}
@@ -759,13 +644,6 @@ export default function PublicPlanClient({ plan, layout }: { plan: PublicPlan; l
 
           /* Default print mode: print selected block cards */
           main[data-print-mode="blocks"] [data-selected="false"] { display: none !important; }
-
-          /* Attendance print mode: print only the attendance list for the requested block */
-          main[data-print-mode="attendance"] header { display: none !important; }
-          main[data-print-mode="attendance"] .stickyBar { display: none !important; }
-          main[data-print-mode="attendance"] section[data-print-attendance="false"] { display: none !important; }
-          main[data-print-mode="attendance"] section[data-print-attendance="true"] [data-selected] { display: block !important; }
-          main[data-print-mode="attendance"] section[data-print-attendance="true"] .attendanceWrap { display: block !important; }
         }
       `}</style>
       </main>
@@ -918,9 +796,6 @@ const styles: Record<string, React.CSSProperties> = {
   tocList: { margin: 0, paddingLeft: 18 },
   tocCard: { border: `1px solid ${RCS.midGrey}`, borderRadius: 10, padding: 10, background: RCS.offWhite },
 
-  attendanceWrap: { padding: 12, background: RCS.white },
-  attendanceHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 10 },
-  studentRow: { display: 'flex', gap: 10, alignItems: 'center' },
   stickyBar: {
     position: 'sticky',
     bottom: 0,

@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 import PublicPlanClient from '../PublicPlanClient';
+import { redactStudentsInPlan } from '@/lib/redactPublicStudents';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -37,5 +38,5 @@ export default async function PublicPlanPage({ params }: { params: Promise<{ id:
     notFound();
   }
 
-  return <PublicPlanClient plan={data as any} layout={layoutData as any} />;
+  return <PublicPlanClient plan={redactStudentsInPlan(data as any)} layout={layoutData as any} />;
 }

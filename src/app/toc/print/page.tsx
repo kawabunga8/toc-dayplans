@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 import TocPrintClient from './TocPrintClient';
+import { redactStudentsInPlan } from '@/lib/redactPublicStudents';
 
 export const dynamic = 'force-dynamic';
 
@@ -63,7 +64,7 @@ export default async function TocPrintPage({ searchParams }: { searchParams: Pro
   const detail: any[] = [];
   for (const p of sortedDayPlans) {
     const { data, error } = await supabase.rpc('get_public_day_plan_by_id', { plan_id: p.id });
-    if (!error && data) detail.push(data);
+    if (!error && data) detail.push(redactStudentsInPlan(data));
   }
 
   // Load effective block times once for the day (used to override displayed times)
