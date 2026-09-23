@@ -4,6 +4,7 @@ import { createServerClient } from '@supabase/ssr';
 import { extractJsonObject } from '@/lib/ai/anthropic';
 import { providers } from '@/lib/ai/providers';
 import { TEACHER_ROLES, STANDING_GUARDRAILS, buildSection1FromFields } from '@/lib/teacherSuperprompt/superprompt';
+import { redactStudentNames } from '@/lib/detectStudentNames';
 
 export const runtime = 'nodejs';
 
@@ -90,6 +91,21 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
+
+  // RCS Staff AI Policy §05: no identifiable student information may be sent
+  // to an AI tool. Everything below goes to Claude, and several fields are
+  // free text a staff member typed (Note to TOC, constraints, task, class
+  // diversity notes...). Replace any enrolled student's name with
+  // "[a student]" before any prompt is built. If the roster can't be loaded,
+  // refuse rather than send unscreened text.
+  const { data: roster, error: rosterErr } = await supabase.from('students').select('first_name, last_name');
+  if (rosterErr) {
+    return NextResponse.json(
+      { error: 'Could not load the class roster to screen for student names, so nothing was sent to the AI. Please try again.' },
+      { status: 503 }
+    );
+  }
+  body = { ...body, input: redactStudentNames((body as any).input, roster ?? []).value } as SuggestReq;
 
   if (body.section === 'note_to_toc_rewrite') {
     const current = String(body.input?.current_note_to_toc ?? '');

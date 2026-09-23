@@ -60,3 +60,44 @@ export function detectStudentNamesInToc(toc: unknown, students: Student[]): Name
   }
   return matches;
 }
+
+// Replaces any enrolled student's first or last name with "[a student]" in
+// every string inside `node` (objects and arrays are walked recursively).
+// Used before staff-typed text is sent to an outside AI provider, so a name
+// typed into e.g. a Note to TOC never reaches it. Same matching rules as
+// detectStudentNamesInToc above (per-token, word-boundary, leading capital).
+export function redactStudentNames<T>(node: T, students: Student[]): { value: T; count: number } {
+  const names = new Set<string>();
+  for (const s of students) {
+    const first = String(s?.first_name ?? '').trim();
+    const last = String(s?.last_name ?? '').trim();
+    if (first.length >= 2) names.add(first.charAt(0).toUpperCase() + first.slice(1));
+    if (last.length >= 2) names.add(last.charAt(0).toUpperCase() + last.slice(1));
+  }
+  if (!names.size) return { value: node, count: 0 };
+
+  // Longest names first, so "Anne-Marie" is matched before "Anne".
+  const pattern = new RegExp(
+    `\\b(?:${[...names].sort((a, b) => b.length - a.length).map(escapeRegExp).join('|')})\\b`,
+    'g'
+  );
+  let count = 0;
+
+  const walk = (v: unknown): unknown => {
+    if (typeof v === 'string') {
+      const replaced = v.replace(pattern, () => {
+        count++;
+        return '[a student]';
+      });
+      // "Daniel Chiang" becomes two adjacent placeholders; collapse to one.
+      return replaced.replace(/\[a student\](\s+\[a student\])+/g, '[a student]');
+    }
+    if (Array.isArray(v)) return v.map(walk);
+    if (v && typeof v === 'object') {
+      return Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, walk(x)]));
+    }
+    return v;
+  };
+
+  return { value: walk(node) as T, count };
+}
