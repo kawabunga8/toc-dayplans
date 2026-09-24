@@ -38,6 +38,22 @@ published plans were scanned clean of student names in both rendered
 content and raw JSON. See the public attendance-roster removal
 (`8ea9079`) below for the feature change that made this true.
 
+### No student data (2026-09-24)
+
+This app no longer serves student data. Still reading it, pending a decision:
+`/api/ai/suggest` loads first/last names to screen them out of text sent to
+Claude (it refuses to send if the list can't load), and the publish route's
+name warning checks per-block `students` (now always empty, so it no longer
+fires). Removed: the admin Class
+lists page (rosters + student photos), the unused public
+`/api/toc/plan/[id]` route (returned enrolled students' names and photo
+paths with the service-role key, no auth), and the per-block `students`
+key from `resolve_day_plan_payload` / `get_public_day_plan_live`
+(migration `20260924120000_remove_students_from_day_plan_payloads.sql`,
+which also strips it from stored `published_payload` snapshots). Don't
+add student lookups back — rosters and photos belong to Course Hub, which
+runs locally, not in this cloud project.
+
 - **Admin** (`/admin/*`): Authenticated staff create/edit/publish dayplans with schedule blocks and TOC instructions
 - **Public** (`/toc`, `/p/[id]`): TOCs browse published plans by week and print them
 
@@ -58,7 +74,6 @@ day_plan_blocks     → Time blocks within a dayplan (start/end, room, class_nam
 toc_block_plans     → TOC-specific overrides per block (lesson_flow_phases, activity_options, plan_mode)
 class_toc_templates → Reusable template content per class (default_tags, etc.)
 classes             → Course definitions (block_label, grade_level, room)
-enrollments         → Class ↔ Student mappings
 toc_snippets        → Reusable text fragments
 ```
 

@@ -204,9 +204,6 @@ export default function AdminLayout({ children }: PropsWithChildren) {
             <Link href="/admin/courses" style={navLink('/admin/courses', pathname)}>
               Courses/Rooms
             </Link>
-            <Link href="/admin/class-lists" style={navLink('/admin/class-lists', pathname)}>
-              Class lists
-            </Link>
             <Link href="/admin/publishing" style={navLink('/admin/publishing', pathname)}>
               Publishing
             </Link>

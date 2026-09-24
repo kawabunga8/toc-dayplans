@@ -6,10 +6,3 @@ export const aiLessonFlowFlag = flag<boolean>({
   defaultValue: true,
   decide: () => true,
 });
-
-export const classListsFlag = flag<boolean>({
-  key: 'class-lists',
-  description: 'Show the Class Lists feature in the admin dashboard',
-  defaultValue: false,
-  decide: () => false,
-});
