@@ -1476,6 +1476,7 @@ begin
   end if;
 
   -- Materials Needed: always included (Standard + Advanced), hidden when empty.
+  adv_out := '{}'::jsonb;
   if jsonb_typeof(adv->'materials_needed') = 'array' and jsonb_array_length(adv->'materials_needed') > 0 then
     adv_out := adv_out || jsonb_build_object('materials_needed', adv->'materials_needed');
   end if;
