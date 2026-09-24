@@ -1101,7 +1101,7 @@ drop policy if exists "toc_end_of_class_items_staff_delete" on toc_end_of_class_
 -- SECURITY DEFINER so anon callers can access without opening table RLS.
 -- Public dayplan payload (by day_plans.id)
 -- Includes TOC content (template merged with per-day overrides).
-create or replace function resolve_day_plan_payload(plan_id uuid)
+create or replace function public.resolve_day_plan_payload(plan_id uuid)
 returns jsonb
 language plpgsql
 security definer
@@ -1541,8 +1541,8 @@ begin
 end;
 $$;
 
-revoke all on function resolve_day_plan_payload(uuid) from public;
-grant execute on function resolve_day_plan_payload(uuid) to authenticated;
+revoke all on function public.resolve_day_plan_payload(uuid) from public, anon;
+grant execute on function public.resolve_day_plan_payload(uuid) to authenticated;
 
 -- Public-safe live payload for /p: compute directly from day plan + templates + overrides.
 -- Unlike get_public_day_plan_from_toc, this does NOT rely on toc_block_plans.public_payload being materialized.
@@ -1937,6 +1937,7 @@ begin
     end if;
   end if;
 
+  adv_out := '{}'::jsonb;
   if jsonb_typeof(adv->'materials_needed') = 'array' and jsonb_array_length(adv->'materials_needed') > 0 then
     adv_out := adv_out || jsonb_build_object('materials_needed', adv->'materials_needed');
   end if;
