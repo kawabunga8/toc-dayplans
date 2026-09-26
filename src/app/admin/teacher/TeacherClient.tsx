@@ -6,6 +6,7 @@ import { getSupabaseClient } from '@/lib/supabaseClient';
 import { TEACHER_ROLES, buildSection1FromFields, STANDING_GUARDRAILS } from '@/lib/teacherSuperprompt/superprompt';
 import { templateForClass } from '@/lib/appRules/templates';
 import { useSchoolYear } from '@/app/admin/SchoolYearContext';
+import { suggestWithLocalModel } from '@/lib/ai/suggest';
 
 type RoleId = 1 | 2 | 3 | 4 | 5 | 6;
 
@@ -78,37 +79,20 @@ export default function TeacherClient() {
     setPhases(null);
     setReviewed(false);
     try {
-      const res = await fetch('/api/ai/suggest', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          section: 'teacher_lesson_flow_phases',
-          input: {
-            role_id: roleId,
-            section1_fields: { subject: subject || selectedBlock?.class_name || '', grade: gradeText, class_size: classSize, diversity, standards, unit_topic: unitTopic, unit_stage: unitStage, tools, not_worked: notWorked },
-            task,
-            constraints,
-            plan_date: selectedBlock?.plan_date ?? null,
-            slot: selectedBlock?.slot ?? null,
-            class_name: selectedBlock?.class_name ?? null,
-          },
-        }),
+      const j = await suggestWithLocalModel({
+        section: 'teacher_lesson_flow_phases',
+        input: {
+          role_id: roleId as 1 | 2 | 3 | 4 | 5 | 6,
+          section1_fields: { subject: subject || selectedBlock?.class_name || '', grade: gradeText, class_size: classSize, diversity, standards, unit_topic: unitTopic, unit_stage: unitStage, tools, not_worked: notWorked },
+          task,
+          constraints,
+          plan_date: selectedBlock?.plan_date ?? null,
+          slot: selectedBlock?.slot ?? null,
+          class_name: selectedBlock?.class_name ?? null,
+        },
       });
 
-      let j: any = null;
-      let rawText: string | null = null;
-      try {
-        j = await res.json();
-      } catch {
-        rawText = await res.text().catch(() => null);
-      }
-
-      if (!res.ok) {
-        const msg = j?.error || rawText || `AI suggest failed (${res.status})`;
-        throw new Error(String(msg));
-      }
-
-      setPhases(j?.suggestion?.lesson_flow_phases ?? null);
+      setPhases((j.suggestion.lesson_flow_phases ?? null) as any);
     } catch (e: any) {
       setErr(e?.message ?? 'AI suggest failed');
     } finally {

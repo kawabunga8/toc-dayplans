@@ -5,6 +5,7 @@ import { getSupabaseClient } from '@/lib/supabaseClient';
 import { ensureDefaultTemplateForClass, templateForClass } from '@/lib/appRules/templates';
 import { useDemo } from '@/app/admin/DemoContext';
 import type { TocSnippetRow } from '@/lib/tocSnippetTypes';
+import { suggestWithLocalModel } from '@/lib/ai/suggest';
 
 type Status = 'loading' | 'idle' | 'saving' | 'error';
 
@@ -1405,23 +1406,17 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                 setAiNoteError(null);
                 setAiNoteSuggestion('');
                 try {
-                  const res = await fetch('/api/ai/suggest', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      section: 'note_to_toc_rewrite',
-                      input: {
-                        current_note_to_toc: noteTOC.trim() || templateNoteTOC || '',
-                        class_name: '',
-                        plan_date: '',
-                        slot: '',
-                        audience: 'toc',
-                      },
-                    }),
+                  const j = await suggestWithLocalModel({
+                    section: 'note_to_toc_rewrite',
+                    input: {
+                      current_note_to_toc: noteTOC.trim() || templateNoteTOC || '',
+                      class_name: '',
+                      plan_date: '',
+                      slot: '',
+                      audience: 'toc',
+                    },
                   });
-                  const j = await res.json();
-                  if (!res.ok) throw new Error(j?.error ?? 'AI suggest failed');
-                  setAiNoteSuggestion(String(j?.suggestion?.note_to_toc ?? ''));
+                  setAiNoteSuggestion(String(j.suggestion.note_to_toc ?? ''));
                 } catch (e: any) {
                   setAiNoteError(e?.message ?? 'AI suggest failed');
                 } finally {
@@ -1670,22 +1665,16 @@ export default function TocBlockPlanInstanceEditor(props: { dayPlanBlockId: stri
                     };
                   });
 
-                  const res = await fetch('/api/ai/suggest', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      section: 'lesson_flow_phases',
-                      input: {
-                        class_name: '',
-                        plan_date: '',
-                        slot: '',
-                        current_phases: current,
-                      },
-                    }),
+                  const j = await suggestWithLocalModel({
+                    section: 'lesson_flow_phases',
+                    input: {
+                      class_name: '',
+                      plan_date: '',
+                      slot: '',
+                      current_phases: current,
+                    },
                   });
-                  const j = await res.json();
-                  if (!res.ok) throw new Error(j?.error ?? 'AI suggest failed');
-                  setAiFlowSuggestion((j?.suggestion?.lesson_flow_phases ?? null) as any);
+                  setAiFlowSuggestion((j.suggestion.lesson_flow_phases ?? null) as any);
                 } catch (e: any) {
                   setAiFlowError(e?.message ?? 'AI suggest failed');
                 } finally {

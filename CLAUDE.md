@@ -40,11 +40,10 @@ content and raw JSON. See the public attendance-roster removal
 
 ### No student data (2026-09-24)
 
-This app no longer serves student data. Still reading it, pending a decision:
-`/api/ai/suggest` loads first/last names to screen them out of text sent to
-Claude (it refuses to send if the list can't load), and the publish route's
-name warning checks per-block `students` (now always empty, so it no longer
-fires). Removed: the admin Class
+This app no longer serves or reads student data. (The publish route's name
+warning still checks per-block `students`, which is now always empty, so it
+no longer fires.) The AI writing aid runs on the local model instead of
+Claude — see "AI integration" below. Removed: the admin Class
 lists page (rosters + student photos), the unused public
 `/api/toc/plan/[id]` route (returned enrolled students' names and photo
 paths with the service-role key, no auth), and the per-block `students`
@@ -63,7 +62,7 @@ runs locally, not in this cloud project.
 - **Published payload snapshot**: When staff publish a plan, a canonical JSON snapshot (`published_payload`) is stored in `day_plans`. The schema contract is documented in `docs/architecture/effective-plan-contract.md`. This snapshot merges class templates with per-block overrides.
 - **AppRules library** (`src/lib/appRules/`): All domain-specific business logic lives here — school day calculations, Friday Day 1/Day 2 rotation, special block types (Flex, Lunch, Chapel, CLE), navigation URL builders, and template merging.
 - **Supabase RPC functions**: Complex queries use Supabase RPCs (e.g., `get_public_plans_for_week`, `is_staff()`). RLS policies are defined in `supabase/schema.sql`.
-- **AI lesson flow**: Claude (Anthropic) is the only provider — see `src/lib/ai/providers/`; the RCS-approved AI tool for this feature, matching rcs-report-card-tool's decision. The API route `/api/admin/dayplans/blocks/[blockId]/lesson-flow/append` generates and appends AI lesson flows to a block. Prompt templates are in `src/lib/teacherSuperprompt/`.
+- **AI lesson flow**: runs on the local model (Ollama) on the staff laptop, called from the browser — see `src/lib/ai/suggest.ts`. `/api/admin/dayplans/blocks/[blockId]/lesson-flow/append` saves (appends) the generated flow to a block; it doesn't call any AI. Prompt templates are in `src/lib/teacherSuperprompt/`.
 - **No global state**: Admin UI uses `'use client'` components with local React state + API route calls. No Redux/Zustand.
 
 ### Core data model
@@ -95,14 +94,14 @@ Many features require explicit `friday_type` (day1/day2) when the date is a Frid
 
 The teacher lesson flow generator:
 1. Selects a date + block, builds Section 1 context, selects an educator role
-2. Calls `POST /api/ai/suggest` → returns JSON phases
+2. Calls `suggestWithLocalModel()` (`src/lib/ai/suggest.ts`) → the browser POSTs to Ollama at `NEXT_PUBLIC_OLLAMA_URL` (default `http://localhost:11434`), model `NEXT_PUBLIC_OLLAMA_MODEL` (default `qwen2.5:14b`) → JSON phases
 3. Staff must check "I have reviewed this AI-generated content..." in the Preview panel before Apply is enabled (`TeacherClient.tsx`'s `reviewed` state) — required because `/p` renders live data, so Apply on an already-published plan makes the content visible to TOCs immediately, with no separate re-publish step
 4. Applies via `/api/admin/dayplans/blocks/[blockId]/lesson-flow/append`
 
 Important:
-- AI suggest endpoints must force JSON-only output
+- AI prompts must force JSON-only output (the Ollama call also sets `format: 'json'`)
 - When applying to Friday blocks, include `friday_type`
-- Claude (Anthropic) is the only provider here, and that's correct as long as it stays that way: the "Learner diversity"/"Differentiation strategy (UDL / IEP)" fields (`TeacherClient.tsx`, `TocTemplateClient.tsx`, `superprompt.ts`) are aggregate class-composition context the teacher types in (e.g. "2 students with IEPs, mixed prior knowledge"), never individual student names or IEP note content — that's why this feature doesn't need the local-AI path rcs-report-card-tool uses for actual per-student data. If a future feature here ever sends individual student records/notes to an AI provider, it must switch to a local model instead, per the standing RCS AI data-sensitivity rule (Claude only for non-student-data features).
+- **Local model only, no cloud fallback (2026-09-24).** Nothing typed into the AI aid leaves the laptop: the browser calls Ollama directly, and there is no server AI route or Claude client left in this app. Ollama must be started with `OLLAMA_ORIGINS` allowing this site (e.g. `OLLAMA_ORIGINS=https://toc-dayplans.vercel.app,http://localhost:3006`), or the browser's request is refused. Only the single staff user on the laptop running Ollama can use the AI buttons — that's intended. Don't reintroduce a cloud provider for this feature: free text typed here can mention students, and there is no longer a roster to screen names against.
 
 ### Where things usually break
 
@@ -123,8 +122,9 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=   # needed for server-side admin API routes
 
-# AI (required for AI features)
-ANTHROPIC_API_KEY=
+# AI (optional — browser-side, defaults shown)
+NEXT_PUBLIC_OLLAMA_URL=http://localhost:11434
+NEXT_PUBLIC_OLLAMA_MODEL=qwen2.5:14b
 ```
 
 ### Deploy notes
