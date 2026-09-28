@@ -593,13 +593,15 @@ export default function PublicPlanClient({ plan, layout }: { plan: PublicPlan; l
                                       if (s.title && typeof s.title === 'string') {
                                         return (
                                           <div key={idx}>
-                                            {React.cloneElement(el as any, {}, (el as any).props.children && Array.isArray((el as any).props.children)
-                                              ? (el as any).props.children.map((child: any) =>
+                                            {/* Children are spread as separate arguments, not passed as an
+                                                array, so React doesn't treat them as a list needing keys. */}
+                                            {Array.isArray((el as any).props.children)
+                                              ? React.cloneElement(el as any, {}, ...(el as any).props.children.map((child: any) =>
                                                   child?.props?.style === styles.tocSectionTitle
                                                     ? React.cloneElement(child, {}, s.title)
                                                     : child
-                                                )
-                                              : (el as any).props.children)}
+                                                ))
+                                              : el}
                                           </div>
                                         );
                                       }
